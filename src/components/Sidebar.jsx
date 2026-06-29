@@ -157,6 +157,10 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
           );
         })}
       </nav>
+      
+      <div style={{ marginTop: 'auto', padding: '15px', textAlign: 'center', fontSize: '11px', color: 'var(--text-secondary)', borderTop: '1px solid var(--border-color)' }}>
+        Developed by: <a href="https://shakilmahmud.vercel.app/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-primary)', textDecoration: 'none', fontWeight: 'bold' }}>Shakil Mahmud</a>
+      </div>
     </aside>
   );
 };
