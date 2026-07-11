@@ -27,7 +27,7 @@ const Login = () => {
       <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '40px', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.1)' }}>
         
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-          <h2 style={{ fontSize: '28px', color: 'var(--accent-primary)', fontWeight: 'bold', margin: '0 0 10px 0' }}>EG ERP</h2>
+          <img src="/EZ-ERP-LOGO-WIDE.png" alt="EG ERP Logo" style={{ height: '60px', marginBottom: '15px' }} />
           <p style={{ color: '#666', fontSize: '14px', margin: 0 }}>Login to your account</p>
         </div>
 
