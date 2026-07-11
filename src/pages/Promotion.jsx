@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import CustomSelect from '../components/CustomSelect';
 
 const SectionWrapper = ({ title, children, rightContent }) => (
   <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '20px', backgroundColor: 'var(--card-bg)', marginBottom: '20px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)' }}>
@@ -780,9 +781,9 @@ const PromotionForm = ({ initialData, onSave, onCancel }) => {
           {['Brand', 'Category', 'Sub Category', 'Sub Subcategory', 'Vendor', 'Item'].map((lbl, i) => (
             <div key={i}>
               <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{lbl}</label>
-              <select className="input-animated" style={{ width: '100%', borderBottom: '1px dotted var(--border-color)', borderTop: 'none', borderLeft: 'none', borderRight: 'none', borderRadius: 0, fontSize: '0.8rem', padding: '5px 0' }}>
+              <CustomSelect className="input-animated" style={{ width: '100%', borderBottom: '1px dotted var(--border-color)', borderTop: 'none', borderLeft: 'none', borderRight: 'none', borderRadius: 0, fontSize: '0.8rem', padding: '5px 0' }}>
                 <option>-- ALL --</option>
-              </select>
+              </CustomSelect>
             </div>
           ))}
           <div>
@@ -815,9 +816,9 @@ const PromotionForm = ({ initialData, onSave, onCancel }) => {
 
           <div style={{ gridColumn: '1 / 2' }}>
             <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Sale Price</label>
-            <select className="input-animated" style={{ width: '100%', borderBottom: '1px dotted var(--border-color)', borderTop: 'none', borderLeft: 'none', borderRight: 'none', borderRadius: 0, fontSize: '0.8rem' }}>
+            <CustomSelect className="input-animated" style={{ width: '100%', borderBottom: '1px dotted var(--border-color)', borderTop: 'none', borderLeft: 'none', borderRight: 'none', borderRadius: 0, fontSize: '0.8rem' }}>
               <option>{bcSalePrice || '-- Select Sale Price --'}</option>
-            </select>
+            </CustomSelect>
           </div>
           <div style={{ gridColumn: '2 / 3' }}>
             <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Discount(%) <span style={{ color: 'red' }}>*</span></label>

@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabaseClient';
 import jsPDF from 'jspdf';
 import JsBarcode from 'jsbarcode';
+import CustomSelect from '../components/CustomSelect';
 
 const SectionWrapper = ({ title, children, rightContent }) => (
   <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '20px', backgroundColor: 'var(--card-bg)', marginBottom: '20px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)' }}>
@@ -344,10 +345,10 @@ const BarcodePrint = () => {
               
               <div style={{ flex: '1 1 150px' }}>
                 <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Sale Price</label>
-                <select className="input-animated" value={stdSalePrice} onChange={e => setStdSalePrice(e.target.value)}>
+                <CustomSelect className="input-animated" value={stdSalePrice} onChange={e => setStdSalePrice(e.target.value)}>
                   <option value="">- Select Sale Price -</option>
                   {stdTempItem && <option value={stdTempItem.mrp}>{stdTempItem.mrp}</option>}
-                </select>
+                </CustomSelect>
               </div>
 
               {customizeDiscount && (

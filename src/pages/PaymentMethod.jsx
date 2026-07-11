@@ -2,47 +2,44 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import toast from 'react-hot-toast';
 import { Check, X } from 'lucide-react';
-import CustomSelect from '../components/CustomSelect';
 import { useAuth } from '../context/AuthContext';
 
 const initialFormState = {
   name: '',
-  discount_percent: 0,
-  promo_price: 'MRP',
-  scan_card_on_sale: false,
-  send_sms_to_customer: false,
-  visible_in_pos: false,
-  other_promotion_applicable: false,
-  accounts_head_creation: false,
-  welcome_sms: false
+  bank_name: '',
+  bank_commission: 0,
+  bin: '',
+  mfs: false,
+  ec: false,
+  pos: false
 };
 
-const CustomerType = () => {
+const PaymentMethod = () => {
   const { hasEditPermission } = useAuth();
-  const canEdit = hasEditPermission('Customer Type');
+  const canEdit = hasEditPermission('Payment Method');
   const [view, setView] = useState('list');
-  const [customerTypes, setCustomerTypes] = useState([]);
+  const [paymentMethods, setPaymentMethods] = useState([]);
   const [formData, setFormData] = useState(initialFormState);
   const [editingId, setEditingId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (view === 'list') {
-      fetchCustomerTypes();
+      fetchPaymentMethods();
     }
   }, [view]);
 
-  const fetchCustomerTypes = async () => {
+  const fetchPaymentMethods = async () => {
     try {
       const { data, error } = await supabase
-        .from('customer_types')
+        .from('payment_methods')
         .select('*')
         .order('code', { ascending: true });
       if (error) throw error;
-      setCustomerTypes(data || []);
+      setPaymentMethods(data || []);
     } catch (err) {
       console.error(err);
-      toast.error(`Failed to fetch Customer Types: ${err.message || err.toString()}`);
+      toast.error(`Failed to fetch Payment Methods: ${err.message || err.toString()}`);
     }
   };
 
@@ -52,33 +49,35 @@ const CustomerType = () => {
       toast.error('Name is required');
       return;
     }
+    if (!formData.bank_name) {
+      toast.error('Bank Name is required');
+      return;
+    }
     setIsLoading(true);
 
     try {
       if (editingId) {
         const { error } = await supabase
-          .from('customer_types')
+          .from('payment_methods')
           .update({
             name: formData.name,
-            discount_percent: formData.discount_percent,
-            promo_price: formData.promo_price,
-            scan_card_on_sale: formData.scan_card_on_sale,
-            send_sms_to_customer: formData.send_sms_to_customer,
-            visible_in_pos: formData.visible_in_pos,
-            other_promotion_applicable: formData.other_promotion_applicable,
-            accounts_head_creation: formData.accounts_head_creation,
-            welcome_sms: formData.welcome_sms,
+            bank_name: formData.bank_name,
+            bank_commission: formData.bank_commission,
+            bin: formData.bin,
+            mfs: formData.mfs,
+            ec: formData.ec,
+            pos: formData.pos,
             updated_at: new Date()
           })
           .eq('id', editingId);
         
         if (error) throw error;
-        toast.success('Customer Type updated successfully');
+        toast.success('Payment Method updated successfully');
       } else {
         // Generate new code
         let newCode = '001';
         const { data: lastRecord } = await supabase
-          .from('customer_types')
+          .from('payment_methods')
           .select('code')
           .order('code', { ascending: false })
           .limit(1);
@@ -91,46 +90,59 @@ const CustomerType = () => {
         }
 
         const { error } = await supabase
-          .from('customer_types')
+          .from('payment_methods')
           .insert([{
             code: newCode,
             name: formData.name,
-            discount_percent: formData.discount_percent,
-            promo_price: formData.promo_price,
-            scan_card_on_sale: formData.scan_card_on_sale,
-            send_sms_to_customer: formData.send_sms_to_customer,
-            visible_in_pos: formData.visible_in_pos,
-            other_promotion_applicable: formData.other_promotion_applicable,
-            accounts_head_creation: formData.accounts_head_creation,
-            welcome_sms: formData.welcome_sms
+            bank_name: formData.bank_name,
+            bank_commission: formData.bank_commission,
+            bin: formData.bin,
+            mfs: formData.mfs,
+            ec: formData.ec,
+            pos: formData.pos
           }]);
           
         if (error) throw error;
-        toast.success('Customer Type added successfully');
+        toast.success('Payment Method added successfully');
       }
       setView('list');
     } catch (err) {
       console.error(err);
-      toast.error('Error saving customer type');
+      toast.error('Error saving payment method');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleEdit = (type) => {
+  const handleEdit = (method) => {
     setFormData({
-      name: type.name,
-      discount_percent: type.discount_percent,
-      promo_price: type.promo_price,
-      scan_card_on_sale: type.scan_card_on_sale,
-      send_sms_to_customer: type.send_sms_to_customer,
-      visible_in_pos: type.visible_in_pos,
-      other_promotion_applicable: type.other_promotion_applicable,
-      accounts_head_creation: type.accounts_head_creation,
-      welcome_sms: type.welcome_sms
+      name: method.name,
+      bank_name: method.bank_name,
+      bank_commission: method.bank_commission,
+      bin: method.bin || '',
+      mfs: method.mfs,
+      ec: method.ec,
+      pos: method.pos
     });
-    setEditingId(type.id);
+    setEditingId(method.id);
     setView('add');
+  };
+
+  const toggleStatus = async (method) => {
+    try {
+      const newStatus = method.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+      const { error } = await supabase
+        .from('payment_methods')
+        .update({ status: newStatus })
+        .eq('id', method.id);
+      
+      if (error) throw error;
+      toast.success(`Status updated to ${newStatus}`);
+      fetchPaymentMethods();
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to update status');
+    }
   };
 
   const BooleanIcon = ({ value }) => {
@@ -147,7 +159,7 @@ const CustomerType = () => {
         <div style={{ backgroundColor: 'var(--card-bg)', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
           <div style={{ padding: '15px 20px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)' }}>
             <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-              {editingId ? 'Edit Customer Type' : 'Add Customer Type'}
+              {editingId ? 'Edit Payment Method' : 'Add Payment Method'}
             </h2>
           </div>
           
@@ -170,59 +182,58 @@ const CustomerType = () => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: 'var(--text-primary)' }}>
-                  Discount(%) <span style={{ color: 'var(--danger)' }}>*</span>
+                  Bank Name <span style={{ color: 'var(--danger)' }}>*</span>
+                </label>
+                <input 
+                  type="text" 
+                  className="input-animated"
+                  style={{ width: '100%' }}
+                  value={formData.bank_name}
+                  onChange={e => setFormData({...formData, bank_name: e.target.value})}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: 'var(--text-primary)' }}>
+                  Bank Commission <span style={{ color: 'var(--danger)' }}>*</span>
                 </label>
                 <input 
                   type="number" 
                   step="0.01"
                   className="input-animated"
                   style={{ width: '100%' }}
-                  value={formData.discount_percent}
-                  onChange={e => setFormData({...formData, discount_percent: parseFloat(e.target.value) || 0})}
+                  value={formData.bank_commission}
+                  onChange={e => setFormData({...formData, bank_commission: parseFloat(e.target.value) || 0})}
                   required
                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: 'var(--accent-primary)' }}>
-                  Promo Price <span style={{ color: 'var(--danger)' }}>*</span>
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: 'var(--text-primary)' }}>
+                  BIN
                 </label>
-                <CustomSelect 
+                <input 
+                  type="text" 
                   className="input-animated"
-                  style={{ width: '100%', borderBottom: '2px solid var(--accent-primary)' }}
-                  value={formData.promo_price}
-                  onChange={e => setFormData({...formData, promo_price: e.target.value})}
-                  required
-                >
-                  <option value="MRP">MRP</option>
-                  <option value="Wholesale">Wholesale</option>
-                </CustomSelect>
+                  style={{ width: '100%' }}
+                  value={formData.bin}
+                  onChange={e => setFormData({...formData, bin: e.target.value})}
+                />
               </div>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginTop: '10px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
-                  <input type="checkbox" checked={formData.scan_card_on_sale} onChange={e => setFormData({...formData, scan_card_on_sale: e.target.checked})} style={{ accentColor: 'var(--accent-primary)', width: '16px', height: '16px' }} />
-                  Scan Card On Sale
+                  <input type="checkbox" checked={formData.mfs} onChange={e => setFormData({...formData, mfs: e.target.checked})} style={{ accentColor: 'var(--accent-primary)', width: '16px', height: '16px' }} />
+                  MFS
                 </label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
-                  <input type="checkbox" checked={formData.send_sms_to_customer} onChange={e => setFormData({...formData, send_sms_to_customer: e.target.checked})} style={{ accentColor: 'var(--accent-primary)', width: '16px', height: '16px' }} />
-                  Send SMS To Customer
+                  <input type="checkbox" checked={formData.ec} onChange={e => setFormData({...formData, ec: e.target.checked})} style={{ accentColor: 'var(--accent-primary)', width: '16px', height: '16px' }} />
+                  EC
                 </label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
-                  <input type="checkbox" checked={formData.visible_in_pos} onChange={e => setFormData({...formData, visible_in_pos: e.target.checked})} style={{ accentColor: 'var(--accent-primary)', width: '16px', height: '16px' }} />
-                  Visible in POS
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
-                  <input type="checkbox" checked={formData.other_promotion_applicable} onChange={e => setFormData({...formData, other_promotion_applicable: e.target.checked})} style={{ accentColor: 'var(--accent-primary)', width: '16px', height: '16px' }} />
-                  Other Promotion Applicable
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
-                  <input type="checkbox" checked={formData.accounts_head_creation} onChange={e => setFormData({...formData, accounts_head_creation: e.target.checked})} style={{ accentColor: 'var(--accent-primary)', width: '16px', height: '16px' }} />
-                  Accounts Head Creation
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
-                  <input type="checkbox" checked={formData.welcome_sms} onChange={e => setFormData({...formData, welcome_sms: e.target.checked})} style={{ accentColor: 'var(--accent-primary)', width: '16px', height: '16px' }} />
-                  Welcome SMS
+                  <input type="checkbox" checked={formData.pos} onChange={e => setFormData({...formData, pos: e.target.checked})} style={{ accentColor: 'var(--accent-primary)', width: '16px', height: '16px' }} />
+                  POS
                 </label>
               </div>
               
@@ -256,7 +267,7 @@ const CustomerType = () => {
   return (
     <div className="animate-fade-in" style={{ padding: '20px', backgroundColor: 'var(--bg-color)', minHeight: '100vh' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
-        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Customer Type</h2>
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Payment Method</h2>
         {canEdit && (
           <button 
             className="btn-theme" 
@@ -280,45 +291,52 @@ const CustomerType = () => {
                 <th style={{ padding: '12px 15px' }}>SL</th>
                 <th style={{ padding: '12px 15px' }}>Code</th>
                 <th style={{ padding: '12px 15px' }}>Name</th>
-                <th style={{ padding: '12px 15px' }}>Discount(%)</th>
-                <th style={{ padding: '12px 15px' }}>Promo Price</th>
-                <th style={{ padding: '12px 15px', textAlign: 'center' }}>Visible in POS</th>
-                <th style={{ padding: '12px 15px', textAlign: 'center' }}>Send SMS To Customer</th>
-                <th style={{ padding: '12px 15px', textAlign: 'center' }}>Other Promotion Applicable</th>
-                <th style={{ padding: '12px 15px', textAlign: 'center' }}>Accounts Head Creation</th>
-                <th style={{ padding: '12px 15px', textAlign: 'center' }}>Welcome SMS</th>
-                {canEdit && <th style={{ padding: '12px 15px', textAlign: 'center' }}></th>}
+                <th style={{ padding: '12px 15px' }}>Bank Name</th>
+                <th style={{ padding: '12px 15px' }}>Bank Commission</th>
+                <th style={{ padding: '12px 15px' }}>BIN</th>
+                <th style={{ padding: '12px 15px' }}>Status</th>
+                <th style={{ padding: '12px 15px', textAlign: 'center' }}>MFS</th>
+                <th style={{ padding: '12px 15px', textAlign: 'center' }}>EC</th>
+                <th style={{ padding: '12px 15px', textAlign: 'center' }}>POS</th>
+                {canEdit && <th style={{ padding: '12px 15px', textAlign: 'center' }}>Action</th>}
               </tr>
             </thead>
             <tbody>
-              {customerTypes.map((type, idx) => (
-                <tr key={type.id} style={{ borderBottom: '1px solid #eee' }}>
+              {paymentMethods.map((method, idx) => (
+                <tr key={method.id} style={{ borderBottom: '1px solid #eee' }}>
                   <td style={{ padding: '10px 15px' }}>{idx + 1}</td>
-                  <td style={{ padding: '10px 15px' }}>{type.code}</td>
-                  <td style={{ padding: '10px 15px' }}>{type.name}</td>
-                  <td style={{ padding: '10px 15px' }}>{type.discount_percent}</td>
-                  <td style={{ padding: '10px 15px' }}>{type.promo_price}</td>
-                  <td style={{ padding: '10px 15px', textAlign: 'center' }}><BooleanIcon value={type.visible_in_pos} /></td>
-                  <td style={{ padding: '10px 15px', textAlign: 'center' }}><BooleanIcon value={type.send_sms_to_customer} /></td>
-                  <td style={{ padding: '10px 15px', textAlign: 'center' }}><BooleanIcon value={type.other_promotion_applicable} /></td>
-                  <td style={{ padding: '10px 15px', textAlign: 'center' }}><BooleanIcon value={type.accounts_head_creation} /></td>
-                  <td style={{ padding: '10px 15px', textAlign: 'center' }}><BooleanIcon value={type.welcome_sms} /></td>
+                  <td style={{ padding: '10px 15px' }}>{method.code}</td>
+                  <td style={{ padding: '10px 15px' }}>{method.name}</td>
+                  <td style={{ padding: '10px 15px' }}>{method.bank_name}</td>
+                  <td style={{ padding: '10px 15px' }}>{method.bank_commission}</td>
+                  <td style={{ padding: '10px 15px' }}>{method.bin || '0'}</td>
+                  <td style={{ padding: '10px 15px' }}>{method.status}</td>
+                  <td style={{ padding: '10px 15px', textAlign: 'center' }}><BooleanIcon value={method.mfs} /></td>
+                  <td style={{ padding: '10px 15px', textAlign: 'center' }}><BooleanIcon value={method.ec} /></td>
+                  <td style={{ padding: '10px 15px', textAlign: 'center' }}><BooleanIcon value={method.pos} /></td>
                   {canEdit && (
                     <td style={{ padding: '10px 15px', textAlign: 'center' }}>
                       <span 
                         style={{ cursor: 'pointer', color: 'var(--text-secondary)', textDecoration: 'underline' }}
-                        onClick={() => handleEdit(type)}
+                        onClick={() => handleEdit(method)}
                       >
                         Edit
+                      </span>
+                      <span style={{ margin: '0 5px', color: 'var(--text-secondary)' }}>|</span>
+                      <span 
+                        style={{ cursor: 'pointer', color: 'var(--text-secondary)', textDecoration: 'underline' }}
+                        onClick={() => toggleStatus(method)}
+                      >
+                        {method.status === 'ACTIVE' ? 'Inactive' : 'Active'}
                       </span>
                     </td>
                   )}
                 </tr>
               ))}
-              {customerTypes.length === 0 && (
+              {paymentMethods.length === 0 && (
                 <tr>
                   <td colSpan="11" style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)' }}>
-                    No Customer Types Found
+                    No Payment Methods Found
                   </td>
                 </tr>
               )}
@@ -330,4 +348,4 @@ const CustomerType = () => {
   );
 };
 
-export default CustomerType;
+export default PaymentMethod;

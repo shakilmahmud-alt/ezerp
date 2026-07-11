@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabaseClient';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import CustomSelect from '../components/CustomSelect';
 
 const PurchaseReturn = () => {
   const [vendors, setVendors] = useState([]);
@@ -348,14 +349,14 @@ const PurchaseReturn = () => {
             
             <div>
               <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Vendor Name <span style={{color:'red'}}>*</span></label>
-              <select 
+              <CustomSelect 
                 value={formData.vendorId} 
                 onChange={(e) => loadChallansForVendor(e.target.value)} 
                 className="input-animated"
               >
                 <option value="">-- Select a Vendor --</option>
                 {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-              </select>
+              </CustomSelect>
             </div>
 
             <div style={{ borderBottom: '1px dotted var(--border-color)', paddingBottom: '5px' }}>
@@ -365,7 +366,7 @@ const PurchaseReturn = () => {
 
             <div>
               <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Challan No <span style={{color:'red'}}>*</span></label>
-              <select 
+              <CustomSelect 
                 value={formData.purchaseReceiveId} 
                 onChange={(e) => {
                   const selectedChallan = vendorChallans.find(c => c.id === e.target.value);
@@ -382,7 +383,7 @@ const PurchaseReturn = () => {
                 {vendorChallans.map(c => (
                   <option key={c.id} value={c.id}>{c.last_challan_no} ({c.created_at?.split('T')[0]})</option>
                 ))}
-              </select>
+              </CustomSelect>
             </div>
 
             <div>

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Download, Edit, Loader } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import CustomSelect from '../components/CustomSelect';
+import { useAuth } from '../context/AuthContext';
 
 const initialFormState = {
   name: '', address: '', postal_code: '', city: '', country: 'Bangladesh', contact_no: '', email: '', website: '',
@@ -40,6 +42,8 @@ const SectionWrapper = ({ title, titleRight, children }) => (
 );
 
 const Vendor = () => {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Vendor');
   const [isAdding, setIsAdding] = useState(false);
   const [vendors, setVendors] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -187,24 +191,26 @@ const Vendor = () => {
             <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>Vendor</h2>
             {isLoading && <Loader className="animate-spin" size={20} color="var(--text-secondary)" />}
           </div>
-          <button 
-            className="btn btn-primary btn-theme" 
-            onClick={() => {
-              setFormData(initialFormState);
-              setEditingId(null);
-              setIsAdding(true);
-            }}
-            style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
-          >
-            <Plus size={16} /> Add New
-          </button>
+          {canEdit && (
+            <button 
+              className="btn btn-primary btn-theme" 
+              onClick={() => {
+                setFormData(initialFormState);
+                setEditingId(null);
+                setIsAdding(true);
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
+            >
+              <Plus size={16} /> Add New
+            </button>
+          )}
         </div>
 
         <div style={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '4px' }}>
           <div style={{ padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', gap: '20px', alignItems: 'flex-end' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               <label style={{ fontSize: '0.85rem', color: 'var(--accent-primary)' }}>Payment Terms and condition</label>
-              <select 
+              <CustomSelect 
                 className="input-animated"
                 value={filterPaymentTerms}
                 onChange={(e) => { setFilterPaymentTerms(e.target.value); setCurrentPage(1); }}
@@ -216,7 +222,7 @@ const Vendor = () => {
                 <option value="Credit">Credit</option>
                 <option value="Bill to Bill">Bill to Bill</option>
                 <option value="Cash Purchase">Cash Purchase</option>
-              </select>
+              </CustomSelect>
             </div>
             
             <div style={{ display: 'flex', gap: '15px', alignItems: 'center', marginBottom: '5px' }}>
@@ -263,7 +269,7 @@ const Vendor = () => {
                   <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>Supplier Type</th>
                   <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>Address</th>
                   <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>Status</th>
-                  <th style={{ textAlign: 'center', padding: '12px', fontWeight: 600 }}>Action</th>
+                  {canEdit && <th style={{ textAlign: 'center', padding: '12px', fontWeight: 600 }}>Action</th>}
                 </tr>
               </thead>
               <tbody>
@@ -285,19 +291,21 @@ const Vendor = () => {
                       <td style={{ padding: '12px' }}>{v.vendor_type}</td>
                       <td style={{ padding: '12px' }}>{v.address}</td>
                       <td style={{ padding: '12px' }}>{v.status}</td>
-                      <td style={{ padding: '12px', textAlign: 'center' }}>
-                        <button  
-                          onClick={() => handleEdit(v)}
-                          style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <Edit size={14} /> Edit
-                        </button>
-                        <span style={{ margin: '0 5px', color: 'var(--border-color)' }}>|</span>
-                        <button 
-                          onClick={() => toggleStatus(v)}
-                          style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                          {v.status === 'ACTIVE' ? 'Inactive' : 'Active'}
-                        </button>
-                      </td>
+                      {canEdit && (
+                        <td style={{ padding: '12px', textAlign: 'center' }}>
+                          <button  
+                            onClick={() => handleEdit(v)}
+                            style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <Edit size={14} /> Edit
+                          </button>
+                          <span style={{ margin: '0 5px', color: 'var(--border-color)' }}>|</span>
+                          <button
+                            onClick={() => toggleStatus(v)}
+                            style={{ background: 'transparent', border: 'none', color: v.status === 'ACTIVE' ? 'var(--danger)' : 'var(--accent-primary)', cursor: 'pointer' }}>
+                            {v.status === 'ACTIVE' ? 'Inactive' : 'Active'}
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))
                 ) : (
@@ -381,18 +389,18 @@ const Vendor = () => {
                   </div>
                   <div>
                     <label style={{ fontSize: '0.85rem' }}>City</label>
-                    <select className="input-animated" value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} disabled={isLoading}>
+                    <CustomSelect className="input-animated" value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} disabled={isLoading}>
                       <option value="">-- Select a City --</option>
                       <option value="Dhaka">Dhaka</option>
                       <option value="Chittagong">Chittagong</option>
                       <option value="Sylhet">Sylhet</option>
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div>
                     <label style={{ fontSize: '0.85rem' }}>Country</label>
-                    <select className="input-animated" value={formData.country} onChange={e => setFormData({...formData, country: e.target.value})} disabled={isLoading}>
+                    <CustomSelect className="input-animated" value={formData.country} onChange={e => setFormData({...formData, country: e.target.value})} disabled={isLoading}>
                       <option value="Bangladesh">Bangladesh</option>
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div>
                     <label style={{ fontSize: '0.85rem' }}>Contact No</label>
@@ -424,11 +432,11 @@ const Vendor = () => {
 
                   <div>
                     <label style={{ fontSize: '0.85rem' }}>Vendor Type <span style={{ color: 'var(--danger)' }}>*</span></label>
-                    <select className="input-animated" value={formData.vendor_type} onChange={e => setFormData({...formData, vendor_type: e.target.value})} disabled={isLoading}>
+                    <CustomSelect className="input-animated" value={formData.vendor_type} onChange={e => setFormData({...formData, vendor_type: e.target.value})} disabled={isLoading}>
                       <option value="">-- Select --</option>
                       <option value="Local">Local</option>
                       <option value="Import">Import</option>
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '10px' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
@@ -484,18 +492,18 @@ const Vendor = () => {
                   </div>
                   <div>
                     <label style={{ fontSize: '0.85rem' }}>City</label>
-                    <select className="input-animated" value={formData.trading_info.city} onChange={e => handleNestedChange('trading_info', 'city', e.target.value)} disabled={isLoading || formData.trading_info.same_as_reg}>
+                    <CustomSelect className="input-animated" value={formData.trading_info.city} onChange={e => handleNestedChange('trading_info', 'city', e.target.value)} disabled={isLoading || formData.trading_info.same_as_reg}>
                       <option value="">-- Select a City --</option>
                       <option value="Dhaka">Dhaka</option>
                       <option value="Chittagong">Chittagong</option>
                       <option value="Sylhet">Sylhet</option>
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div>
                     <label style={{ fontSize: '0.85rem' }}>Country</label>
-                    <select className="input-animated" value={formData.trading_info.country} onChange={e => handleNestedChange('trading_info', 'country', e.target.value)} disabled={isLoading || formData.trading_info.same_as_reg}>
+                    <CustomSelect className="input-animated" value={formData.trading_info.country} onChange={e => handleNestedChange('trading_info', 'country', e.target.value)} disabled={isLoading || formData.trading_info.same_as_reg}>
                       <option value="Bangladesh">Bangladesh</option>
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div>
                     <label style={{ fontSize: '0.85rem' }}>Contact No</label>

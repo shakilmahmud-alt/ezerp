@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabaseClient';
+import CustomSelect from '../components/CustomSelect';
 
 const SectionWrapper = ({ title, children }) => (
   <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '20px', backgroundColor: 'var(--card-bg)', marginBottom: '20px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)' }}>
@@ -15,20 +17,12 @@ const SectionWrapper = ({ title, children }) => (
   </div>
 );
 
-// Dummy Store Data
-const STORES = [
-  { id: 1, name: 'Central Store', contact: '01711-000000', address: 'Main Office', email: 'central@bd.com' },
-  { id: 2, name: 'JAMUNA FUTURE PARK', contact: '01726-499168', address: 'Shop No:026-031,Block-B Level-1, North Court Bashundhara', email: 'info@bd.com' },
-  { id: 3, name: 'KIDS PARADISE (DHANMONDI)', contact: '0', address: 'ANZ Square Situated in Space on Ground Floor, Plot No : 53, Satmasjid Road,Zigatola Bus Stand', email: 'a@gmail.com' },
-  { id: 4, name: 'KIDS PARADISE (SKS Tower)', contact: '01332-121048', address: 'SKS Tower, 3rd Floor, Shop no: 4-5 7 VIP Road, Mohakhali', email: 'a@gmail.com' },
-  { id: 5, name: 'KIDS PARADISE (UTTARA)', contact: '01713460607', address: 'GRAND ZAM ZAM TOWER Shop No:501-503,Level-4 Sonargaon-Janapath Road Sector-13,Uttara', email: 'sgfg@gmail.com' }
-];
-
 const StoreTransferPermission = () => {
   // Mock Auth State (for demonstration)
   const [isAdmin, setIsAdmin] = useState(true);
 
-  const [selectedFromStore, setSelectedFromStore] = useState(1);
+  const [stores, setStores] = useState([]);
+  const [selectedFromStore, setSelectedFromStore] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   
   // permissions[fromStoreId] = array of toStoreIds
@@ -36,14 +30,29 @@ const StoreTransferPermission = () => {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
+    fetchStores();
+    
     // Load dummy permissions from localStorage if available
     const saved = localStorage.getItem('storePermissions');
     if (saved) {
       setPermissions(JSON.parse(saved));
-    } else {
-      setPermissions({ 1: [2, 4, 5] }); // Default some permissions
     }
   }, []);
+
+  const fetchStores = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('stores')
+        .select('id, name, contact_no, address, email')
+        .eq('status', 'ACTIVE')
+        .order('name');
+      
+      if (error) throw error;
+      setStores(data || []);
+    } catch (err) {
+      console.error('Error fetching stores:', err);
+    }
+  };
 
   const handleTogglePermission = (toStoreId) => {
     if (!isAdmin) return;
@@ -68,7 +77,7 @@ const StoreTransferPermission = () => {
     }, 500);
   };
 
-  const availableToStores = STORES.filter(s => s.id !== selectedFromStore && s.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const availableToStores = stores.filter(s => s.id !== selectedFromStore && s.name.toLowerCase().includes(searchTerm.toLowerCase()));
   const currentPermissions = permissions[selectedFromStore] || [];
 
   if (!isAdmin) {
@@ -98,17 +107,17 @@ const StoreTransferPermission = () => {
       <SectionWrapper title="Store Transfer Permission">
         <div style={{ marginBottom: '30px', maxWidth: '300px' }}>
           <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '5px', color: 'var(--accent-primary)' }}>Delivery From</label>
-          <select 
+          <CustomSelect 
             className="input-animated"
             value={selectedFromStore} 
-            onChange={(e) => setSelectedFromStore(Number(e.target.value))}
+            onChange={(e) => setSelectedFromStore(e.target.value)}
             style={{ borderBottomColor: 'var(--accent-primary)' }}
           >
             <option value="" disabled>-- Select a Store --</option>
-            {STORES.map(s => (
+            {stores.map(s => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
-          </select>
+          </CustomSelect>
         </div>
 
         <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
@@ -153,7 +162,7 @@ const StoreTransferPermission = () => {
                         />
                       </td>
                       <td style={{ padding: '12px', color: 'var(--text-primary)' }}>{store.name}</td>
-                      <td style={{ padding: '12px', color: 'var(--text-secondary)' }}>{store.contact}</td>
+                      <td style={{ padding: '12px', color: 'var(--text-secondary)' }}>{store.contact_no}</td>
                       <td style={{ padding: '12px', color: 'var(--text-secondary)' }}>{store.address}</td>
                       <td style={{ padding: '12px', color: 'var(--text-secondary)' }}>{store.email}</td>
                     </tr>

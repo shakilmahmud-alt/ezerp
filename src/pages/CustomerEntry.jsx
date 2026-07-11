@@ -6,6 +6,7 @@ import { Country, City } from 'country-state-city';
 import JsBarcode from 'jsbarcode';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import CustomSelect from '../components/CustomSelect';
 
 const initialFormState = {
   customer_type_id: '',
@@ -271,21 +272,21 @@ const CustomerEntry = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '40px', marginBottom: '20px' }}>
               <div>
                 <label style={labelStyle}>Customer Type</label>
-                <select style={inputStyle} value={formData.customer_type_id} onChange={e => setFormData({...formData, customer_type_id: e.target.value})}>
+                <CustomSelect style={inputStyle} value={formData.customer_type_id} onChange={e => setFormData({...formData, customer_type_id: e.target.value})}>
                   <option value="">Select a Type</option>
                   {customerTypes.map(t => (
                     <option key={t.id} value={t.id}>{t.name}</option>
                   ))}
-                </select>
+                </CustomSelect>
               </div>
               <div>
                 <label style={labelStyle}>Gender <span style={{ color: 'red' }}>*</span></label>
-                <select style={inputStyle} value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value})} required>
+                <CustomSelect style={inputStyle} value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value})} required>
                   <option value="">Select a Gender</option>
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
                   <option value="Other">Other</option>
-                </select>
+                </CustomSelect>
               </div>
               <div>
                 <label style={labelStyle}>First Name <span style={{ color: 'red' }}>*</span></label>
@@ -349,12 +350,12 @@ const CustomerEntry = () => {
               </div>
               <div>
                 <label style={labelStyle}>City <span style={{ color: 'red' }}>*</span></label>
-                <select style={inputStyle} value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} required>
+                <CustomSelect style={inputStyle} value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} required>
                   <option value="">--Select a City--</option>
                   {cities.map(c => (
                     <option key={c.name} value={c.name}>{c.name}</option>
                   ))}
-                </select>
+                </CustomSelect>
               </div>
               <div>
                 <label style={labelStyle}>Postal Code</label>
@@ -366,12 +367,12 @@ const CustomerEntry = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '40px', marginBottom: '20px' }}>
               <div>
                 <label style={labelStyle}>Country</label>
-                <select style={inputStyle} value={formData.country} onChange={e => {setFormData({...formData, country: e.target.value, city: ''})}}>
+                <CustomSelect style={inputStyle} value={formData.country} onChange={e => {setFormData({...formData, country: e.target.value, city: ''})}}>
                   <option value="">Select a Country</option>
                   {countries.map(c => (
                     <option key={c.isoCode} value={c.isoCode}>{c.name}</option>
                   ))}
-                </select>
+                </CustomSelect>
               </div>
               <div>
                 <label style={labelStyle}>Discount Percent</label>
@@ -379,19 +380,19 @@ const CustomerEntry = () => {
               </div>
               <div>
                 <label style={labelStyle}>Salesperson</label>
-                <select style={inputStyle} value={formData.salesperson} onChange={e => setFormData({...formData, salesperson: e.target.value})}>
+                <CustomSelect style={inputStyle} value={formData.salesperson} onChange={e => setFormData({...formData, salesperson: e.target.value})}>
                   <option value="">Select a Employee</option>
                   <option value="Emp 1">Emp 1</option>
                   <option value="Emp 2">Emp 2</option>
-                </select>
+                </CustomSelect>
               </div>
               <div>
                 <label style={labelStyle}>Store <span style={{ color: 'red' }}>*</span></label>
-                <select style={inputStyle} value={formData.store} onChange={e => setFormData({...formData, store: e.target.value})} required>
+                <CustomSelect style={inputStyle} value={formData.store} onChange={e => setFormData({...formData, store: e.target.value})} required>
                   <option value="">-- Select a Store --</option>
                   <option value="Central Store">Central Store</option>
                   <option value="Shop">Shop</option>
-                </select>
+                </CustomSelect>
               </div>
             </div>
 
@@ -407,9 +408,9 @@ const CustomerEntry = () => {
               </div>
               <div>
                 <label style={labelStyle}>Age Range</label>
-                <select style={inputStyle}>
+                <CustomSelect style={inputStyle}>
                   <option value="">Select Age Range</option>
-                </select>
+                </CustomSelect>
               </div>
               <div>
                 <label style={checkboxContainerStyle}>

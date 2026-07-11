@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Package, Plus, Trash2, Box, Tag, DollarSign, Layers } from 'lucide-react';
+import CustomSelect from '../components/CustomSelect';
 
 const Inventory = () => {
   const [items, setItems] = useState([]);
@@ -48,11 +49,11 @@ const Inventory = () => {
             <input className="input-glass" placeholder="Category" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})} required />
             <input className="input-glass" type="number" placeholder="Stock Quantity" value={newItem.stock} onChange={e => setNewItem({...newItem, stock: e.target.value})} required min="0" />
             <input className="input-glass" type="number" step="0.01" placeholder="Unit Price ($)" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} required min="0" />
-            <select className="input-glass" value={newItem.status} onChange={e => setNewItem({...newItem, status: e.target.value})}>
+            <CustomSelect className="input-glass" value={newItem.status} onChange={e => setNewItem({...newItem, status: e.target.value})}>
               <option value="In Stock" style={{ color: 'black' }}>In Stock</option>
               <option value="Low Stock" style={{ color: 'black' }}>Low Stock</option>
               <option value="Out of Stock" style={{ color: 'black' }}>Out of Stock</option>
-            </select>
+            </CustomSelect>
             <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
               <button type="button" className="btn btn-glass btn-danger" onClick={() => setIsAdding(false)}>Cancel</button>
               <button type="submit" className="btn btn-primary btn-theme">Save Item</button>

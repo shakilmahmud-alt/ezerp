@@ -3,6 +3,8 @@ import { useLocation } from 'react-router-dom';
 import { Plus, Download, Edit, Loader } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import toast from 'react-hot-toast';
+import CustomSelect from '../components/CustomSelect';
+import { useAuth } from '../context/AuthContext';
 
 const initialFormState = {
   item_name: '',
@@ -49,6 +51,8 @@ const SectionWrapper = ({ title, children }) => (
 );
 
 const Product = () => {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Product');
   const [isAdding, setIsAdding] = useState(false);
   const [products, setProducts] = useState([]);
   
@@ -310,26 +314,28 @@ const Product = () => {
             <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>Product List</h2>
             {isLoading && <Loader className="animate-spin" size={20} color="var(--text-secondary)" />}
           </div>
-          <button 
-            className="btn btn-primary btn-theme" 
-            onClick={() => {
-              const nextSl = products.length > 0 ? Math.max(...products.map(p => p.sl || 0)) + 1 : 1;
-              const nextBarcode = `10011${String(nextSl).padStart(5, '0')}`;
-              
-              const saved = localStorage.getItem('productFormCache');
-              let cachedData = initialFormState;
-              if (saved) {
-                try { cachedData = JSON.parse(saved); } catch(e) {}
-              }
-              
-              setFormData({...cachedData, user_define_barcode: nextBarcode});
-              setEditingId(null);
-              setIsAdding(true);
-            }}
-            style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
-          >
-            <Plus size={16} /> Add New
-          </button>
+          {canEdit && (
+            <button 
+              className="btn btn-primary btn-theme" 
+              onClick={() => {
+                const nextSl = products.length > 0 ? Math.max(...products.map(p => p.sl || 0)) + 1 : 1;
+                const nextBarcode = `10011${String(nextSl).padStart(5, '0')}`;
+                
+                const saved = localStorage.getItem('productFormCache');
+                let cachedData = initialFormState;
+                if (saved) {
+                  try { cachedData = JSON.parse(saved); } catch(e) {}
+                }
+                
+                setFormData({...cachedData, user_define_barcode: nextBarcode});
+                setEditingId(null);
+                setIsAdding(true);
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
+            >
+              <Plus size={16} /> Add New
+            </button>
+          )}
         </div>
 
         <div style={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '4px' }}>
@@ -338,7 +344,7 @@ const Product = () => {
           <div style={{ padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', gap: '20px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               <label style={{ fontSize: '0.85rem', color: 'var(--accent-primary)' }}>Order By</label>
-              <select 
+              <CustomSelect 
                 className="input-animated"
                 value={orderBy}
                 onChange={(e) => { setOrderBy(e.target.value); setCurrentPage(1); }}
@@ -350,7 +356,7 @@ const Product = () => {
                 <option value="Most Recent Updated First">Most Recent Updated First</option>
                 <option value="MRP Ascending">MRP Ascending</option>
                 <option value="MRP Descending">MRP Descending</option>
-              </select>
+              </CustomSelect>
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
@@ -401,7 +407,7 @@ const Product = () => {
                   <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>CPU</th>
                   <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>MRP</th>
                   <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>WSP</th>
-                  <th style={{ textAlign: 'center', padding: '12px', fontWeight: 600 }}>Action</th>
+                  {canEdit && <th style={{ textAlign: 'center', padding: '12px', fontWeight: 600 }}>Action</th>}
                 </tr>
               </thead>
               <tbody>
@@ -430,22 +436,24 @@ const Product = () => {
                       <td style={{ padding: '12px' }}>{p.purchase_price}</td>
                       <td style={{ padding: '12px' }}>{p.mrp}</td>
                       <td style={{ padding: '12px' }}>{p.wsp}</td>
-                      <td style={{ padding: '12px', textAlign: 'center' }}>
-                         <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
-                           <button 
-                              className="btn btn-primary btn-theme"
-                              onClick={() => handleEdit(p)}
-                              style={{ padding: '4px 10px', fontSize: '0.8rem', color: '#fff' }}>
-                              Edit
-                           </button>
-                           <button 
-                              className="btn btn-danger"
-                              onClick={() => handleDelete(p.id)}
-                              style={{ padding: '4px 10px', fontSize: '0.8rem', backgroundColor: 'rgba(239, 68, 68, 0.2)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
-                              Delete
-                           </button>
-                         </div>
-                      </td>
+                      {canEdit && (
+                        <td style={{ padding: '12px', textAlign: 'center' }}>
+                           <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                             <button 
+                                className="btn btn-primary btn-theme"
+                                onClick={() => handleEdit(p)}
+                                style={{ padding: '4px 10px', fontSize: '0.8rem', color: '#fff' }}>
+                                Edit
+                             </button>
+                             <button 
+                                className="btn btn-danger"
+                                onClick={() => handleDelete(p.id)}
+                                style={{ padding: '4px 10px', fontSize: '0.8rem', backgroundColor: 'rgba(239, 68, 68, 0.2)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
+                                Delete
+                             </button>
+                           </div>
+                        </td>
+                      )}
                     </tr>
                   ))
                 ) : (
@@ -535,35 +543,35 @@ const Product = () => {
                   
                   <div>
                     <label style={{ fontSize: '0.85rem', display: 'block', marginBottom: '5px' }}>Category <span style={{ color: 'var(--danger)' }}>*</span></label>
-                    <select className="input-animated" value={formData.category_id} onChange={e => setFormData({...formData, category_id: e.target.value, subcategory_id: '', sub_subcategory_id: ''})} disabled={isLoading}>
+                    <CustomSelect className="input-animated" value={formData.category_id} onChange={e => setFormData({...formData, category_id: e.target.value, subcategory_id: '', sub_subcategory_id: ''})} disabled={isLoading}>
                       <option value="">Select a Category</option>
                       {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
+                    </CustomSelect>
                   </div>
                   
                   <div>
                     <label style={{ fontSize: '0.85rem', display: 'block', marginBottom: '5px' }}>Sub Category <span style={{ color: 'var(--danger)' }}>*</span></label>
-                    <select className="input-animated" value={formData.subcategory_id} onChange={e => setFormData({...formData, subcategory_id: e.target.value, sub_subcategory_id: ''})} disabled={isLoading || !formData.category_id}>
+                    <CustomSelect className="input-animated" value={formData.subcategory_id} onChange={e => setFormData({...formData, subcategory_id: e.target.value, sub_subcategory_id: ''})} disabled={isLoading || !formData.category_id}>
                       <option value="">Select a Sub Category</option>
                       {subcategories.filter(sc => sc.category_name === categories.find(c => c.id === formData.category_id)?.name).map(sc => <option key={sc.id} value={sc.id}>{sc.name}</option>)}
-                    </select>
+                    </CustomSelect>
                   </div>
                   
                   <div>
                     <label style={{ fontSize: '0.85rem', display: 'block', marginBottom: '5px' }}>Sub Subcategory <span style={{ color: 'var(--danger)' }}>*</span></label>
-                    <select className="input-animated" value={formData.sub_subcategory_id} onChange={e => setFormData({...formData, sub_subcategory_id: e.target.value})} disabled={isLoading || !formData.subcategory_id}>
+                    <CustomSelect className="input-animated" value={formData.sub_subcategory_id} onChange={e => setFormData({...formData, sub_subcategory_id: e.target.value})} disabled={isLoading || !formData.subcategory_id}>
                       <option value="">Select a Sub Subcategory</option>
                       {subSubcategories.filter(ssc => ssc.subcategory_name === subcategories.find(sc => sc.id === formData.subcategory_id)?.name).map(ssc => <option key={ssc.id} value={ssc.id}>{ssc.name}</option>)}
-                    </select>
+                    </CustomSelect>
                   </div>
                   
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
                     <div style={{ flex: 1 }}>
                       <label style={{ fontSize: '0.85rem', display: 'block', marginBottom: '5px' }}>Brand <span style={{ color: 'var(--danger)' }}>*</span></label>
-                      <select className="input-animated" value={formData.brand_id} onChange={e => setFormData({...formData, brand_id: e.target.value})} disabled={isLoading}>
+                      <CustomSelect className="input-animated" value={formData.brand_id} onChange={e => setFormData({...formData, brand_id: e.target.value})} disabled={isLoading}>
                         <option value="">Select a Brand</option>
                         {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                      </select>
+                      </CustomSelect>
                     </div>
                     <button type="button" className="btn btn-primary btn-theme" style={{ padding: '8px 12px' }} onClick={() => setShowBrandModal(true)}>+</button>
                   </div>
@@ -580,10 +588,10 @@ const Product = () => {
                   
                   <div>
                     <label style={{ fontSize: '0.85rem', display: 'block', marginBottom: '5px' }}>Vendor</label>
-                    <select className="input-animated" value={formData.vendor_id} onChange={e => setFormData({...formData, vendor_id: e.target.value})} disabled={isLoading}>
+                    <CustomSelect className="input-animated" value={formData.vendor_id} onChange={e => setFormData({...formData, vendor_id: e.target.value})} disabled={isLoading}>
                       <option value="">Select a Vendor</option>
                       {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                    </select>
+                    </CustomSelect>
                   </div>
 
                   {/* Bottom Checkboxes */}
@@ -622,10 +630,10 @@ const Product = () => {
 
                   <div>
                     <label style={{ fontSize: '0.85rem', display: 'block', marginBottom: '5px', color: 'var(--accent-primary)' }}>Retailer Service Type</label>
-                    <select className="input-animated" value={formData.retailer_service_type} onChange={e => setFormData({...formData, retailer_service_type: e.target.value})} disabled={isLoading}>
+                    <CustomSelect className="input-animated" value={formData.retailer_service_type} onChange={e => setFormData({...formData, retailer_service_type: e.target.value})} disabled={isLoading}>
                       <option value="Readymade Graments (Other's Brand) : 7.5">Readymade Graments (Other's Brand) : 7.5</option>
                       <option value="Zero VAT % : 0">Zero VAT % : 0</option>
-                    </select>
+                    </CustomSelect>
                   </div>
 
                   <div>

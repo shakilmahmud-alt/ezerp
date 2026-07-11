@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient';
 import { Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
+import CustomSelect from '../components/CustomSelect';
 
 const ProductQuickSearch = () => {
   const [categories, setCategories] = useState([]);
@@ -179,31 +180,31 @@ const ProductQuickSearch = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginBottom: '20px' }}>
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: 'var(--text-secondary)' }}>Category</label>
-            <select name="categoryId" value={filters.categoryId} onChange={handleFilterChange} className="input-animated">
+            <CustomSelect name="categoryId" value={filters.categoryId} onChange={handleFilterChange} className="input-animated">
               <option value="">-- ALL --</option>
               {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            </CustomSelect>
           </div>
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: 'var(--text-secondary)' }}>Sub Category</label>
-            <select name="subcategoryId" value={filters.subcategoryId} onChange={handleFilterChange} className="input-animated">
+            <CustomSelect name="subcategoryId" value={filters.subcategoryId} onChange={handleFilterChange} className="input-animated">
               <option value="">-- ALL --</option>
               {subcategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            </CustomSelect>
           </div>
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: 'var(--text-secondary)' }}>Sub Subcategory</label>
-            <select name="subSubcategoryId" value={filters.subSubcategoryId} onChange={handleFilterChange} className="input-animated">
+            <CustomSelect name="subSubcategoryId" value={filters.subSubcategoryId} onChange={handleFilterChange} className="input-animated">
               <option value="">-- ALL --</option>
               {subSubcategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            </CustomSelect>
           </div>
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: 'var(--text-secondary)' }}>Brand</label>
-            <select name="brandId" value={filters.brandId} onChange={handleFilterChange} className="input-animated">
+            <CustomSelect name="brandId" value={filters.brandId} onChange={handleFilterChange} className="input-animated">
               <option value="">-- ALL --</option>
               {brands.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            </CustomSelect>
           </div>
           
           <div>
@@ -214,9 +215,9 @@ const ProductQuickSearch = () => {
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: 'var(--text-secondary)' }}>MRP</label>
             <div style={{ display: 'flex', gap: '5px' }}>
-              <select name="mrpOperator" value={filters.mrpOperator} onChange={handleFilterChange} className="input-animated" style={{ flex: 1 }}>
+              <CustomSelect name="mrpOperator" value={filters.mrpOperator} onChange={handleFilterChange} className="input-animated" style={{ flex: 1 }}>
                 {operatorOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-              </select>
+              </CustomSelect>
               {filters.mrpOperator && (
                 <input type="number" name="mrpValue" value={filters.mrpValue} onChange={handleFilterChange} className="input-animated" placeholder="Value" style={{ flex: 1 }} />
               )}
@@ -226,9 +227,9 @@ const ProductQuickSearch = () => {
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: 'var(--text-secondary)' }}>CPU</label>
             <div style={{ display: 'flex', gap: '5px' }}>
-              <select name="cpuOperator" value={filters.cpuOperator} onChange={handleFilterChange} className="input-animated" style={{ flex: 1 }}>
+              <CustomSelect name="cpuOperator" value={filters.cpuOperator} onChange={handleFilterChange} className="input-animated" style={{ flex: 1 }}>
                 {operatorOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-              </select>
+              </CustomSelect>
               {filters.cpuOperator && (
                 <input type="number" name="cpuValue" value={filters.cpuValue} onChange={handleFilterChange} className="input-animated" placeholder="Value" style={{ flex: 1 }} />
               )}
@@ -237,18 +238,18 @@ const ProductQuickSearch = () => {
           
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: 'var(--text-secondary)' }}>Store</label>
-            <select name="store" value={filters.store} onChange={handleFilterChange} className="input-animated">
+            <CustomSelect name="store" value={filters.store} onChange={handleFilterChange} className="input-animated">
               <option value="">-- ALL --</option>
               <option value="Main Store">Main Store</option>
-            </select>
+            </CustomSelect>
           </div>
           
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: 'var(--text-secondary)' }}>Vendor</label>
-            <select name="vendorId" value={filters.vendorId} onChange={handleFilterChange} className="input-animated">
+            <CustomSelect name="vendorId" value={filters.vendorId} onChange={handleFilterChange} className="input-animated">
               <option value="">-- ALL --</option>
               {vendors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            </CustomSelect>
           </div>
         </div>
 

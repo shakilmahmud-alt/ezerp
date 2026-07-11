@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Download, Edit, Loader } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../context/AuthContext';
 
 const VatPolicy = () => {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('VAT Policy Setup');
   const [isAdding, setIsAdding] = useState(false);
   const [policies, setPolicies] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -134,17 +137,19 @@ const VatPolicy = () => {
             <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>Vat policy</h2>
             {isLoading && <Loader className="animate-spin" size={20} color="var(--text-secondary)" />}
           </div>
-          <button 
-            className="btn btn-primary btn-theme" 
-            onClick={() => {
-              setNewPolicy({ sdc_vat_code: '', sdc_sd_code: '', vat_rate: '', sd_rate: '' });
-              setEditingId(null);
-              setIsAdding(true);
-            }}
-            style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
-          >
-            <Plus size={16} /> Add New
-          </button>
+          {canEdit && (
+            <button 
+              className="btn btn-primary btn-theme" 
+              onClick={() => {
+                setNewPolicy({ sdc_vat_code: '', sdc_sd_code: '', vat_rate: '', sd_rate: '' });
+                setEditingId(null);
+                setIsAdding(true);
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
+            >
+              <Plus size={16} /> Add New
+            </button>
+          )}
         </div>
 
         <div style={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '4px' }}>
@@ -165,12 +170,12 @@ const VatPolicy = () => {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: 'rgba(255,255,255,0.05)' }}>
-                  <th style={{ textAlign: 'left', padding: '12px 15px', fontWeight: 600 }}>SL</th>
-                  <th style={{ textAlign: 'left', padding: '12px 15px', fontWeight: 600 }}>SDC VAT CODE</th>
-                  <th style={{ textAlign: 'left', padding: '12px 15px', fontWeight: 600 }}>SDC SD CODE</th>
-                  <th style={{ textAlign: 'left', padding: '12px 15px', fontWeight: 600 }}>Vat rate</th>
-                  <th style={{ textAlign: 'left', padding: '12px 15px', fontWeight: 600 }}>SD rate</th>
-                  <th style={{ textAlign: 'center', padding: '12px 15px', fontWeight: 600 }}></th>
+                  <th style={{ padding: '12px 15px', borderBottom: '2px solid var(--border-color)', fontWeight: 600, color: 'var(--text-secondary)' }}>SL</th>
+                  <th style={{ padding: '12px 15px', borderBottom: '2px solid var(--border-color)', fontWeight: 600, color: 'var(--text-secondary)' }}>SDC VAT CODE</th>
+                  <th style={{ padding: '12px 15px', borderBottom: '2px solid var(--border-color)', fontWeight: 600, color: 'var(--text-secondary)' }}>SDC SD CODE</th>
+                  <th style={{ padding: '12px 15px', borderBottom: '2px solid var(--border-color)', fontWeight: 600, color: 'var(--text-secondary)' }}>Vat rate</th>
+                  <th style={{ padding: '12px 15px', borderBottom: '2px solid var(--border-color)', fontWeight: 600, color: 'var(--text-secondary)' }}>SD rate</th>
+                  {canEdit && <th style={{ padding: '12px 15px', borderBottom: '2px solid var(--border-color)', fontWeight: 600, color: 'var(--text-secondary)', textAlign: 'right', width: '80px' }}>Action</th>}
                 </tr>
               </thead>
               <tbody>
@@ -185,16 +190,20 @@ const VatPolicy = () => {
                     <tr key={p.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                       <td style={{ padding: '12px 15px' }}>{p.sl}</td>
                       <td style={{ padding: '12px 15px' }}>{p.sdc_vat_code}</td>
-                      <td style={{ padding: '12px 15px' }}>{p.sdc_sd_code}</td>
-                      <td style={{ padding: '12px 15px' }}>{p.vat_rate}</td>
-                      <td style={{ padding: '12px 15px' }}>{p.sd_rate}</td>
-                      <td style={{ padding: '12px 15px', textAlign: 'center' }}>
-                        <button  
-                          onClick={() => handleEdit(p)}
-                          style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <Edit size={14} /> Edit
-                        </button>
-                      </td>
+                      <td style={{ padding: '12px 15px', color: 'var(--text-primary)' }}>{p.sdc_sd_code}</td>
+                      <td style={{ padding: '12px 15px', color: 'var(--text-primary)' }}>{p.vat_rate}</td>
+                      <td style={{ padding: '12px 15px', color: 'var(--text-primary)' }}>{p.sd_rate}</td>
+                      {canEdit && (
+                        <td style={{ padding: '12px 15px', textAlign: 'right' }}>
+                          <button 
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-primary)', padding: '5px' }}
+                            onClick={() => handleEdit(p)}
+                            title="Edit"
+                          >
+                            <Edit size={16} />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))
                 ) : (

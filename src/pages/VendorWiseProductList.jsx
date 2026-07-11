@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import toast from 'react-hot-toast';
+import CustomSelect from '../components/CustomSelect';
 
 const SectionWrapper = ({ title, children }) => (
   <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '20px', backgroundColor: 'var(--card-bg)', marginBottom: '20px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)' }}>
@@ -212,38 +213,38 @@ const VendorWiseProductList = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '30px' }}>
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: 'var(--text-secondary)' }}>Vendor</label>
-            <select name="vendorId" value={filters.vendorId} onChange={handleFilterChange} className="input-animated">
+            <CustomSelect name="vendorId" value={filters.vendorId} onChange={handleFilterChange} className="input-animated">
               <option value="">-- ALL --</option>
               {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-            </select>
+            </CustomSelect>
           </div>
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: 'var(--text-secondary)' }}>Category</label>
-            <select name="categoryId" value={filters.categoryId} onChange={handleFilterChange} className="input-animated">
+            <CustomSelect name="categoryId" value={filters.categoryId} onChange={handleFilterChange} className="input-animated">
               <option value="">-- ALL --</option>
               {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            </CustomSelect>
           </div>
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: 'var(--text-secondary)' }}>Sub Category</label>
-            <select name="subcategoryId" value={filters.subcategoryId} onChange={handleFilterChange} className="input-animated">
+            <CustomSelect name="subcategoryId" value={filters.subcategoryId} onChange={handleFilterChange} className="input-animated">
               <option value="">-- ALL --</option>
               {subcategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            </CustomSelect>
           </div>
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: 'var(--text-secondary)' }}>Sub Subcategory</label>
-            <select name="subSubcategoryId" value={filters.subSubcategoryId} onChange={handleFilterChange} className="input-animated">
+            <CustomSelect name="subSubcategoryId" value={filters.subSubcategoryId} onChange={handleFilterChange} className="input-animated">
               <option value="">-- ALL --</option>
               {subSubcategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            </CustomSelect>
           </div>
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: 'var(--text-secondary)' }}>Sale VAT Percent</label>
-            <select name="saleVatPercent" value={filters.saleVatPercent} onChange={handleFilterChange} className="input-animated">
+            <CustomSelect name="saleVatPercent" value={filters.saleVatPercent} onChange={handleFilterChange} className="input-animated">
               <option value="">-- ALL --</option>
               {vatPercents.map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
+            </CustomSelect>
           </div>
         </div>
 

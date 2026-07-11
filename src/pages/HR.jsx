@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Users, Plus, Mail, Phone, Briefcase, Trash2 } from 'lucide-react';
+import CustomSelect from '../components/CustomSelect';
 
 const HR = () => {
   const [employees, setEmployees] = useState([]);
@@ -39,10 +40,10 @@ const HR = () => {
             <input className="input-glass" placeholder="Department" value={newEmployee.department} onChange={e => setNewEmployee({...newEmployee, department: e.target.value})} required />
             <input className="input-glass" type="email" placeholder="Email" value={newEmployee.email} onChange={e => setNewEmployee({...newEmployee, email: e.target.value})} required />
             <input className="input-glass" type="tel" placeholder="Phone" value={newEmployee.phone} onChange={e => setNewEmployee({...newEmployee, phone: e.target.value})} required />
-            <select className="input-glass" value={newEmployee.status} onChange={e => setNewEmployee({...newEmployee, status: e.target.value})}>
+            <CustomSelect className="input-glass" value={newEmployee.status} onChange={e => setNewEmployee({...newEmployee, status: e.target.value})}>
               <option value="Active" style={{ color: 'black' }}>Active</option>
               <option value="On Leave" style={{ color: 'black' }}>On Leave</option>
-            </select>
+            </CustomSelect>
             <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
               <button type="button" className="btn btn-glass btn-danger" onClick={() => setIsAdding(false)}>Cancel</button>
               <button type="submit" className="btn btn-primary btn-theme">Save Employee</button>

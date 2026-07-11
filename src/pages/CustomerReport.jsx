@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import CustomSelect from '../components/CustomSelect';
 
 const CustomerReport = () => {
   // Form States
@@ -353,7 +354,7 @@ const CustomerReport = () => {
             {/* Status */}
             <div>
               <label style={{ display: 'block', fontSize: '12px', marginBottom: '5px', color: 'var(--text-primary)' }}>Status</label>
-              <select 
+              <CustomSelect 
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
                 style={{ width: '100%', padding: '6px 10px', border: 'none', borderBottom: '1px dashed var(--border-color)', outline: 'none', backgroundColor: 'transparent', color: 'var(--text-primary)' }}
@@ -361,7 +362,7 @@ const CustomerReport = () => {
                 <option value="Active">Active</option>
                 <option value="Inactive">Inactive</option>
                 <option value="ALL">ALL</option>
-              </select>
+              </CustomSelect>
             </div>
 
             {/* Customer Type Dropdown */}
@@ -402,7 +403,7 @@ const CustomerReport = () => {
             {/* Store */}
             <div>
               <label style={{ display: 'block', fontSize: '12px', marginBottom: '5px', color: 'var(--text-primary)' }}>Store</label>
-              <select 
+              <CustomSelect 
                 value={store}
                 onChange={(e) => setStore(e.target.value)}
                 style={{ width: '100%', padding: '6px 10px', border: 'none', borderBottom: '1px dashed var(--border-color)', outline: 'none', backgroundColor: 'transparent', color: 'var(--text-primary)' }}
@@ -410,7 +411,7 @@ const CustomerReport = () => {
                 <option value="-- ALL --">-- ALL --</option>
                 <option value="Central Store">Central Store</option>
                 <option value="Shop">Shop</option>
-              </select>
+              </CustomSelect>
             </div>
 
           </div>

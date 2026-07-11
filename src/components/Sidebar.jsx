@@ -10,11 +10,15 @@ import {
   Users,
   Box,
   Plus,
-  Minus
+  Minus,
+  Store,
+  Briefcase
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const Sidebar = ({ isOpen, toggleSidebar }) => {
   const [expandedMenus, setExpandedMenus] = useState({});
+  const { hasViewPermission } = useAuth();
 
   const toggleMenu = (name, e) => {
     e.preventDefault();
@@ -85,6 +89,28 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
       ]
     },
     { 
+      name: 'Store', 
+      path: '/store', 
+      icon: <Store size={20} />, 
+      subItems: [
+        { name: 'Area', path: '/store/area' },
+        { name: 'Store List', path: '/store/store-list' },
+        { name: 'Terminal', path: '/store/terminal' },
+        { name: 'POS Distribution', path: '/store/pos-distribution' }
+      ]
+    },
+    { 
+      name: 'Employee', 
+      path: '/employee', 
+      icon: <Briefcase size={20} />, 
+      subItems: [
+        { name: 'Designation', path: '/employee/designation' },
+        { name: 'Employee List', path: '/employee/employee-list' },
+        { name: 'User Menu Distribution', path: '/employee/user-menu-distribution' },
+        { name: 'Payment Method', path: '/employee/payment-method' }
+      ]
+    },
+    { 
       name: 'Approval', 
       path: '/approval', 
       icon: <Settings size={20} />, 
@@ -105,7 +131,21 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
         </div>
       </div>
       <nav className="nav-links" style={{ minWidth: 'var(--sidebar-width)' }}>
-        {navItems.map((item, index) => {
+        {navItems
+          .map(item => {
+            if (item.subItems) {
+              return {
+                ...item,
+                subItems: item.subItems.filter(sub => hasViewPermission(sub.name))
+              };
+            }
+            return item;
+          })
+          .filter(item => {
+            if (item.subItems) return item.subItems.length > 0;
+            return hasViewPermission(item.name);
+          })
+          .map((item, index) => {
           const isExpanded = expandedMenus[item.name];
           const hasSub = item.subItems && item.subItems.length > 0;
           const showToggle = hasSub || item.hasSubItems;

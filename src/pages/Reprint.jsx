@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabaseClient';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import CustomSelect from '../components/CustomSelect';
 
 const SectionWrapper = ({ title, children, rightContent }) => (
   <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '20px', backgroundColor: 'var(--card-bg)', marginBottom: '20px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)' }}>
@@ -388,7 +389,7 @@ const Reprint = () => {
           {/* Type */}
           <div>
             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Type</label>
-            <select 
+            <CustomSelect 
               className="input-animated" 
               value={selectedType} 
               onChange={e => setSelectedType(e.target.value)}
@@ -398,13 +399,13 @@ const Reprint = () => {
               {REPRINT_TYPES.map(type => (
                 <option key={type} value={type}>{type}</option>
               ))}
-            </select>
+            </CustomSelect>
           </div>
 
           {/* Store */}
           <div>
             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Store</label>
-            <select 
+            <CustomSelect 
               className="input-animated" 
               value={selectedStore} 
               onChange={e => setSelectedStore(e.target.value)}
@@ -413,7 +414,7 @@ const Reprint = () => {
               <option value="">-- All --</option>
               <option value="Central Store">Central Store</option>
               <option value="Shop">Shop</option>
-            </select>
+            </CustomSelect>
           </div>
 
           {/* Document No */}
@@ -421,7 +422,7 @@ const Reprint = () => {
             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'block', minHeight: '20px' }}>
               {selectedType ? getLabelForType() : 'Document No'}
             </label>
-            <select 
+            <CustomSelect 
               className="input-animated" 
               value={selectedDocument} 
               onChange={e => setSelectedDocument(e.target.value)}
@@ -432,7 +433,7 @@ const Reprint = () => {
               {documentList.map(doc => (
                 <option key={doc} value={doc}>{doc}</option>
               ))}
-            </select>
+            </CustomSelect>
             {isLoading && <span style={{ marginLeft: '10px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Loading...</span>}
             {!isLoading && selectedType && documentList.length === 0 && (
               <span style={{ marginLeft: '10px', fontSize: '0.85rem', color: 'var(--danger)' }}>No documents found for this period.</span>

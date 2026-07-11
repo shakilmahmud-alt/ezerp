@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Download, Edit, Image as ImageIcon, Loader } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import CustomSelect from '../components/CustomSelect';
+import { useAuth } from '../context/AuthContext';
 
 const SubSubcategory = () => {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sub sub-category');
   const [isAdding, setIsAdding] = useState(false);
   const [subSubcategories, setSubSubcategories] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -164,23 +168,20 @@ const SubSubcategory = () => {
             {isLoading && <Loader className="animate-spin" size={20} color="var(--text-secondary)" />}
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button 
-              className="btn btn-primary btn-theme" 
-              onClick={() => {
-                setNewSubSub({ category_name: '', subcategory_name: '', name: '', description: '' });
-                setEditingCode(null);
-                setIsAdding(true);
-              }}
-              style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
-            >
-              <Plus size={16} /> Add New
-            </button>
-            <button 
-              className="btn btn-primary btn-theme"
-              onClick={exportCSV}
-              style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
-            >
-              <Download size={16} /> Export List
+            {canEdit && (
+              <button 
+                className="btn btn-primary btn-theme" 
+                onClick={() => {
+                  setNewSubSub({ category_name: '', subcategory_name: '', name: '', description: '' });
+                  setEditingCode(null);
+                  setIsAdding(!isAdding);
+                }}
+              >
+                <Plus size={18} style={{ marginRight: '5px' }} /> {isAdding ? 'Cancel' : 'Add New'}
+              </button>
+            )}
+            <button className="btn btn-secondary btn-glass" style={{ display: 'flex', alignItems: 'center' }} onClick={exportCSV}>
+              <Download size={18} style={{ marginRight: '5px' }} /> Export
             </button>
           </div>
         </div>
@@ -203,12 +204,12 @@ const SubSubcategory = () => {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: 'rgba(255,255,255,0.05)' }}>
-                  <th style={{ textAlign: 'left', padding: '12px 15px', fontWeight: 600 }}>SL</th>
-                  <th style={{ textAlign: 'left', padding: '12px 15px', fontWeight: 600 }}>Category</th>
-                  <th style={{ textAlign: 'left', padding: '12px 15px', fontWeight: 600 }}>Sub Category</th>
-                  <th style={{ textAlign: 'left', padding: '12px 15px', fontWeight: 600 }}>Code</th>
-                  <th style={{ textAlign: 'left', padding: '12px 15px', fontWeight: 600 }}>Name</th>
-                  <th style={{ textAlign: 'center', padding: '12px 15px', fontWeight: 600 }}>Action</th>
+                  <th style={{ padding: '12px 15px', borderBottom: '2px solid var(--border-color)', fontWeight: 600, color: 'var(--text-secondary)' }}>SL</th>
+                  <th style={{ padding: '12px 15px', borderBottom: '2px solid var(--border-color)', fontWeight: 600, color: 'var(--text-secondary)' }}>Category</th>
+                  <th style={{ padding: '12px 15px', borderBottom: '2px solid var(--border-color)', fontWeight: 600, color: 'var(--text-secondary)' }}>Sub Category</th>
+                  <th style={{ padding: '12px 15px', borderBottom: '2px solid var(--border-color)', fontWeight: 600, color: 'var(--text-secondary)' }}>Code</th>
+                  <th style={{ padding: '12px 15px', borderBottom: '2px solid var(--border-color)', fontWeight: 600, color: 'var(--text-secondary)' }}>Name</th>
+                  {canEdit && <th style={{ padding: '12px 15px', borderBottom: '2px solid var(--border-color)', fontWeight: 600, color: 'var(--text-secondary)', textAlign: 'right', width: '80px' }}>Action</th>}
                 </tr>
               </thead>
               <tbody>
@@ -223,16 +224,20 @@ const SubSubcategory = () => {
                     <tr key={cat.code || cat.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                       <td style={{ padding: '12px 15px' }}>{cat.sl}</td>
                       <td style={{ padding: '12px 15px' }}>{cat.category_name}</td>
-                      <td style={{ padding: '12px 15px' }}>{cat.subcategory_name}</td>
-                      <td style={{ padding: '12px 15px' }}>{cat.code}</td>
-                      <td style={{ padding: '12px 15px' }}>{cat.name}</td>
-                      <td style={{ padding: '12px 15px', textAlign: 'center' }}>
-                        <button  
-                          onClick={() => handleEdit(cat)}
-                          style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <Edit size={14} /> Edit
-                        </button>
-                      </td>
+                      <td style={{ padding: '12px 15px', color: 'var(--text-primary)' }}>{cat.subcategory_name}</td>
+                      <td style={{ padding: '12px 15px', color: 'var(--text-primary)' }}>{cat.code}</td>
+                      <td style={{ padding: '12px 15px', color: 'var(--text-primary)' }}>{cat.name}</td>
+                      {canEdit && (
+                        <td style={{ padding: '12px 15px', textAlign: 'right' }}>
+                          <button 
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-primary)', padding: '5px' }}
+                            onClick={() => handleEdit(cat)}
+                            title="Edit"
+                          >
+                            <Edit size={16} />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))
                 ) : (
@@ -301,7 +306,7 @@ const SubSubcategory = () => {
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <label style={{ fontSize: '0.85rem' }}>Category <span style={{ color: 'var(--danger)' }}>*</span></label>
-              <select 
+              <CustomSelect 
                 className="input-animated"
                 value={newSubSub.category_name}
                 onChange={(e) => {
@@ -313,12 +318,12 @@ const SubSubcategory = () => {
                 {categories.map((c, i) => (
                   <option key={i} value={c.name} style={{ color: 'var(--text-primary)', backgroundColor: 'var(--bg-color)' }}>{c.name}</option>
                 ))}
-              </select>
+              </CustomSelect>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <label style={{ fontSize: '0.85rem' }}>Sub Category <span style={{ color: 'var(--danger)' }}>*</span></label>
-              <select 
+              <CustomSelect 
                 className="input-animated"
                 value={newSubSub.subcategory_name}
                 onChange={(e) => setNewSubSub({...newSubSub, subcategory_name: e.target.value})}
@@ -328,7 +333,7 @@ const SubSubcategory = () => {
                 {availableSubcategories.map((s, i) => (
                   <option key={i} value={s.name} style={{ color: 'var(--text-primary)', backgroundColor: 'var(--bg-color)' }}>{s.name}</option>
                 ))}
-              </select>
+              </CustomSelect>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

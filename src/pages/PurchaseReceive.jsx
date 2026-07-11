@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabaseClient';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import CustomSelect from '../components/CustomSelect';
 
 const SectionWrapper = ({ title, children, rightContent }) => (
   <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '20px', backgroundColor: 'var(--card-bg)', marginBottom: '20px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)' }}>
@@ -507,10 +508,10 @@ const PurchaseReceive = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '20px', marginBottom: '20px' }}>
           <div>
             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Vendor Name <span style={{color:'red'}}>*</span></label>
-            <select name="vendorId" value={headerData.vendorId} onChange={handleHeaderChange} className="input-animated">
+            <CustomSelect name="vendorId" value={headerData.vendorId} onChange={handleHeaderChange} className="input-animated">
               <option value="">-- Select a Vendor --</option>
               {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-            </select>
+            </CustomSelect>
           </div>
           <div>
             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>From Date</label>
@@ -523,12 +524,12 @@ const PurchaseReceive = () => {
           
           <div>
             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Purchase Order <span style={{color:'red'}}>*</span></label>
-            <select name="purchaseOrderId" value={headerData.purchaseOrderId} onChange={handleHeaderChange} className="input-animated">
+            <CustomSelect name="purchaseOrderId" value={headerData.purchaseOrderId} onChange={handleHeaderChange} className="input-animated">
               <option value="">-- Select --</option>
               {vendorPOs.map(po => (
                 <option key={po.id} value={po.id}>{po.reference_no || 'PO'} - {po.order_date}</option>
               ))}
-            </select>
+            </CustomSelect>
           </div>
           <div>
             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Purchase Date</label>
@@ -544,10 +545,10 @@ const PurchaseReceive = () => {
           </div>
           <div>
             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Delivery To</label>
-            <select name="deliveryTo" value={headerData.deliveryTo} onChange={handleHeaderChange} className="input-animated">
+            <CustomSelect name="deliveryTo" value={headerData.deliveryTo} onChange={handleHeaderChange} className="input-animated">
               <option value="Central Store">Central Store</option>
               <option value="Shop">Shop</option>
-            </select>
+            </CustomSelect>
           </div>
         </div>
       </SectionWrapper>

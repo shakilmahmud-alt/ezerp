@@ -5,6 +5,8 @@ import {
   PieChart, Pie, Cell
 } from 'recharts';
 import { Clock, FileText, CalendarDays, Calendar } from 'lucide-react';
+import { supabase } from '../lib/supabaseClient';
+import CustomSelect from '../components/CustomSelect';
 
 // --- Dummy Data ---
 const lastSevenDaysSaleData = [];
@@ -18,6 +20,32 @@ const storeSalesTable = [];
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#a05195', '#d45087', '#f95d6a', '#ff7c43', '#ffa600'];
 
 const Dashboard = () => {
+  const [areas, setAreas] = React.useState([]);
+  const [stores, setStores] = React.useState([]);
+  const [selectedArea, setSelectedArea] = React.useState('');
+  const [selectedStore, setSelectedStore] = React.useState('');
+
+  React.useEffect(() => {
+    const fetchDropdownData = async () => {
+      try {
+        const [areasRes, storesRes] = await Promise.all([
+          supabase.from('areas').select('id, name').order('name'),
+          supabase.from('stores').select('id, name, area_id').eq('status', 'ACTIVE').order('name')
+        ]);
+        
+        if (areasRes.data) setAreas(areasRes.data);
+        if (storesRes.data) setStores(storesRes.data);
+      } catch (err) {
+        console.error('Error fetching dashboard dropdowns:', err);
+      }
+    };
+    fetchDropdownData();
+  }, []);
+
+  const filteredStores = selectedArea 
+    ? stores.filter(s => s.area_id === selectedArea)
+    : stores;
+
   return (
     <div style={{ backgroundColor: '#f4f6f9', minHeight: '100%', padding: '20px', color: '#333', fontFamily: 'sans-serif' }}>
       
@@ -27,12 +55,22 @@ const Dashboard = () => {
           <h2 style={{ fontSize: '1.25rem', margin: 0, fontWeight: 500 }}>Dashboard <span style={{ fontSize: '0.9rem', color: '#666' }}>(Sales overview & summary)</span></h2>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
-          <select style={{ padding: '6px 12px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#fff', color: '#333' }}>
-            <option>-- Select AREA --</option>
-          </select>
-          <select style={{ padding: '6px 12px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#fff', color: '#333' }}>
-            <option>-- Select Store --</option>
-          </select>
+          <CustomSelect 
+            value={selectedArea}
+            onChange={(e) => { setSelectedArea(e.target.value); setSelectedStore(''); }}
+            style={{ padding: '6px 12px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#fff', color: '#333' }}
+          >
+            <option value="">-- Select AREA --</option>
+            {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </CustomSelect>
+          <CustomSelect 
+            value={selectedStore}
+            onChange={(e) => setSelectedStore(e.target.value)}
+            style={{ padding: '6px 12px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#fff', color: '#333' }}
+          >
+            <option value="">-- Select Store --</option>
+            {filteredStores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </CustomSelect>
         </div>
       </div>
 

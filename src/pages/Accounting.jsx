@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Calculator, Plus, Trash2, TrendingUp, TrendingDown, DollarSign, Calendar, Tag } from 'lucide-react';
+import CustomSelect from '../components/CustomSelect';
 
 const Accounting = () => {
   const [transactions, setTransactions] = useState([
@@ -73,10 +74,10 @@ const Accounting = () => {
           <form onSubmit={handleAddTransaction} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
             <input className="input-glass" type="date" value={newTx.date} onChange={e => setNewTx({...newTx, date: e.target.value})} required />
             <input className="input-glass" placeholder="Description" value={newTx.description} onChange={e => setNewTx({...newTx, description: e.target.value})} required />
-            <select className="input-glass" value={newTx.type} onChange={e => setNewTx({...newTx, type: e.target.value})}>
+            <CustomSelect className="input-glass" value={newTx.type} onChange={e => setNewTx({...newTx, type: e.target.value})}>
               <option value="Income" style={{ color: 'black' }}>Income</option>
               <option value="Expense" style={{ color: 'black' }}>Expense</option>
-            </select>
+            </CustomSelect>
             <input className="input-glass" placeholder="Category (e.g. Sales, Utilities)" value={newTx.category} onChange={e => setNewTx({...newTx, category: e.target.value})} required />
             <input className="input-glass" type="number" placeholder="Amount (৳)" value={newTx.amount} onChange={e => setNewTx({...newTx, amount: e.target.value})} required min="0" />
             <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>

@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabaseClient';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import CustomSelect from '../components/CustomSelect';
 
 const SectionWrapper = ({ title, children, rightContent }) => (
   <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '20px', backgroundColor: 'var(--card-bg)', marginBottom: '20px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)' }}>
@@ -427,17 +428,17 @@ const PurchaseOrderVendor = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '20px' }}>
           <div>
             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Vendor Name</label>
-            <select name="vendorId" value={headerData.vendorId} onChange={handleHeaderChange} className="input-animated">
+            <CustomSelect name="vendorId" value={headerData.vendorId} onChange={handleHeaderChange} className="input-animated">
               <option value="">Select Vendor</option>
               {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-            </select>
+            </CustomSelect>
           </div>
           <div>
             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Supplier Payment Type</label>
-            <select name="supplierPaymentType" value={headerData.supplierPaymentType} onChange={handleHeaderChange} className="input-animated">
+            <CustomSelect name="supplierPaymentType" value={headerData.supplierPaymentType} onChange={handleHeaderChange} className="input-animated">
               <option value="CashPurchase">CashPurchase</option>
               <option value="CreditPurchase">CreditPurchase</option>
-            </select>
+            </CustomSelect>
           </div>
           <div>
             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Number Of PO</label>
@@ -462,10 +463,10 @@ const PurchaseOrderVendor = () => {
           </div>
           <div style={{ gridColumn: 'span 3' }}>
             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Delivery To</label>
-            <select name="deliveryTo" value={headerData.deliveryTo} onChange={handleHeaderChange} className="input-animated">
+            <CustomSelect name="deliveryTo" value={headerData.deliveryTo} onChange={handleHeaderChange} className="input-animated">
               <option value="Central Store">Central Store</option>
               <option value="JAMUNA FUTURE PARK">JAMUNA FUTURE PARK</option>
-            </select>
+            </CustomSelect>
           </div>
 
           <div>

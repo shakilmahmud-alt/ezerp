@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Download, Edit, Image as ImageIcon, Loader } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../context/AuthContext';
 
 const Category = () => {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Category');
   const [isAdding, setIsAdding] = useState(false);
   const [categories, setCategories] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -149,23 +152,20 @@ const Category = () => {
             {isLoading && <Loader className="animate-spin" size={20} color="var(--text-secondary)" />}
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button 
-              className="btn btn-primary btn-theme" 
-              onClick={() => {
-                setNewCategory({ name: '', description: '', vat: '' });
-                setEditingCode(null);
-                setIsAdding(true);
-              }}
-              style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
-            >
-              <Plus size={16} /> Add New
-            </button>
-            <button 
-              className="btn btn-primary btn-theme"
-              onClick={exportCSV}
-              style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
-            >
-              <Download size={16} /> Export List
+            {canEdit && (
+              <button 
+                className="btn btn-primary btn-theme" 
+                onClick={() => {
+                  setNewCategory({ name: '', description: '', vat: '' });
+                  setEditingCode(null);
+                  setIsAdding(true);
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
+              >
+                <Plus size={16} /> Add Category
+              </button>
+            )}
+            <button className="btn btn-secondary" onClick={exportCSV} style={{ display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}>List
             </button>
           </div>
         </div>
@@ -188,11 +188,11 @@ const Category = () => {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: 'rgba(255,255,255,0.05)' }}>
-                  <th style={{ textAlign: 'left', padding: '12px 15px', fontWeight: 600 }}>SL</th>
-                  <th style={{ textAlign: 'left', padding: '12px 15px', fontWeight: 600 }}>Code</th>
-                  <th style={{ textAlign: 'left', padding: '12px 15px', fontWeight: 600 }}>Name</th>
-                  <th style={{ textAlign: 'left', padding: '12px 15px', fontWeight: 600 }}>VAT(%)</th>
-                  <th style={{ textAlign: 'center', padding: '12px 15px', fontWeight: 600 }}>Action</th>
+                  <th style={{ padding: '12px 15px', borderBottom: '2px solid var(--border-color)', fontWeight: 600, color: 'var(--text-secondary)' }}>SL</th>
+                  <th style={{ padding: '12px 15px', borderBottom: '2px solid var(--border-color)', fontWeight: 600, color: 'var(--text-secondary)' }}>Code</th>
+                  <th style={{ padding: '12px 15px', borderBottom: '2px solid var(--border-color)', fontWeight: 600, color: 'var(--text-secondary)' }}>Name</th>
+                  <th style={{ padding: '12px 15px', borderBottom: '2px solid var(--border-color)', fontWeight: 600, color: 'var(--text-secondary)', textAlign: 'right' }}>VAT(%)</th>
+                  {canEdit && <th style={{ padding: '12px 15px', borderBottom: '2px solid var(--border-color)', fontWeight: 600, color: 'var(--text-secondary)', textAlign: 'right', width: '80px' }}>Action</th>}
                 </tr>
               </thead>
               <tbody>
@@ -205,17 +205,21 @@ const Category = () => {
                 ) : paginatedCategories.length > 0 ? (
                   paginatedCategories.map((cat) => (
                     <tr key={cat.code || cat.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                      <td style={{ padding: '12px 15px' }}>{cat.sl}</td>
-                      <td style={{ padding: '12px 15px' }}>{cat.code}</td>
-                      <td style={{ padding: '12px 15px' }}>{cat.name}</td>
-                      <td style={{ padding: '12px 15px' }}>{cat.vat}</td>
-                      <td style={{ padding: '12px 15px', textAlign: 'center' }}>
-                        <button  
-                          onClick={() => handleEdit(cat)}
-                          style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <Edit size={14} /> Edit
-                        </button>
-                      </td>
+                      <td style={{ padding: '12px 15px', color: 'var(--text-primary)' }}>{cat.sl}</td>
+                      <td style={{ padding: '12px 15px', color: 'var(--text-primary)' }}>{cat.code}</td>
+                      <td style={{ padding: '12px 15px', color: 'var(--text-primary)' }}>{cat.name}</td>
+                      <td style={{ padding: '12px 15px', textAlign: 'right', color: 'var(--text-primary)' }}>{cat.vat}</td>
+                      {canEdit && (
+                        <td style={{ padding: '12px 15px', textAlign: 'right' }}>
+                          <button 
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-primary)', padding: '5px' }}
+                            onClick={() => handleEdit(cat)}
+                            title="Edit"
+                          >
+                            <Edit size={16} />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))
                 ) : (

@@ -515,3 +515,23 @@ select.input-animated option {
 .btn-secondary svg {
   stroke: currentColor !important;
 }
+
+/* Global Form Element Styling */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent-primary) !important;
+}
+
+select {
+  /* Some browsers support custom option hover styling, though limited on Windows */
+}
+
+select option:checked,
+select option:focus,
+select option:active,
+select option:hover {
+  background: var(--accent-primary) !important;
+  background-color: var(--accent-primary) !important;
+  color: white !important;
+  box-shadow: 0 0 10px 100px var(--accent-primary) inset !important;
+}
