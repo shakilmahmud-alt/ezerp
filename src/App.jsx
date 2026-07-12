@@ -44,6 +44,11 @@ import Login from './pages/Login';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 
+import HomeSelector from './pages/HomeSelector';
+import PosLayout from './components/pos/PosLayout';
+import PosLogin from './pages/pos/PosLogin';
+import PosDashboard from './pages/pos/PosDashboard';
+
 function App() {
   return (
     <AuthProvider>
@@ -56,10 +61,15 @@ function App() {
           }} 
         />
         <Routes>
+          <Route path="/" element={<HomeSelector />} />
           <Route path="/login" element={<Login />} />
           
-          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route index element={<PlaceholderPage />} />
+          <Route path="/pos/login" element={<PosLogin />} />
+          <Route path="/pos" element={<PosLayout />}>
+            <Route index element={<PosDashboard />} />
+          </Route>
+          
+          <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route path="dashboard" element={<ProtectedRoute moduleName="Dashboard"><Dashboard /></ProtectedRoute>} />
             
             <Route path="catalog" element={<Settings />} />

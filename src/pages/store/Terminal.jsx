@@ -97,18 +97,17 @@ const Terminal = () => {
         if (error) throw error;
         toast.success('Terminal updated successfully');
       } else {
-        // Find existing terminals for the selected store to generate next counter_id
-        const { data: storeTerminals, error: fetchErr } = await supabase
+        // Find all existing terminals across all stores to generate next globally unique counter_id
+        const { data: allTerminals, error: fetchErr } = await supabase
           .from('terminals')
-          .select('counter_id')
-          .eq('store_id', formData.store_id);
+          .select('counter_id');
           
         if (fetchErr) throw fetchErr;
         
         // Generate counter_id (e.g., '01', '02', '03')
         let nextCounter = 1;
-        if (storeTerminals && storeTerminals.length > 0) {
-          const maxCounter = Math.max(...storeTerminals.map(t => parseInt(t.counter_id) || 0));
+        if (allTerminals && allTerminals.length > 0) {
+          const maxCounter = Math.max(...allTerminals.map(t => parseInt(t.counter_id) || 0));
           nextCounter = maxCounter + 1;
         }
         

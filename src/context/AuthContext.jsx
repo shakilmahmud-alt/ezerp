@@ -8,19 +8,26 @@ export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [posTerminal, setPosTerminal] = useState(null);
   const [permissions, setPermissions] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // Check if user is stored in localStorage on initial load
     const storedUser = localStorage.getItem('erp_user');
+    const storedPosTerminal = localStorage.getItem('erp_pos_terminal');
+    
     if (storedUser) {
       try {
         const parsedUser = JSON.parse(storedUser);
         setUser(parsedUser);
+        if (storedPosTerminal) {
+          setPosTerminal(JSON.parse(storedPosTerminal));
+        }
         loadPermissions(parsedUser.id);
       } catch (err) {
         localStorage.removeItem('erp_user');
+        localStorage.removeItem('erp_pos_terminal');
         setLoading(false);
       }
     } else {
@@ -85,6 +92,67 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const posLogin = async (username, password, terminalId) => {
+    setLoading(true);
+    try {
+      // 1. Verify Terminal
+      const { data: terminalDataArray, error: terminalError } = await supabase
+        .from('terminals')
+        .select('*, stores(name)')
+        .eq('counter_id', terminalId)
+        .eq('status', 'ACTIVE')
+        .limit(1);
+        
+      if (terminalError || !terminalDataArray || terminalDataArray.length === 0) {
+        toast.error('Invalid or Inactive Terminal ID');
+        setLoading(false);
+        return false;
+      }
+      
+      const terminalData = terminalDataArray[0];
+      
+      // 2. Verify User
+      const { data: userData, error: userError } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('username', username)
+        .eq('password', password)
+        .single();
+        
+      if (userError || !userData) {
+        toast.error('Invalid username or password');
+        setLoading(false);
+        return false;
+      }
+      
+      if (userData.status !== 'ACTIVE') {
+        toast.error('Your account is inactive');
+        setLoading(false);
+        return false;
+      }
+      
+      const posTerminalInfo = {
+        counter_id: terminalData.counter_id,
+        store_id: terminalData.store_id,
+        store_name: terminalData.stores?.name
+      };
+      
+      // 3. Login success
+      setUser(userData);
+      setPosTerminal(posTerminalInfo);
+      localStorage.setItem('erp_user', JSON.stringify(userData));
+      localStorage.setItem('erp_pos_terminal', JSON.stringify(posTerminalInfo));
+      
+      await loadPermissions(userData.id);
+      return true;
+    } catch (err) {
+      console.error(err);
+      toast.error('An error occurred during POS login');
+      setLoading(false);
+      return false;
+    }
+  };
+
   const logout = () => {
     setUser(null);
     setPermissions({});
@@ -105,8 +173,10 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     user,
+    posTerminal,
     permissions,
     login,
+    posLogin,
     logout,
     loading,
     hasViewPermission,
