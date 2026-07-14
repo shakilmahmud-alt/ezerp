@@ -48,6 +48,7 @@ import HomeSelector from './pages/HomeSelector';
 import PosLayout from './components/pos/PosLayout';
 import PosLogin from './pages/pos/PosLogin';
 import PosDashboard from './pages/pos/PosDashboard';
+import PosCustomerManagement from './pages/pos/PosCustomerManagement';
 
 function App() {
   return (
@@ -67,6 +68,7 @@ function App() {
           <Route path="/pos/login" element={<PosLogin />} />
           <Route path="/pos" element={<PosLayout />}>
             <Route index element={<PosDashboard />} />
+            <Route path="customers" element={<PosCustomerManagement />} />
           </Route>
           
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
