@@ -87,6 +87,10 @@ const ProductQuickSearch = () => {
       if (filters.searchQuery) {
         query = query.or(`item_name.ilike.%${filters.searchQuery}%,code.ilike.%${filters.searchQuery}%,barcode.ilike.%${filters.searchQuery}%`);
       }
+      
+      if (!filters.showZeroStock) {
+        query = query.or('wh_stock.gt.0,str_stock.gt.0');
+      }
 
       if (filters.mrpOperator && filters.mrpValue) {
         const val = parseFloat(filters.mrpValue);
@@ -150,6 +154,7 @@ const ProductQuickSearch = () => {
       Brand: p.brand?.name || '',
       Vendor: p.vendor?.name || '',
       Status: p.status || 'Active',
+      Stock: (p.wh_stock || 0) + (p.str_stock || 0),
       'VAT(%)': p.sale_vat_percent || 0,
       CPU: p.purchase_price,
       MRP: p.mrp,
@@ -300,6 +305,7 @@ const ProductQuickSearch = () => {
                 <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>Brand</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>Vendor</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>Status</th>
+                <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>Stock</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>VAT(%)</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>CPU</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>MRP</th>
@@ -328,6 +334,7 @@ const ProductQuickSearch = () => {
                     <td style={{ padding: '12px' }}>{p.brand?.name}</td>
                     <td style={{ padding: '12px' }}>{p.vendor?.name}</td>
                     <td style={{ padding: '12px' }}>{p.status || 'Active'}</td>
+                    <td style={{ padding: '12px', fontWeight: 'bold' }}>{(p.wh_stock || 0) + (p.str_stock || 0)}</td>
                     <td style={{ padding: '12px' }}>{p.sale_vat_percent || 0}</td>
                     <td style={{ padding: '12px' }}>{p.purchase_price}</td>
                     <td style={{ padding: '12px' }}>{p.mrp}</td>
