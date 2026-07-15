@@ -107,11 +107,10 @@ const Reprint = () => {
         else if (selectedType === 'Store Delivery Challan' || selectedType === 'Store Delivery Challan Summary' || selectedType === 'Store Delivery Receive Challan') {
           const { data, error } = await supabase
             .from('requisitions')
-            .select('requisition_no')
+            .select('challan_no, requisition_no')
             .gte('requisition_date', fromDate)
-            .lte('requisition_date', toDate)
-            .eq('status', 'Approved');
-          if (!error && data) docs = data.map(d => d.requisition_no).filter(Boolean);
+            .lte('requisition_date', toDate);
+          if (!error && data) docs = data.map(d => d.challan_no || d.requisition_no).filter(Boolean);
         }
         else if (selectedType === 'Purchase Return Challan') {
           const { data, error } = await supabase
@@ -211,7 +210,7 @@ const Reprint = () => {
         ]));
 
       } else if (selectedType === 'Store Requisition(Ecom)' || selectedType === 'Store Requisition') {
-        const { data: req } = await supabase.from('requisitions').select('*, shops(name)').eq('requisition_no', selectedDocument).single();
+        const { data: req } = await supabase.from('requisitions').select('*, stores(name)').eq('requisition_no', selectedDocument).single();
         const { data: reqItems } = await supabase.from('requisition_items').select('*, products(item_name, barcode, mrp)').eq('requisition_id', req?.id);
 
         headerInfo = {
@@ -219,7 +218,7 @@ const Reprint = () => {
           docNo: req?.requisition_no,
           date: req?.requisition_date,
           orderNo: '',
-          deliveryTo: req?.shops?.name || '',
+          deliveryTo: req?.stores?.name || '',
           vendorName: '',
           remarks: ''
         };
@@ -289,30 +288,35 @@ const Reprint = () => {
         ]));
 
       } else if (selectedType === 'Store Delivery Challan' || selectedType === 'Store Delivery Challan Summary' || selectedType === 'Store Delivery Receive Challan') {
-        const { data: req } = await supabase.from('requisitions').select('*, shops(name)').eq('requisition_no', selectedDocument).single();
+        const { data: req } = await supabase.from('requisitions').select('*, stores(name)').or(`challan_no.eq.${selectedDocument},requisition_no.eq.${selectedDocument}`).single();
         const { data: reqItems } = await supabase.from('requisition_items').select('*, products(item_name, barcode, mrp)').eq('requisition_id', req?.id);
 
         headerInfo = {
           title: selectedType.toUpperCase(),
-          docNo: req?.requisition_no,
+          docNo: req?.challan_no || req?.requisition_no,
           date: req?.requisition_date,
           orderNo: '',
-          deliveryTo: req?.shops?.name || '',
+          deliveryTo: req?.stores?.name || '',
           vendorName: '',
           remarks: ''
         };
 
-        items = (reqItems || []).map((i, idx) => ([
-          idx + 1,
-          i.products?.barcode || '',
-          i.products?.item_name || '',
-          Number(i.approve_qty || 0).toFixed(2) + ' PCS',
-          '0.00',
-          '0.00',
-          Number(i.products?.mrp || 0).toFixed(2),
-          '0.00',
-          '0.00'
-        ]));
+        items = (reqItems || []).map((i, idx) => {
+          const qty = Number(i.approve_qty) || 0;
+          const cpu = Number(i.cpu) || 0;
+          const mrp = Number(i.products?.mrp || i.mrp) || 0;
+          return [
+            idx + 1,
+            i.products?.barcode || i.barcode || '',
+            i.products?.item_name || i.product_name || '',
+            qty.toFixed(2) + ' PCS',
+            Number(i.bal_qty || 0).toFixed(2) + ' PCS',
+            cpu.toFixed(2),
+            mrp.toFixed(2),
+            (Number(i.cost_value) || (cpu * qty)).toFixed(2),
+            (mrp * qty).toFixed(2)
+          ];
+        });
 
       } else {
         // Mock fallback for types not built yet
@@ -390,47 +394,83 @@ const Reprint = () => {
       const discount = "0.00";
       const netAmount = totalAmount.toFixed(2);
 
+      let tableHead = [['S/L', 'BARCODE', 'DISPLAY_NAME', 'PUR QTY', 'FREE QTY', 'PUR PRICE', 'MRP', 'DISC AMT', 'AMOUNT']];
+      
+      let isStoreDelivery = (selectedType === 'Store Delivery Challan' || selectedType === 'Store Delivery Challan Summary' || selectedType === 'Store Delivery Receive Challan');
+      
+      if (isStoreDelivery) {
+        tableHead = [['S/L', 'BARCODE', 'DISPLAY_NAME', 'DEL QTY', 'C. STOCK', 'CPU', 'SALE PRICE', 'COST VALUE', 'SALE VALUE']];
+      }
+
       autoTable(doc, {
         startY: startY,
-        head: [['S/L', 'BARCODE', 'DISPLAY_NAME', 'PUR QTY', 'FREE QTY', 'PUR PRICE', 'MRP', 'DISC AMT', 'AMOUNT']],
+        head: tableHead,
         body: items,
         theme: 'plain',
         styles: { fontSize: 7, cellPadding: 1, textColor: [0, 0, 0] },
-        headStyles: { fontStyle: 'bold', lineWidth: { top: 0.5, bottom: 0.5 }, lineColor: 0, textColor: [0, 0, 0] },
+        headStyles: { fontStyle: 'bold', lineWidth: { top: 0.5, bottom: 0.5 }, lineColor: 0, textColor: [0, 0, 0], halign: 'right' },
         columnStyles: {
           0: { halign: 'center', cellWidth: 10 },
-          3: { halign: 'right' },
-          4: { halign: 'right' },
-          5: { halign: 'right' },
-          6: { halign: 'right' },
-          7: { halign: 'right' },
-          8: { halign: 'right' }
+          1: { halign: 'left', cellWidth: 25 },
+          2: { halign: 'left', cellWidth: 'auto' },
+          3: { halign: 'right', cellWidth: 20 },
+          4: { halign: 'right', cellWidth: 20 },
+          5: { halign: 'right', cellWidth: 20 },
+          6: { halign: 'right', cellWidth: 20 },
+          7: { halign: 'right', cellWidth: 20 },
+          8: { halign: 'right', cellWidth: 20 }
         },
-        margin: { left: 14, right: 14 }
+        didParseCell: function (data) {
+          if (data.section === 'head') {
+            if (data.column.index === 0) data.cell.styles.halign = 'center';
+            if (data.column.index === 1 || data.column.index === 2) data.cell.styles.halign = 'left';
+          }
+        },
+        margin: { top: 10, left: 14, right: 14 }
       });
 
-      const finalY = doc.lastAutoTable.finalY + 5;
-      
-      // Totals Section
+      const finalY = doc.lastAutoTable.finalY || startY;
+
       doc.setFontSize(7);
       doc.setFont('helvetica', 'bold');
-      doc.text('SUB TOTAL:', 110, finalY, { align: 'right' });
-      doc.text(totalPurQty.toFixed(2), 125, finalY, { align: 'right' });
-      doc.text(totalFreeQty.toFixed(2), 140, finalY, { align: 'right' });
-      doc.text(subTotal, pageWidth - 14, finalY, { align: 'right' });
       
-      doc.text('DISCOUNT:', 140, finalY + 5, { align: 'right' });
-      doc.text(discount, pageWidth - 14, finalY + 5, { align: 'right' });
+      doc.line(pageWidth / 2, finalY + 2, pageWidth - 14, finalY + 2);
+      doc.text('SUB TOTAL:', pageWidth / 2, finalY + 6, { align: 'right' });
+      
+      if (isStoreDelivery) {
+        let totalDelQty = 0;
+        let totalSaleValue = 0;
+        items.forEach(row => {
+          totalDelQty += parseFloat(row[3]) || 0;
+          totalSaleValue += parseFloat(row[8]) || 0;
+        });
+        doc.text(`${totalDelQty.toFixed(2)}`, pageWidth / 2 + 20, finalY + 6, { align: 'right' });
+        doc.text(`${totalSaleValue.toFixed(2)}`, pageWidth - 14, finalY + 6, { align: 'right' });
+        
+        doc.text('DISCOUNT:', pageWidth / 2, finalY + 10, { align: 'right' });
+        doc.text('0.00', pageWidth - 14, finalY + 10, { align: 'right' });
+        
+        doc.text('ADDITIONAL COST:', pageWidth / 2, finalY + 14, { align: 'right' });
+        doc.text('0.00', pageWidth - 14, finalY + 14, { align: 'right' });
+        
+        doc.line(pageWidth / 2, finalY + 16, pageWidth - 14, finalY + 16);
+        doc.text('NET AMOUNT:', pageWidth / 2, finalY + 20, { align: 'right' });
+        doc.text(`${totalSaleValue.toFixed(2)}`, pageWidth - 14, finalY + 20, { align: 'right' });
+      } else {
+        doc.text(`${totalPurQty.toFixed(2)}`, pageWidth / 2 + 10, finalY + 6, { align: 'right' });
+        doc.text(`${totalFreeQty.toFixed(2)}`, pageWidth / 2 + 30, finalY + 6, { align: 'right' });
+        doc.text(`${subTotal}`, pageWidth - 14, finalY + 6, { align: 'right' });
 
-      doc.text('ADDTIONAL COST:', 140, finalY + 10, { align: 'right' });
-      doc.text('0.00', pageWidth - 14, finalY + 10, { align: 'right' });
+        doc.text('DISCOUNT:', pageWidth / 2, finalY + 10, { align: 'right' });
+        doc.text(`${discount}`, pageWidth - 14, finalY + 10, { align: 'right' });
 
-      // Total line
-      doc.setLineWidth(0.5);
-      doc.line(110, finalY + 12, pageWidth - 14, finalY + 12);
+        doc.text('ADDTIONAL COST:', pageWidth / 2, finalY + 14, { align: 'right' });
+        doc.text('0.00', pageWidth - 14, finalY + 14, { align: 'right' });
 
-      doc.text('NET AMOUNT:', 140, finalY + 16, { align: 'right' });
-      doc.text(netAmount, pageWidth - 14, finalY + 16, { align: 'right' });
+        doc.line(pageWidth / 2, finalY + 16, pageWidth - 14, finalY + 16);
+        doc.text('NET AMOUNT:', pageWidth / 2, finalY + 20, { align: 'right' });
+        doc.text(`${netAmount}`, pageWidth - 14, finalY + 20, { align: 'right' });
+      }
 
       // Signatures
       const sigY = finalY + 40;

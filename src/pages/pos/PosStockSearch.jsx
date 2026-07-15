@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 const PosStockSearch = () => {
+  const { posTerminal } = useAuth();
   const [searchName, setSearchName] = useState('');
   const [searchBarcode, setSearchBarcode] = useState('');
   const [showZero, setShowZero] = useState(false);
@@ -63,7 +65,8 @@ const PosStockSearch = () => {
         .select(`
           *,
           category:category_id (name),
-          vendor:vendor_id (name)
+          vendor:vendor_id (name),
+          store_stocks(store_id, stock_qty)
         `)
         .limit(100);
 
@@ -75,13 +78,21 @@ const PosStockSearch = () => {
         query = query.or(`barcode.ilike.%${searchBarcode.trim()}%,code.ilike.%${searchBarcode.trim()}%`);
       }
 
-      if (!showZero) {
-        query = query.gt('wh_stock', 0); // Assuming central store stock is wh_stock
-      }
-
+      // We cannot easily filter on inner relation for showZero without breaking the outer results if it's 0, 
+      // but the user's previous code did `query.gt('wh_stock', 0)`. We will just fetch all and filter in JS.
+      
       const { data, error } = await query;
       if (error) throw error;
-      setProducts(data || []);
+      
+      let finalData = data || [];
+      if (!showZero) {
+        finalData = finalData.filter(p => {
+          const sStock = p.store_stocks?.find(s => s.store_id === posTerminal?.store_id)?.stock_qty || 0;
+          return p.wh_stock > 0 || sStock > 0;
+        });
+      }
+      
+      setProducts(finalData);
     } catch (error) {
       console.error("Error searching stock:", error);
       toast.error("Failed to search stock");
@@ -154,7 +165,8 @@ const PosStockSearch = () => {
               <th style={{ padding: '8px', textAlign: 'left', borderRight: '1px solid #ddd', minWidth: '200px' }}>Name</th>
               <th style={{ padding: '8px', textAlign: 'right', borderRight: '1px solid #ddd', minWidth: '80px' }}>CPU</th>
               <th style={{ padding: '8px', textAlign: 'right', borderRight: '1px solid #ddd', minWidth: '80px' }}>MRP</th>
-              <th style={{ padding: '8px', textAlign: 'right', borderRight: '1px solid #ddd', minWidth: '80px' }}>Balance</th>
+              <th style={{ padding: '8px', textAlign: 'right', borderRight: '1px solid #ddd', minWidth: '100px' }}>Central Store Balance</th>
+              <th style={{ padding: '8px', textAlign: 'right', borderRight: '1px solid #ddd', minWidth: '100px' }}>Store Balance</th>
               <th style={{ padding: '8px', textAlign: 'left', borderRight: '1px solid #ddd', minWidth: '150px' }}>Vendor Name</th>
               <th style={{ padding: '8px', textAlign: 'center', borderRight: '1px solid #ddd', minWidth: '80px' }}>UOM</th>
               <th style={{ padding: '8px', textAlign: 'right', borderRight: '1px solid #ddd', minWidth: '80px' }}>VAT(%)</th>
@@ -167,20 +179,24 @@ const PosStockSearch = () => {
                 <td colSpan="10" style={{ padding: '20px', textAlign: 'center' }}>Searching...</td>
               </tr>
             ) : products.length > 0 ? (
-              products.map((p, idx) => (
-                <tr key={p.id} style={{ borderBottom: '1px solid #eee' }}>
-                  <td style={{ padding: '6px 8px', borderRight: '1px solid #eee' }}>{p.code}</td>
-                  <td style={{ padding: '6px 8px', borderRight: '1px solid #eee' }}>{p.barcode}</td>
-                  <td style={{ padding: '6px 8px', borderRight: '1px solid #eee' }}>{p.item_name}</td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right', borderRight: '1px solid #eee' }}>{p.purchase_price}</td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right', borderRight: '1px solid #eee' }}>{p.mrp}</td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right', borderRight: '1px solid #eee' }}>{p.wh_stock || 0}</td>
-                  <td style={{ padding: '6px 8px', borderRight: '1px solid #eee' }}>{p.vendor?.name}</td>
-                  <td style={{ padding: '6px 8px', textAlign: 'center', borderRight: '1px solid #eee' }}>{p.uom || 'Pcs'}</td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right', borderRight: '1px solid #eee' }}>{p.sale_vat_percent || 0}</td>
-                  <td style={{ padding: '6px 8px' }}>{p.category?.name}</td>
-                </tr>
-              ))
+              products.map((p, idx) => {
+                const storeStock = p.store_stocks?.find(s => s.store_id === posTerminal?.store_id)?.stock_qty || 0;
+                return (
+                  <tr key={p.id} style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '6px 8px', borderRight: '1px solid #eee' }}>{p.code}</td>
+                    <td style={{ padding: '6px 8px', borderRight: '1px solid #eee' }}>{p.barcode}</td>
+                    <td style={{ padding: '6px 8px', borderRight: '1px solid #eee' }}>{p.item_name}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right', borderRight: '1px solid #eee' }}>{p.purchase_price}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right', borderRight: '1px solid #eee' }}>{p.mrp}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right', borderRight: '1px solid #eee', fontWeight: 'bold' }}>{p.wh_stock || 0}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right', borderRight: '1px solid #eee', fontWeight: 'bold', color: 'blue' }}>{storeStock}</td>
+                    <td style={{ padding: '6px 8px', borderRight: '1px solid #eee' }}>{p.vendor?.name}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'center', borderRight: '1px solid #eee' }}>{p.uom || 'Pcs'}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right', borderRight: '1px solid #eee' }}>{p.sale_vat_percent || 0}</td>
+                    <td style={{ padding: '6px 8px' }}>{p.category?.name}</td>
+                  </tr>
+                );
+              })
             ) : (
               <tr>
                 <td colSpan="10" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>

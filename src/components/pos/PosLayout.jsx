@@ -6,14 +6,16 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabaseClient';
 
 const PosLayout = () => {
-  const { user, posTerminal, logout } = useAuth();
+  const { user, posTerminal, logout, loading } = useAuth();
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const [hamburgerMenuOpen, setHamburgerMenuOpen] = useState(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
+  const [inventoryMenuOpen, setInventoryMenuOpen] = useState(false);
 
   const fileMenuRef = useRef(null);
   const hamburgerMenuRef = useRef(null);
+  const inventoryMenuRef = useRef(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -24,12 +26,19 @@ const PosLayout = () => {
       if (hamburgerMenuRef.current && !hamburgerMenuRef.current.contains(event.target)) {
         setHamburgerMenuOpen(false);
       }
+      if (inventoryMenuRef.current && !inventoryMenuRef.current.contains(event.target)) {
+        setInventoryMenuOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  if (loading) {
+    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading POS...</div>;
+  }
 
   // Protect POS routes
   if (!user || !posTerminal) {
@@ -165,7 +174,60 @@ const PosLayout = () => {
             </div>
           )}
         </div>
-        <div style={{ cursor: 'pointer', padding: '2px 8px' }}>Inventory</div>
+        <div 
+          ref={inventoryMenuRef} 
+          style={{ position: 'relative' }}
+        >
+          <div 
+            style={{ 
+              cursor: 'pointer', 
+              padding: '2px 8px',
+              backgroundColor: inventoryMenuOpen ? '#ffffff' : 'transparent',
+              color: inventoryMenuOpen ? '#000000' : '#ffffff',
+              borderRadius: inventoryMenuOpen ? '2px 2px 0 0' : '0'
+            }}
+            onClick={() => setInventoryMenuOpen(!inventoryMenuOpen)}
+          >
+            Inventory
+          </div>
+          
+          {inventoryMenuOpen && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              backgroundColor: '#ffffff',
+              color: '#000000',
+              minWidth: 'max-content',
+              boxShadow: '2px 2px 8px rgba(0,0,0,0.3)',
+              zIndex: 1000,
+              padding: '2px 0',
+              border: '1px solid #ddd',
+              whiteSpace: 'nowrap'
+            }}>
+              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Requisition</div>
+              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Requisition (Vendorwise)</div>
+              <div 
+                style={{ padding: '4px 20px 4px 32px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} 
+                className="pos-menu-item"
+                onClick={() => {
+                  setInventoryMenuOpen(false);
+                  navigate('/pos/stock-receive');
+                }}
+              >
+                <Package size={14} /> Stock Receive
+              </div>
+              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Stock Transfer</div>
+              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Stock Transfer By Category</div>
+              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Purchase Receive</div>
+              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Purchase Receive By PO</div>
+              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Purchase Return</div>
+              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Product Stock Journal</div>
+              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Global Stock Search</div>
+              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Discount Circular Search</div>
+            </div>
+          )}
+        </div>
         <div style={{ cursor: 'pointer', padding: '2px 8px' }}>Report</div>
         <div style={{ cursor: 'pointer', padding: '2px 8px' }}>Help</div>
         <div style={{ cursor: 'pointer', padding: '2px 8px' }}>QuickDo</div>
