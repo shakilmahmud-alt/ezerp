@@ -41,6 +41,8 @@ const PosCustomerManagement = () => {
   const [countries, setCountries] = useState([]);
   const [cities, setCities] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+  const [previewCustomer, setPreviewCustomer] = useState(null);
   
   const { posTerminal } = useAuth();
   const navigate = useNavigate();
@@ -148,6 +150,17 @@ const PosCustomerManagement = () => {
     c.code?.includes(searchQuery)
   );
 
+  const handlePreview = () => {
+    if (!selectedCustomerId) {
+      toast.error('Please select a customer first');
+      return;
+    }
+    const customer = customers.find(c => c.id === selectedCustomerId);
+    if (customer) {
+      setPreviewCustomer(customer);
+    }
+  };
+
   return (
     <div style={{ padding: '20px', height: 'calc(100vh - 65px)', backgroundColor: 'rgba(255,255,255,0.9)', overflowY: 'auto' }}>
       
@@ -194,7 +207,15 @@ const PosCustomerManagement = () => {
               </thead>
               <tbody>
                 {filteredCustomers.map((cust, idx) => (
-                  <tr key={cust.id} style={{ backgroundColor: idx % 2 === 0 ? '#fff' : '#fff9d6', borderBottom: '1px solid #eee' }}>
+                  <tr 
+                    key={cust.id} 
+                    onClick={() => setSelectedCustomerId(cust.id)}
+                    style={{ 
+                      backgroundColor: selectedCustomerId === cust.id ? 'rgba(46, 111, 64, 0.15)' : (idx % 2 === 0 ? '#fff' : '#fff9d6'), 
+                      borderBottom: '1px solid #eee',
+                      cursor: 'pointer' 
+                    }}
+                  >
                     <td style={{ padding: '6px 8px' }}>{cust.code || cust.id}</td>
                     <td style={{ padding: '6px 8px' }}>{cust.card_no}</td>
                     <td style={{ padding: '6px 8px' }}>{cust.first_name}</td>
@@ -213,8 +234,8 @@ const PosCustomerManagement = () => {
           </div>
 
           <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-            <button className="btn" style={{ backgroundColor: '#e0e0e0', color: '#333', padding: '8px 25px' }}>Preview</button>
-            <button className="btn" onClick={() => navigate('/pos')} style={{ backgroundColor: '#e0e0e0', color: '#333', padding: '8px 25px' }}>Close</button>
+            <button className="btn btn-theme" onClick={handlePreview}>Preview</button>
+            <button className="btn btn-secondary" onClick={() => navigate('/pos')}>Close</button>
           </div>
         </div>
       )}
@@ -364,6 +385,35 @@ const PosCustomerManagement = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Modal */}
+      {previewCustomer && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
+          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', minWidth: '400px', maxWidth: '600px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '15px' }}>
+              <h3 style={{ margin: 0 }}>Customer Preview</h3>
+              <span style={{ cursor: 'pointer', fontWeight: 'bold' }} onClick={() => setPreviewCustomer(null)}>✕</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '14px' }}>
+              <div><strong>Code/ID:</strong> {previewCustomer.code || previewCustomer.id}</div>
+              <div><strong>Card No:</strong> {previewCustomer.card_no}</div>
+              <div><strong>First Name:</strong> {previewCustomer.first_name}</div>
+              <div><strong>Middle Name:</strong> {previewCustomer.middle_name}</div>
+              <div><strong>Last Name:</strong> {previewCustomer.last_name}</div>
+              <div><strong>Type:</strong> {previewCustomer.customer_type?.name}</div>
+              <div><strong>Discount:</strong> {previewCustomer.discount_percent}%</div>
+              <div><strong>Phone:</strong> {previewCustomer.contact_no}</div>
+              <div><strong>Email:</strong> {previewCustomer.email}</div>
+              <div><strong>City:</strong> {previewCustomer.city}</div>
+              <div><strong>Country:</strong> {previewCustomer.country}</div>
+              <div style={{ gridColumn: '1 / -1' }}><strong>Address:</strong> {previewCustomer.address}</div>
+            </div>
+            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" onClick={() => setPreviewCustomer(null)}>Close</button>
+            </div>
           </div>
         </div>
       )}
