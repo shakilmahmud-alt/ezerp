@@ -22,6 +22,7 @@ const SectionWrapper = ({ title, children, rightContent }) => (
 
 const PurchaseOrderVendor = () => {
   const [vendors, setVendors] = useState([]);
+  const [stores, setStores] = useState([]);
   const [allProducts, setAllProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -79,12 +80,14 @@ const PurchaseOrderVendor = () => {
   const fetchInitialData = async () => {
     setIsLoading(true);
     try {
-      const [vendorRes, productRes] = await Promise.all([
+      const [vendorRes, productRes, storeRes] = await Promise.all([
         supabase.from('vendors').select('id, name').order('name'),
-        supabase.from('products').select('*').order('item_name')
+        supabase.from('products').select('*').order('item_name'),
+        supabase.from('stores').select('id, name').eq('status', 'ACTIVE').order('name')
       ]);
       setVendors(vendorRes.data || []);
       setAllProducts(productRes.data || []);
+      setStores(storeRes.data || []);
     } catch (error) {
       console.error(error);
       toast.error('Failed to load initial data');
@@ -465,7 +468,7 @@ const PurchaseOrderVendor = () => {
             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Delivery To</label>
             <CustomSelect name="deliveryTo" value={headerData.deliveryTo} onChange={handleHeaderChange} className="input-animated">
               <option value="Central Store">Central Store</option>
-              <option value="JAMUNA FUTURE PARK">JAMUNA FUTURE PARK</option>
+              {stores.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
             </CustomSelect>
           </div>
 

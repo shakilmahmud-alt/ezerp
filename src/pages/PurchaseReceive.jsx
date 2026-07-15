@@ -22,6 +22,7 @@ const SectionWrapper = ({ title, children, rightContent }) => (
 
 const PurchaseReceive = () => {
   const [vendors, setVendors] = useState([]);
+  const [stores, setStores] = useState([]);
   const [vendorPOs, setVendorPOs] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -50,9 +51,12 @@ const PurchaseReceive = () => {
   const fetchInitialData = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.from('vendors').select('id, name').order('name');
-      if (error) throw error;
-      setVendors(data || []);
+      const [vendorRes, storeRes] = await Promise.all([
+        supabase.from('vendors').select('id, name').order('name'),
+        supabase.from('stores').select('id, name').eq('status', 'ACTIVE').order('name')
+      ]);
+      setVendors(vendorRes.data || []);
+      setStores(storeRes.data || []);
     } catch (error) {
       console.error(error);
       toast.error('Failed to load vendors');
@@ -547,7 +551,7 @@ const PurchaseReceive = () => {
             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Delivery To</label>
             <CustomSelect name="deliveryTo" value={headerData.deliveryTo} onChange={handleHeaderChange} className="input-animated">
               <option value="Central Store">Central Store</option>
-              <option value="Shop">Shop</option>
+              {stores.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
             </CustomSelect>
           </div>
         </div>

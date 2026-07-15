@@ -18,6 +18,7 @@ const CustomerReport = () => {
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   
   const [store, setStore] = useState('-- ALL --');
+  const [storesList, setStoresList] = useState([]);
   const [exportFormat, setExportFormat] = useState('PDF');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -32,6 +33,7 @@ const CustomerReport = () => {
     setToDate(today.toISOString().split('T')[0]);
 
     fetchCustomerTypes();
+    fetchStores();
 
     // Close dropdown on outside click
     const handleClickOutside = (event) => {
@@ -53,6 +55,15 @@ const CustomerReport = () => {
     } catch (err) {
       console.error(err);
       toast.error('Failed to load customer types');
+    }
+  };
+
+  const fetchStores = async () => {
+    try {
+      const { data, error } = await supabase.from('stores').select('id, name').eq('status', 'ACTIVE').order('name');
+      if (data) setStoresList(data);
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -410,7 +421,7 @@ const CustomerReport = () => {
               >
                 <option value="-- ALL --">-- ALL --</option>
                 <option value="Central Store">Central Store</option>
-                <option value="Shop">Shop</option>
+                {storesList.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
               </CustomSelect>
             </div>
 

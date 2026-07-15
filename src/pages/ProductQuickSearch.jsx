@@ -11,6 +11,7 @@ const ProductQuickSearch = () => {
   const [subSubcategories, setSubSubcategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const [vendors, setVendors] = useState([]);
+  const [stores, setStores] = useState([]);
   const [products, setProducts] = useState([]);
   
   const [filters, setFilters] = useState({
@@ -37,12 +38,13 @@ const ProductQuickSearch = () => {
 
   const fetchDropdownData = async () => {
     try {
-      const [catRes, subcatRes, subsubRes, brandRes, vendorRes] = await Promise.all([
+      const [catRes, subcatRes, subsubRes, brandRes, vendorRes, storeRes] = await Promise.all([
         supabase.from('categories').select('id, name'),
         supabase.from('subcategories').select('id, name'),
         supabase.from('sub_subcategories').select('id, name'),
         supabase.from('brands').select('id, name'),
-        supabase.from('vendors').select('id, name')
+        supabase.from('vendors').select('id, name'),
+        supabase.from('stores').select('id, name').eq('status', 'ACTIVE').order('name')
       ]);
       
       setCategories(catRes.data || []);
@@ -50,6 +52,7 @@ const ProductQuickSearch = () => {
       setSubSubcategories(subsubRes.data || []);
       setBrands(brandRes.data || []);
       setVendors(vendorRes.data || []);
+      setStores(storeRes.data || []);
     } catch (error) {
       console.error("Error fetching dropdown data:", error);
     }
@@ -245,7 +248,7 @@ const ProductQuickSearch = () => {
             <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: 'var(--text-secondary)' }}>Store</label>
             <CustomSelect name="store" value={filters.store} onChange={handleFilterChange} className="input-animated">
               <option value="">-- ALL --</option>
-              <option value="Main Store">Main Store</option>
+              {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </CustomSelect>
           </div>
           

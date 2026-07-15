@@ -41,6 +41,19 @@ const Reprint = () => {
   const [documentList, setDocumentList] = useState([]);
   const [selectedDocument, setSelectedDocument] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [stores, setStores] = useState([]);
+
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        const { data, error } = await supabase.from('stores').select('id, name').eq('status', 'ACTIVE').order('name');
+        if (data) setStores(data);
+      } catch (err) {
+        console.error("Failed to load stores");
+      }
+    };
+    fetchInitialData();
+  }, []);
 
   // Fetch document numbers when Type or Dates change
   useEffect(() => {
@@ -505,7 +518,7 @@ const Reprint = () => {
             >
               <option value="">-- All --</option>
               <option value="Central Store">Central Store</option>
-              <option value="Shop">Shop</option>
+              {stores.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
             </CustomSelect>
           </div>
 

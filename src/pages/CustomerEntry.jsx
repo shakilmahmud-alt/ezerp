@@ -53,6 +53,7 @@ const CustomerEntry = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [countries, setCountries] = useState([]);
   const [cities, setCities] = useState([]);
+  const [stores, setStores] = useState([]);
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [printingCustomer, setPrintingCustomer] = useState(null);
   
@@ -62,6 +63,7 @@ const CustomerEntry = () => {
   useEffect(() => {
     setCountries(Country.getAllCountries());
     fetchCustomerTypes();
+    fetchStores();
     if (view === 'list') {
       fetchCustomers();
     }
@@ -95,6 +97,15 @@ const CustomerEntry = () => {
     } catch (err) {
       console.error(err);
       toast.error('Failed to fetch Customer Types');
+    }
+  };
+
+  const fetchStores = async () => {
+    try {
+      const { data, error } = await supabase.from('stores').select('id, name').eq('status', 'ACTIVE').order('name');
+      if (data) setStores(data);
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -391,7 +402,7 @@ const CustomerEntry = () => {
                 <CustomSelect style={inputStyle} value={formData.store} onChange={e => setFormData({...formData, store: e.target.value})} required>
                   <option value="">-- Select a Store --</option>
                   <option value="Central Store">Central Store</option>
-                  <option value="Shop">Shop</option>
+                  {stores.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                 </CustomSelect>
               </div>
             </div>

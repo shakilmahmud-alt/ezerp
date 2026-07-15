@@ -177,7 +177,19 @@ const PromotionForm = ({ initialData, onSave, onCancel }) => {
   
   const [selectedStores, setSelectedStores] = useState(initialData?.stores ? initialData.stores.split(', ') : []);
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false);
-  const storesList = ['Central Store', 'Shop', 'JAMUNA FUTURE PARK', 'KIDS PARADISE (UTTARA)'];
+  const [storesList, setStoresList] = useState([]);
+
+  useEffect(() => {
+    const fetchStores = async () => {
+      try {
+        const { data, error } = await supabase.from('stores').select('name').eq('status', 'ACTIVE').order('name');
+        if (data) setStoresList(['Central Store', ...data.map(s => s.name)]);
+      } catch (err) {
+        console.error("Failed to load stores");
+      }
+    };
+    fetchStores();
+  }, []);
 
   // Circular Discount
   const [items, setItems] = useState([]);

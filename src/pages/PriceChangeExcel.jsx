@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabaseClient';
 import * as XLSX from 'xlsx';
@@ -25,7 +25,19 @@ const PriceChangeExcel = () => {
   
   const [selectedStores, setSelectedStores] = useState([]);
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false);
-  const storesList = ['Central Store', 'Shop'];
+  const [storesList, setStoresList] = useState([]);
+
+  useEffect(() => {
+    const fetchStores = async () => {
+      try {
+        const { data, error } = await supabase.from('stores').select('name').eq('status', 'ACTIVE').order('name');
+        if (data) setStoresList(['Central Store', ...data.map(s => s.name)]);
+      } catch (err) {
+        console.error("Failed to load stores");
+      }
+    };
+    fetchStores();
+  }, []);
 
   const [excelFile, setExcelFile] = useState(null);
   const [items, setItems] = useState([]);
