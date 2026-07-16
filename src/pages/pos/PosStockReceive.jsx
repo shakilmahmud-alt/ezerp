@@ -10,6 +10,7 @@ const PosStockReceive = () => {
   const { posTerminal } = useAuth();
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   
+  const [receiveChallan, setReceiveChallan] = useState('');
   const [deliveries, setDeliveries] = useState([]);
   const [selectedChallan, setSelectedChallan] = useState('');
   
@@ -31,6 +32,14 @@ const PosStockReceive = () => {
   });
 
   useEffect(() => {
+    // Generate Receive Challan number e.g., SDR20260715xxxx
+    const prefix = "SDR";
+    const datePart = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const randPart = Math.floor(1000 + Math.random() * 9000);
+    setReceiveChallan(`${prefix}${datePart}${randPart}`);
+  }, []);
+
+  useEffect(() => {
     if (posTerminal && posTerminal.store_name) {
       fetchDeliveries(posTerminal.store_name);
     }
@@ -48,7 +57,17 @@ const PosStockReceive = () => {
         .eq('shop_id', storeData.id)
         .eq('status', 'Delivered'); // pending receive at store
         
-      if (data) setDeliveries(data);
+      if (data) {
+        const unique = [];
+        const seen = new Set();
+        for (const item of data) {
+           if (!seen.has(item.challan_no)) {
+             seen.add(item.challan_no);
+             unique.push(item);
+           }
+        }
+        setDeliveries(unique);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -169,9 +188,10 @@ const PosStockReceive = () => {
     const selectedChallanObj = deliveries.find(c => c.id === selectedChallan);
     const refText = selectedChallanObj ? (selectedChallanObj.challan_no || selectedChallanObj.requisition_no) : 'N/A';
     
-    doc.text(`CHALLAN NO # ${refText}`, pageWidth - 14, 20, { align: 'right' });
-    doc.text(`RECEIVE DATE: ${date}`, pageWidth - 14, 25, { align: 'right' });
-    doc.text(`RECEIVE FROM: Central Store`, pageWidth - 14, 30, { align: 'right' });
+    doc.text(`CHALLAN NO # ${receiveChallan}`, pageWidth - 14, 20, { align: 'right' });
+    doc.text(`REF CHALLAN # ${refText}`, pageWidth - 14, 25, { align: 'right' });
+    doc.text(`RECEIVE DATE: ${date}`, pageWidth - 14, 30, { align: 'right' });
+    doc.text(`RECEIVE FROM: Central Store`, pageWidth - 14, 35, { align: 'right' });
     
     // Left Side Info
     doc.text(`STORE NAME: ${posTerminal?.store_name || 'N/A'}`, 14, 45);
@@ -272,7 +292,9 @@ const PosStockReceive = () => {
     doc.setFont("helvetica", "bold");
     doc.text('Authorized Signatory', pageWidth - 45, sigY + 5, { align: 'center' });
     
-    doc.save(`Store_Receive_${date}.pdf`);
+    const blob = doc.output('blob');
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
   };
 
   const handleSave = async () => {
@@ -310,10 +332,14 @@ const PosStockReceive = () => {
               .eq('product_id', item.productId)
               .single();
 
+            const newStoreQty = existingStock 
+              ? Number(existingStock.stock_qty || 0) + qty 
+              : qty;
+
             if (existingStock) {
               await supabase
                 .from('store_stocks')
-                .update({ stock_qty: Number(existingStock.stock_qty || 0) + qty })
+                .update({ stock_qty: newStoreQty })
                 .eq('id', existingStock.id);
             } else {
               await supabase
@@ -321,9 +347,21 @@ const PosStockReceive = () => {
                 .insert({
                   store_id: posTerminal.store_id,
                   product_id: item.productId,
-                  stock_qty: qty
+                  stock_qty: newStoreQty
                 });
             }
+
+            // Also sync str_stock on products table (used by POS stock view)
+            const { data: freshProd } = await supabase
+              .from('products')
+              .select('str_stock')
+              .eq('id', item.productId)
+              .single();
+            const newStrStock = Number(freshProd?.str_stock || 0) + qty;
+            await supabase
+              .from('products')
+              .update({ str_stock: newStrStock })
+              .eq('id', item.productId);
           }
         }
       }
@@ -333,6 +371,36 @@ const PosStockReceive = () => {
         .from('requisitions')
         .update({ status: 'Received' })
         .eq('id', selectedChallan);
+
+      // Create new SDR challan in requisitions
+      const selectedChallanObj = deliveries.find(c => c.id === selectedChallan);
+      const refChallanNo = selectedChallanObj ? (selectedChallanObj.challan_no || selectedChallanObj.requisition_no) : '';
+      
+      const { data: newReq, error: reqErr } = await supabase
+        .from('requisitions')
+        .insert({
+          requisition_no: receiveChallan,
+          challan_no: refChallanNo,
+          requisition_date: date,
+          status: 'Receive Challan',
+          shop_id: posTerminal.store_id
+        })
+        .select('id')
+        .single();
+        
+      if (!reqErr && newReq) {
+        const receivedItemsForDb = items.filter(i => Number(i.rcvQty) > 0).map(item => ({
+          requisition_id: newReq.id,
+          product_id: item.productId,
+          product_code: item.code,
+          product_name: item.name,
+          barcode: item.barcode,
+          mrp: item.mrp,
+          req_qty: Number(item.rcvQty),
+          approve_qty: Number(item.rcvQty)
+        }));
+        await supabase.from('requisition_items').insert(receivedItemsForDb);
+      }
 
       toast.success('Stock Received successfully!');
       
@@ -345,9 +413,16 @@ const PosStockReceive = () => {
       setProductInfo({
         barcode: '', name: '', category: '', subCategory: '', subSubCategory: '', salePrice: '', challanQty: '', receivingQty: ''
       });
+      
+      // Generate new receive challan number for next
+      const prefix = "SDR";
+      const datePart = new Date().toISOString().split('T')[0].replace(/-/g, '');
+      const randPart = Math.floor(1000 + Math.random() * 9000);
+      setReceiveChallan(`${prefix}${datePart}${randPart}`);
+      
       // refresh deliveries
-      if (posTerminal && posTerminal.stores?.name) {
-        fetchDeliveries(posTerminal.stores.name);
+      if (posTerminal && posTerminal.store_name) {
+        fetchDeliveries(posTerminal.store_name);
       }
 
     } catch (err) {

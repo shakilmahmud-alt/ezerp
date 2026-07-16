@@ -69,12 +69,17 @@ const Reprint = () => {
         
         // Dynamic fetch based on type
         if (selectedType === 'Purchase Order') {
-          const { data, error } = await supabase
+          let query = supabase
             .from('purchase_orders')
             .select('po_number')
             .gte('order_date', fromDate)
             .lte('order_date', toDate);
             
+          if (selectedStore && selectedStore !== '-- All --') {
+            query = query.eq('delivery_to', selectedStore);
+          }
+            
+          const { data, error } = await query;
           if (!error && data) docs = data.map(d => d.po_number).filter(Boolean);
         } 
         else if (selectedType === 'DML Challan') {
@@ -87,30 +92,80 @@ const Reprint = () => {
           if (!error && data) docs = data.map(d => String(d.id));
         }
         else if (selectedType === 'Store Requisition(Ecom)' || selectedType === 'Store Requisition') {
-          const { data, error } = await supabase
+          let query = supabase
             .from('requisitions')
             .select('requisition_no')
             .gte('requisition_date', fromDate)
             .lte('requisition_date', toDate);
             
+          if (selectedStore && selectedStore !== '-- All --') {
+            const s = stores.find(s => s.name === selectedStore);
+            if (s) {
+              query = query.eq('shop_id', s.id);
+            } else {
+              query = query.eq('shop_id', '00000000-0000-0000-0000-000000000000');
+            }
+          }
+            
+          const { data, error } = await query;
           if (!error && data) docs = data.map(d => d.requisition_no).filter(Boolean);
         }
         else if (selectedType === 'Purchase Receive Challan') {
-          const { data, error } = await supabase
+          let query = supabase
             .from('purchase_receives')
             .select('last_challan_no')
             .gte('purchase_date', fromDate)
             .lte('purchase_date', toDate)
             .eq('status', 'Saved');
+            
+          if (selectedStore && selectedStore !== '-- All --') {
+            query = query.eq('delivery_to', selectedStore);
+          }
+            
+          const { data, error } = await query;
           if (!error && data) docs = data.map(d => d.last_challan_no).filter(Boolean);
         }
-        else if (selectedType === 'Store Delivery Challan' || selectedType === 'Store Delivery Challan Summary' || selectedType === 'Store Delivery Receive Challan') {
-          const { data, error } = await supabase
+        else if (selectedType === 'Store Delivery Challan' || selectedType === 'Store Delivery Challan Summary') {
+          let query = supabase
             .from('requisitions')
             .select('challan_no, requisition_no')
             .gte('requisition_date', fromDate)
-            .lte('requisition_date', toDate);
-          if (!error && data) docs = data.map(d => d.challan_no || d.requisition_no).filter(Boolean);
+            .lte('requisition_date', toDate)
+            .not('status', 'eq', 'Receive Challan')
+            .not('requisition_no', 'like', 'SDR%');
+            
+          if (selectedStore && selectedStore !== '-- All --') {
+            if (selectedStore === 'Central Store') {
+              // Central store is the sender, so show all delivery challans
+            } else {
+              // Delivery challans shouldn't show up for receiver stores
+              query = query.eq('shop_id', '00000000-0000-0000-0000-000000000000');
+            }
+          }
+          const { data, error } = await query;
+          if (!error && data) {
+            const arr = data.map(d => d.challan_no || d.requisition_no).filter(Boolean);
+            docs = [...new Set(arr)];
+          }
+        }
+        else if (selectedType === 'Store Delivery Receive Challan') {
+          let query = supabase
+            .from('requisitions')
+            .select('requisition_no')
+            .gte('requisition_date', fromDate)
+            .lte('requisition_date', toDate)
+            .eq('status', 'Receive Challan');
+            
+          if (selectedStore && selectedStore !== '-- All --') {
+            const s = stores.find(s => s.name === selectedStore);
+            if (s) {
+              query = query.eq('shop_id', s.id);
+            } else {
+              query = query.eq('shop_id', '00000000-0000-0000-0000-000000000000');
+            }
+          }
+          const { data, error } = await query;
+          if (!error && data) docs = data.map(d => d.requisition_no).filter(Boolean);
         }
         else if (selectedType === 'Purchase Return Challan') {
           const { data, error } = await supabase
@@ -135,7 +190,7 @@ const Reprint = () => {
     };
 
     fetchDocuments();
-  }, [selectedType, fromDate, toDate]);
+  }, [selectedType, fromDate, toDate, selectedStore, stores]);
 
   const getLabelForType = () => {
     if (!selectedType) return 'Document No';
@@ -287,8 +342,13 @@ const Reprint = () => {
           Number(i.line_amount || 0).toFixed(2)
         ]));
 
-      } else if (selectedType === 'Store Delivery Challan' || selectedType === 'Store Delivery Challan Summary' || selectedType === 'Store Delivery Receive Challan') {
-        const { data: req } = await supabase.from('requisitions').select('*, stores(name)').or(`challan_no.eq.${selectedDocument},requisition_no.eq.${selectedDocument}`).single();
+      } else if (selectedType === 'Store Delivery Challan' || selectedType === 'Store Delivery Challan Summary') {
+        const { data: req } = await supabase.from('requisitions')
+          .select('*, stores(name)')
+          .or(`challan_no.eq.${selectedDocument},requisition_no.eq.${selectedDocument}`)
+          .not('status', 'eq', 'Receive Challan')
+          .not('requisition_no', 'like', 'SDR%')
+          .single();
         const { data: reqItems } = await supabase.from('requisition_items').select('*, products(item_name, barcode, mrp)').eq('requisition_id', req?.id);
 
         headerInfo = {
@@ -314,6 +374,40 @@ const Reprint = () => {
             cpu.toFixed(2),
             mrp.toFixed(2),
             (Number(i.cost_value) || (cpu * qty)).toFixed(2),
+            (mrp * qty).toFixed(2)
+          ];
+        });
+
+      } else if (selectedType === 'Store Delivery Receive Challan') {
+        const { data: req } = await supabase.from('requisitions')
+          .select('*, stores(name)')
+          .or(`challan_no.eq.${selectedDocument},requisition_no.eq.${selectedDocument}`)
+          .eq('status', 'Receive Challan')
+          .single();
+        const { data: reqItems } = await supabase.from('requisition_items').select('*, products(item_name, barcode, mrp)').eq('requisition_id', req?.id);
+
+        headerInfo = {
+          title: selectedType.toUpperCase(),
+          docNo: req?.requisition_no || '', // the SDR number
+          date: req?.requisition_date,
+          orderNo: req?.challan_no || '', // the DLV number
+          deliveryTo: req?.stores?.name || '',
+          vendorName: '',
+          remarks: ''
+        };
+
+        items = (reqItems || []).map((i, idx) => {
+          const qty = Number(i.approve_qty) || 0;
+          const mrp = Number(i.products?.mrp || i.mrp) || 0;
+          return [
+            idx + 1,
+            i.products?.barcode || i.barcode || '',
+            i.products?.item_name || i.product_name || '',
+            qty.toFixed(2) + ' PCS',
+            '0.00 PCS',
+            '0.00',
+            mrp.toFixed(2),
+            '0.00',
             (mrp * qty).toFixed(2)
           ];
         });
@@ -398,7 +492,9 @@ const Reprint = () => {
       
       let isStoreDelivery = (selectedType === 'Store Delivery Challan' || selectedType === 'Store Delivery Challan Summary' || selectedType === 'Store Delivery Receive Challan');
       
-      if (isStoreDelivery) {
+      if (selectedType === 'Store Delivery Receive Challan') {
+        tableHead = [['S/L', 'BARCODE', 'DISPLAY_NAME', 'RCV QTY', 'C. STOCK', 'CPU', 'SALE PRICE', 'COST VALUE', 'SALE VALUE']];
+      } else if (isStoreDelivery) {
         tableHead = [['S/L', 'BARCODE', 'DISPLAY_NAME', 'DEL QTY', 'C. STOCK', 'CPU', 'SALE PRICE', 'COST VALUE', 'SALE VALUE']];
       }
 

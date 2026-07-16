@@ -73,6 +73,7 @@ const StoreDelivery = () => {
         `)
         .gte('requisition_date', listFromDate)
         .lte('requisition_date', listToDate)
+        .not('requisition_no', 'like', 'SDR%')
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -107,7 +108,15 @@ const StoreDelivery = () => {
         .eq('status', 'Saved');
       
       if (data) {
-        setRcvChallans(data);
+        const unique = [];
+        const seen = new Set();
+        for (const item of data) {
+           if (!seen.has(item.last_challan_no)) {
+             seen.add(item.last_challan_no);
+             unique.push(item);
+           }
+        }
+        setRcvChallans(unique);
       }
     } catch (err) {
       console.error(err);

@@ -51,6 +51,7 @@ import PosDashboard from './pages/pos/PosDashboard';
 import PosCustomerManagement from './pages/pos/PosCustomerManagement';
 import PosStockSearch from './pages/pos/PosStockSearch';
 import PosStockReceive from './pages/pos/PosStockReceive';
+import PosStockTransfer from './pages/pos/PosStockTransfer';
 
 function App() {
   return (
@@ -73,6 +74,7 @@ function App() {
             <Route path="customers" element={<PosCustomerManagement />} />
             <Route path="stock-search" element={<PosStockSearch />} />
             <Route path="stock-receive" element={<PosStockReceive />} />
+            <Route path="stock-transfer" element={<PosStockTransfer />} />
           </Route>
           
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>

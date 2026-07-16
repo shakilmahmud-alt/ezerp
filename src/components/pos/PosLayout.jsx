@@ -217,7 +217,16 @@ const PosLayout = () => {
               >
                 <Package size={14} /> Stock Receive
               </div>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Stock Transfer</div>
+              <div 
+                style={{ padding: '4px 20px 4px 32px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} 
+                className="pos-menu-item"
+                onClick={() => {
+                  setInventoryMenuOpen(false);
+                  navigate('/pos/stock-transfer');
+                }}
+              >
+                Stock Transfer
+              </div>
               <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Stock Transfer By Category</div>
               <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Purchase Receive</div>
               <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Purchase Receive By PO</div>
@@ -269,7 +278,7 @@ const PosLayout = () => {
               border: '1px solid #ddd',
             }}>
               <div 
-                style={{ padding: '8px 15px', cursor: 'pointer' }} 
+                style={{ padding: '4px 15px', cursor: 'pointer' }} 
                 className="pos-menu-item"
                 onClick={() => {
                   setHamburgerMenuOpen(false);
@@ -279,7 +288,7 @@ const PosLayout = () => {
                 Change password
               </div>
               <div 
-                style={{ padding: '8px 15px', cursor: 'pointer' }} 
+                style={{ padding: '4px 15px', cursor: 'pointer' }} 
                 className="pos-menu-item"
                 onClick={handleSignOut}
               >
