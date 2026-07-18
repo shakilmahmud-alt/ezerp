@@ -77,7 +77,8 @@ const ProductQuickSearch = () => {
           subcategory:subcategory_id (name),
           sub_subcategory:sub_subcategory_id (name),
           brand:brand_id (name),
-          vendor:vendor_id (name)
+          vendor:vendor_id (name),
+          store_stocks ( store_id, stock_qty )
         `);
 
       if (filters.categoryId) query = query.eq('category_id', filters.categoryId);
@@ -92,7 +93,10 @@ const ProductQuickSearch = () => {
       }
       
       if (!filters.showZeroStock) {
-        query = query.or('wh_stock.gt.0,str_stock.gt.0');
+        // If a specific store is selected, we filter on-the-fly in JS below
+        if (!filters.store) {
+          query = query.or('wh_stock.gt.0,str_stock.gt.0');
+        }
       }
 
       if (filters.mrpOperator && filters.mrpValue) {
@@ -119,8 +123,24 @@ const ProductQuickSearch = () => {
         }
       }
 
-      const { data, error } = await query;
+      let { data, error } = await query;
       if (error) throw error;
+      
+      // Perform JS filtering for selected store stock
+      if (filters.store && data) {
+        if (filters.store === 'central_store') {
+          if (!filters.showZeroStock) {
+            data = data.filter(p => (p.wh_stock || 0) > 0);
+          }
+        } else {
+          if (!filters.showZeroStock) {
+            data = data.filter(p => {
+              const qty = p.store_stocks?.find(s => s.store_id === filters.store)?.stock_qty || 0;
+              return qty > 0;
+            });
+          }
+        }
+      }
       
       setProducts(data || []);
     } catch (error) {
@@ -157,7 +177,20 @@ const ProductQuickSearch = () => {
       Brand: p.brand?.name || '',
       Vendor: p.vendor?.name || '',
       Status: p.status || 'Active',
-      Stock: (p.wh_stock || 0) + (p.str_stock || 0),
+      Stock: filters.store === 'central_store'
+        ? (p.wh_stock || 0)
+        : filters.store
+          ? (p.store_stocks?.find(s => s.store_id === filters.store)?.stock_qty || 0)
+          : (() => {
+              const whStockText = (p.wh_stock || 0) > 0 ? [`${p.wh_stock} (Central Store)`] : [];
+              const shopStocksText = p.store_stocks
+                ?.filter(s => s.stock_qty > 0)
+                ?.map(s => {
+                  const storeName = stores.find(st => st.id === s.store_id)?.name || 'Store';
+                  return `${s.stock_qty} (${storeName})`;
+                }) || [];
+              return [...whStockText, ...shopStocksText].join(', ') || '0';
+            })(),
       'VAT(%)': p.sale_vat_percent || 0,
       CPU: p.purchase_price,
       MRP: p.mrp,
@@ -248,6 +281,7 @@ const ProductQuickSearch = () => {
             <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: 'var(--text-secondary)' }}>Store</label>
             <CustomSelect name="store" value={filters.store} onChange={handleFilterChange} className="input-animated">
               <option value="">-- ALL --</option>
+              <option value="central_store">Central Store</option>
               {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </CustomSelect>
           </div>
@@ -337,7 +371,23 @@ const ProductQuickSearch = () => {
                     <td style={{ padding: '12px' }}>{p.brand?.name}</td>
                     <td style={{ padding: '12px' }}>{p.vendor?.name}</td>
                     <td style={{ padding: '12px' }}>{p.status || 'Active'}</td>
-                    <td style={{ padding: '12px', fontWeight: 'bold' }}>{(p.wh_stock || 0) + (p.str_stock || 0)}</td>
+                    <td style={{ padding: '12px', fontWeight: 'bold' }}>
+                      {filters.store === 'central_store'
+                        ? (p.wh_stock || 0)
+                        : filters.store
+                          ? (p.store_stocks?.find(s => s.store_id === filters.store)?.stock_qty || 0)
+                          : (() => {
+                              const whStockText = (p.wh_stock || 0) > 0 ? [`${p.wh_stock} (Central Store)`] : [];
+                              const shopStocksText = p.store_stocks
+                                ?.filter(s => s.stock_qty > 0)
+                                ?.map(s => {
+                                  const storeName = stores.find(st => st.id === s.store_id)?.name || 'Store';
+                                  return `${s.stock_qty} (${storeName})`;
+                                }) || [];
+                              return [...whStockText, ...shopStocksText].join(', ') || '0';
+                            })()
+                      }
+                    </td>
                     <td style={{ padding: '12px' }}>{p.sale_vat_percent || 0}</td>
                     <td style={{ padding: '12px' }}>{p.purchase_price}</td>
                     <td style={{ padding: '12px' }}>{p.mrp}</td>

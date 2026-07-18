@@ -303,6 +303,18 @@ const PosStockReceive = () => {
 
     setIsLoading(true);
     try {
+      // Check if it is a shop-to-shop transfer (challan/requisition number starting with 'TRN')
+      const { data: reqInfo, error: reqInfoErr } = await supabase
+        .from('requisitions')
+        .select('requisition_no, challan_no')
+        .eq('id', selectedChallan)
+        .single();
+      
+      if (reqInfoErr) throw reqInfoErr;
+      
+      const reqNo = reqInfo.requisition_no || '';
+      const isShopToShop = reqNo.startsWith('TRN');
+
       // For each item, update central stock (wh_stock) and store stock (str_stock)
       for (const item of items) {
         const qty = Number(item.rcvQty || 0);
@@ -314,15 +326,24 @@ const PosStockReceive = () => {
             .single();
 
           if (prodData) {
-            const newWhStock = Number(prodData.wh_stock || 0) - qty;
-            
-            await supabase
-              .from('products')
-              .update({ 
-                wh_stock: newWhStock,
-                mrp: item.mrp
-              })
-              .eq('id', item.productId);
+            if (!isShopToShop) {
+              const newWhStock = Number(prodData.wh_stock || 0) - qty;
+              await supabase
+                .from('products')
+                .update({ 
+                  wh_stock: newWhStock,
+                  mrp: item.mrp
+                })
+                .eq('id', item.productId);
+            } else {
+              // Just update MRP if needed for shop-to-shop transfer
+              await supabase
+                .from('products')
+                .update({ 
+                  mrp: item.mrp
+                })
+                .eq('id', item.productId);
+            }
               
             // Update store_stocks
             const { data: existingStock } = await supabase

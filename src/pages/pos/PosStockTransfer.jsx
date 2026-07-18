@@ -381,7 +381,7 @@ const PosStockTransfer = () => {
 
     setIsLoading(true);
     try {
-      // 1. Deduct from store_stocks
+      // 1. Deduct from store_stocks and products.str_stock
       for (const item of transferredItems) {
         const qty = Number(item.transferQty);
         
@@ -398,6 +398,20 @@ const PosStockTransfer = () => {
             .from('store_stocks')
             .update({ stock_qty: newQty })
             .eq('id', existingStock.id);
+        }
+
+        // Also decrement products.str_stock
+        const { data: freshProd } = await supabase
+          .from('products')
+          .select('str_stock')
+          .eq('id', item.productId)
+          .single();
+        if (freshProd) {
+          const newStrStock = Math.max(0, Number(freshProd.str_stock || 0) - qty);
+          await supabase
+            .from('products')
+            .update({ str_stock: newStrStock })
+            .eq('id', item.productId);
         }
       }
 
