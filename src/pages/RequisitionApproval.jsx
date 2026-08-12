@@ -319,23 +319,34 @@ const RequisitionApproval = () => {
             </table>
           </div>
 
-          <div style={{ display: 'flex', gap: '10px', marginTop: '20px', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'center' }}>
             <button 
+              className="btn-info"
               onClick={() => generatePDF(selectedReq, reqItems)}
-              style={{ padding: '6px 20px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+              style={{ padding: '8px 24px', fontSize: '13px', fontWeight: 'bold' }}
             >
               Preview
             </button>
+
             <button 
+              className="btn-theme"
               onClick={handleApprove}
               disabled={isLoading || selectedReq.status === 'Approved'}
-              style={{ padding: '6px 20px', backgroundColor: 'var(--accent-primary)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+              style={{ 
+                padding: '8px 24px', 
+                fontSize: '13px', 
+                fontWeight: 'bold', 
+                cursor: selectedReq.status === 'Approved' ? 'not-allowed' : 'pointer',
+                opacity: selectedReq.status === 'Approved' ? 0.6 : 1
+              }}
             >
-              Approve
+              {selectedReq.status === 'Approved' ? 'Approved' : 'Approve'}
             </button>
+
             <button 
+              className="btn-danger"
               onClick={() => setView('list')}
-              style={{ padding: '6px 20px', backgroundColor: '#64748b', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+              style={{ padding: '8px 24px', fontSize: '13px', fontWeight: 'bold' }}
             >
               Back
             </button>
@@ -347,13 +358,13 @@ const RequisitionApproval = () => {
 
   return (
     <div className="animate-fade-in" style={{ padding: '20px', backgroundColor: 'var(--bg-color)', minHeight: '100vh' }}>
-      <div style={{ backgroundColor: 'var(--card-bg)', borderRadius: '4px', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
+      <div style={{ backgroundColor: 'var(--card-bg)', borderRadius: '4px', border: '1px solid var(--border-color)', overflow: 'visible' }}>
         
         <div style={{ padding: '15px 20px', borderBottom: '1px solid var(--border-color)' }}>
           <h2 style={{ fontSize: '1.2rem', fontWeight: 'bold', margin: 0, color: 'var(--text-primary)' }}>Requisition List</h2>
         </div>
 
-        <div style={{ padding: '20px' }}>
+        <div style={{ padding: '20px 20px 100px 20px' }}>
           <div style={{ marginBottom: '20px', position: 'relative' }}>
             <div style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'gray' }}>
               <Search size={16} />
@@ -418,14 +429,20 @@ const RequisitionApproval = () => {
                     
                     {actionDropdown === req.id && (
                       <div style={{
-                        position: 'absolute', top: '100%', right: '10px', 
-                        backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', 
-                        borderRadius: '4px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', zIndex: 10,
-                        minWidth: '100px'
+                        position: 'absolute', 
+                        bottom: index >= filteredRequisitions.length - 2 && filteredRequisitions.length > 1 ? '100%' : '100%', 
+                        right: '10px', 
+                        backgroundColor: '#ffffff', 
+                        border: '1px solid var(--border-color, #cbd5e1)', 
+                        borderRadius: '6px', 
+                        boxShadow: '0 8px 20px rgba(0,0,0,0.2)', 
+                        zIndex: 9999,
+                        minWidth: '120px',
+                        overflow: 'hidden'
                       }}>
-                        <div onClick={() => handleAction('Print', req)} style={{ padding: '8px 15px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}>Print</div>
-                        <div onClick={() => handleAction('Show', req)} style={{ padding: '8px 15px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}>Show</div>
-                        <div onClick={() => handleAction('Cancel', req)} style={{ padding: '8px 15px', cursor: 'pointer', color: 'red' }}>Cancel</div>
+                        <div onClick={() => handleAction('Print', req)} style={{ padding: '8px 15px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontWeight: 'bold', color: '#334155' }} className="action-menu-item">Print</div>
+                        <div onClick={() => handleAction('Show', req)} style={{ padding: '8px 15px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontWeight: 'bold', color: '#0284c7' }} className="action-menu-item">Show</div>
+                        <div onClick={() => handleAction('Cancel', req)} style={{ padding: '8px 15px', cursor: 'pointer', fontWeight: 'bold', color: '#dc2626' }} className="action-menu-item">Cancel</div>
                       </div>
                     )}
                   </td>

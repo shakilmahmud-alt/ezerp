@@ -35,16 +35,21 @@ const Area = () => {
       const { data, error } = await supabase
         .from('areas')
         .select('code')
-        .order('code', { ascending: false })
-        .limit(1);
+        .like('code', 'A%');
 
       if (error) throw error;
 
-      if (data && data.length > 0 && data[0].code) {
-        const lastCode = data[0].code;
-        const numPart = parseInt(lastCode.replace('A', ''), 10);
-        const nextNum = numPart + 1;
-        return `A${nextNum.toString().padStart(4, '0')}`;
+      if (data && data.length > 0) {
+        let maxNum = 0;
+        data.forEach(item => {
+          if (item.code) {
+            const numPart = parseInt(item.code.replace('A', ''), 10);
+            if (!isNaN(numPart) && numPart > maxNum) {
+              maxNum = numPart;
+            }
+          }
+        });
+        return `A${(maxNum + 1).toString().padStart(4, '0')}`;
       } else {
         return 'A0001';
       }

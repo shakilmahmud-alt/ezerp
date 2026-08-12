@@ -103,24 +103,42 @@ const EmployeeList = () => {
         if (!payload.password) delete payload.password; 
         
         const { error } = await supabase.from('employees').update(payload).eq('id', editingId);
-        if (error) throw error;
+        if (error) {
+          if (error.code === '23505') {
+            toast.error('Username already exists');
+            setIsSaving(false);
+            return;
+          }
+          throw error;
+        }
         toast.success('Employee updated successfully');
       } else {
-        // Generate Code
+        // Generate Code by searching all EMP% codes
         let newCode = 'EMP0001';
-        const { data: latestData } = await supabase.from('employees').select('code').order('code', { ascending: false }).limit(1);
-        if (latestData && latestData.length > 0) {
-          const lastCode = latestData[0].code;
-          const numPart = parseInt(lastCode.replace('EMP', ''));
-          if (!isNaN(numPart)) {
-            newCode = 'EMP' + (numPart + 1).toString().padStart(4, '0');
-          }
+        const { data: allEmpData } = await supabase.from('employees').select('code').like('code', 'EMP%');
+        if (allEmpData && allEmpData.length > 0) {
+          let maxNum = 0;
+          allEmpData.forEach(item => {
+            if (item.code) {
+              const numPart = parseInt(item.code.replace('EMP', ''), 10);
+              if (!isNaN(numPart) && numPart < 999900) {
+                if (numPart > maxNum) maxNum = numPart;
+              }
+            }
+          });
+          newCode = 'EMP' + (maxNum + 1).toString().padStart(4, '0');
         }
         
         const { error } = await supabase.from('employees').insert([{ ...payload, code: newCode }]);
         if (error) {
           if (error.code === '23505') {
-             toast.error('Username or Name already exists');
+             if (error.message && error.message.includes('employees_username_key')) {
+               toast.error('Username already exists');
+             } else if (error.message && error.message.includes('employees_code_key')) {
+               toast.error('Employee Code conflict. Please try saving again.');
+             } else {
+               toast.error('Username or Employee record already exists');
+             }
              setIsSaving(false);
              return;
           }

@@ -152,17 +152,19 @@ const CustomerEntry = () => {
       } else {
         // Generate Code
         let newCode = '100001';
-        const { data: lastRecord } = await supabase
+        const { data: allRecords } = await supabase
           .from('customers')
-          .select('code')
-          .order('code', { ascending: false })
-          .limit(1);
+          .select('code');
           
-        if (lastRecord && lastRecord.length > 0 && lastRecord[0].code) {
-          const lastNum = parseInt(lastRecord[0].code, 10);
-          if (!isNaN(lastNum)) {
-            newCode = String(lastNum + 1);
-          }
+        if (allRecords && allRecords.length > 0) {
+          let maxNum = 100000;
+          allRecords.forEach(item => {
+            if (item.code) {
+              const num = parseInt(item.code, 10);
+              if (!isNaN(num) && num > maxNum) maxNum = num;
+            }
+          });
+          newCode = String(maxNum + 1);
         }
         
         payload.code = newCode;

@@ -52,6 +52,11 @@ import PosCustomerManagement from './pages/pos/PosCustomerManagement';
 import PosStockSearch from './pages/pos/PosStockSearch';
 import PosStockReceive from './pages/pos/PosStockReceive';
 import PosStockTransfer from './pages/pos/PosStockTransfer';
+import PosPaymentTypeChange from './pages/pos/PosPaymentTypeChange';
+import PosRequisition from './pages/pos/PosRequisition';
+import PosRequisitionVendorwise from './pages/pos/PosRequisitionVendorwise';
+import PosPurchaseReceive from './pages/pos/PosPurchaseReceive';
+import PosPurchaseReturn from './pages/pos/PosPurchaseReturn';
 
 function App() {
   return (
@@ -75,6 +80,11 @@ function App() {
             <Route path="stock-search" element={<PosStockSearch />} />
             <Route path="stock-receive" element={<PosStockReceive />} />
             <Route path="stock-transfer" element={<PosStockTransfer />} />
+            <Route path="payment-type-change" element={<PosPaymentTypeChange />} />
+            <Route path="requisition" element={<PosRequisition />} />
+            <Route path="requisition-vendorwise" element={<PosRequisitionVendorwise />} />
+            <Route path="purchase-receive" element={<PosPurchaseReceive />} />
+            <Route path="purchase-return" element={<PosPurchaseReturn />} />
           </Route>
           
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>

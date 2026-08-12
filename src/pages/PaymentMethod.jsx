@@ -76,17 +76,19 @@ const PaymentMethod = () => {
       } else {
         // Generate new code
         let newCode = '001';
-        const { data: lastRecord } = await supabase
+        const { data: allRecords } = await supabase
           .from('payment_methods')
-          .select('code')
-          .order('code', { ascending: false })
-          .limit(1);
+          .select('code');
           
-        if (lastRecord && lastRecord.length > 0) {
-          const lastNum = parseInt(lastRecord[0].code, 10);
-          if (!isNaN(lastNum)) {
-            newCode = String(lastNum + 1).padStart(3, '0');
-          }
+        if (allRecords && allRecords.length > 0) {
+          let maxNum = 0;
+          allRecords.forEach(item => {
+            if (item.code) {
+              const num = parseInt(item.code, 10);
+              if (!isNaN(num) && num > maxNum) maxNum = num;
+            }
+          });
+          newCode = String(maxNum + 1).padStart(3, '0');
         }
 
         const { error } = await supabase

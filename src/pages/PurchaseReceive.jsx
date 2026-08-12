@@ -388,15 +388,37 @@ const PurchaseReceive = () => {
       // If 'Save', update stock and hide PO
       if (status === 'Saved') {
         let allReceived = true;
+        const isCentral = !headerData.deliveryTo || headerData.deliveryTo === 'Central Store';
+        const targetStore = stores.find(s => s.name?.toLowerCase() === headerData.deliveryTo?.toLowerCase());
+
         for (const item of selectedItems) {
           const rcvQty = Number(item.rcvQty || 0);
           if (rcvQty > 0) {
-            const newStock = Number(item.wh_stock || 0) + rcvQty;
-            const { error: stockError } = await supabase
-              .from('products')
-              .update({ wh_stock: newStock })
-              .eq('id', item.id);
-            if (stockError) console.error("Stock update error for product", item.id, stockError);
+            if (isCentral) {
+              const newStock = Number(item.wh_stock || 0) + rcvQty;
+              await supabase.from('products').update({ wh_stock: newStock }).eq('id', item.id);
+            } else if (targetStore) {
+              const { data: sStock } = await supabase
+                .from('store_stocks')
+                .select('stock_qty')
+                .eq('store_id', targetStore.id)
+                .eq('product_id', item.id)
+                .single();
+
+              if (sStock) {
+                await supabase
+                  .from('store_stocks')
+                  .update({ stock_qty: (sStock.stock_qty || 0) + rcvQty })
+                  .eq('store_id', targetStore.id)
+                  .eq('product_id', item.id);
+              } else {
+                await supabase.from('store_stocks').insert([{
+                  store_id: targetStore.id,
+                  product_id: item.id,
+                  stock_qty: rcvQty
+                }]);
+              }
+            }
           }
           if (Number(item.poQty) - rcvQty > 0) {
             allReceived = false;

@@ -88,22 +88,25 @@ const Designation = () => {
         // First, generate code
         let newCode = 'DG0001';
         
-        // fetch latest code to increment
-        const { data: latestData, error: fetchErr } = await supabase
+        // fetch existing DG% codes to find max
+        const { data: allData, error: fetchErr } = await supabase
           .from('designations')
           .select('code')
-          .order('code', { ascending: false })
-          .limit(1);
+          .like('code', 'DG%');
           
         if (fetchErr) throw fetchErr;
         
-        if (latestData && latestData.length > 0) {
-          const lastCode = latestData[0].code;
-          // Extract numeric part, assuming format 'DGXXXX'
-          const numPart = parseInt(lastCode.replace('DG', ''));
-          if (!isNaN(numPart)) {
-            newCode = 'DG' + (numPart + 1).toString().padStart(4, '0');
-          }
+        if (allData && allData.length > 0) {
+          let maxNum = 0;
+          allData.forEach(item => {
+            if (item.code) {
+              const numPart = parseInt(item.code.replace('DG', ''), 10);
+              if (!isNaN(numPart) && numPart > maxNum) {
+                maxNum = numPart;
+              }
+            }
+          });
+          newCode = 'DG' + (maxNum + 1).toString().padStart(4, '0');
         }
         
         const { error } = await supabase

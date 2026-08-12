@@ -159,7 +159,16 @@ const PosLayout = () => {
               <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Cash Return</div>
               <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Issue Credit Note</div>
               <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item" onClick={handleStockSearchClick}>Stock Search</div>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Invoice Payment Type Change</div>
+              <div 
+                style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => {
+                  setFileMenuOpen(false);
+                  navigate('/pos/payment-type-change');
+                }}
+              >
+                Invoice Payment Type Change
+              </div>
               <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Manual Data Download-Upload</div>
               <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Change Password</div>
               <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Settings</div>
@@ -205,8 +214,26 @@ const PosLayout = () => {
               border: '1px solid #ddd',
               whiteSpace: 'nowrap'
             }}>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Requisition</div>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Requisition (Vendorwise)</div>
+              <div 
+                style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => {
+                  setInventoryMenuOpen(false);
+                  navigate('/pos/requisition');
+                }}
+              >
+                Requisition
+              </div>
+              <div 
+                style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => {
+                  setInventoryMenuOpen(false);
+                  navigate('/pos/requisition-vendorwise');
+                }}
+              >
+                Requisition (Vendorwise)
+              </div>
               <div 
                 style={{ padding: '4px 20px 4px 32px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} 
                 className="pos-menu-item"
@@ -228,9 +255,27 @@ const PosLayout = () => {
                 Stock Transfer
               </div>
               <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Stock Transfer By Category</div>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Purchase Receive</div>
+              <div 
+                style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => {
+                  setInventoryMenuOpen(false);
+                  navigate('/pos/purchase-receive');
+                }}
+              >
+                Purchase Receive
+              </div>
               <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Purchase Receive By PO</div>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Purchase Return</div>
+              <div 
+                style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => {
+                  setInventoryMenuOpen(false);
+                  navigate('/pos/purchase-return');
+                }}
+              >
+                Purchase Return
+              </div>
               <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Product Stock Journal</div>
               <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Global Stock Search</div>
               <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Discount Circular Search</div>
@@ -322,7 +367,10 @@ const PosLayout = () => {
               justifyContent: 'center', 
               cursor: 'pointer',
               borderBottom: '1px solid #eee'
-            }}>
+            }}
+            title="Main POS Monitor"
+            onClick={() => navigate('/pos')}
+          >
             <ShoppingCart size={30} color="var(--accent-primary)" />
           </div>
           
@@ -334,7 +382,10 @@ const PosLayout = () => {
               justifyContent: 'center', 
               cursor: 'pointer',
               borderBottom: '1px solid #eee'
-            }}>
+            }}
+            title="Stock Receive"
+            onClick={() => navigate('/pos/stock-receive')}
+          >
             <Package size={30} color="var(--accent-primary)" />
           </div>
 
@@ -346,7 +397,10 @@ const PosLayout = () => {
               justifyContent: 'center', 
               cursor: 'pointer',
               borderBottom: '1px solid #eee'
-            }}>
+            }}
+            title="Stock Transfer"
+            onClick={() => navigate('/pos/stock-transfer')}
+          >
             <Truck size={30} color="var(--accent-primary)" />
           </div>
 
@@ -357,7 +411,10 @@ const PosLayout = () => {
               display: 'flex', 
               justifyContent: 'center', 
               cursor: 'pointer'
-            }}>
+            }}
+            title="Customer Management"
+            onClick={() => navigate('/pos/customers')}
+          >
             <Settings size={30} color="var(--accent-primary)" />
           </div>
           <style>{`
