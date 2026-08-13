@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabaseClient';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAuth } from '../../context/AuthContext';
+import CustomSelect from '../../components/CustomSelect';
 
 const SectionWrapper = ({ title, children, rightContent }) => (
   <div style={{ border: '1px solid var(--border-color, #e2e8f0)', borderRadius: '8px', padding: '20px', backgroundColor: '#ffffff', marginBottom: '20px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)' }}>
@@ -447,15 +448,14 @@ const PosPurchaseReceive = () => {
           
           <div>
             <label style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 'bold' }}>Vendor Name *</label>
-            <select 
+            <CustomSelect 
               name="vendorId" 
               value={headerData.vendorId} 
               onChange={handleHeaderChange}
-              style={{ width: '100%', padding: '6px 8px', border: '1px solid #00bcd4', borderRadius: '4px', backgroundColor: '#e0f7fa', fontWeight: 'bold' }}
             >
               <option value="">-- Select a Vendor --</option>
               {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-            </select>
+            </CustomSelect>
           </div>
 
           <div>
@@ -470,15 +470,14 @@ const PosPurchaseReceive = () => {
 
           <div>
             <label style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 'bold' }}>Purchase Order *</label>
-            <select 
+            <CustomSelect 
               name="purchaseOrderId" 
               value={headerData.purchaseOrderId} 
               onChange={handleHeaderChange}
-              style={{ width: '100%', padding: '6px 8px', border: '1px solid #00bcd4', borderRadius: '4px', backgroundColor: '#e0f7fa', fontWeight: 'bold' }}
             >
               <option value="">-- Select PO --</option>
               {vendorPOs.map(po => <option key={po.id} value={po.id}>{po.po_number}</option>)}
-            </select>
+            </CustomSelect>
           </div>
 
           <div>

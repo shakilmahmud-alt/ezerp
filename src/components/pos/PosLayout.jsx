@@ -106,16 +106,19 @@ const PosLayout = () => {
       backgroundRepeat: 'no-repeat',
       fontFamily: 'sans-serif'
     }}>
-      {/* Top Header Menu area, like in the second image */}
+      {/* Top Header Menu area with Windows 7 Aero Glass Styling */}
       <div style={{
-        backgroundColor: 'var(--accent-primary)', // changed from lime green
-        padding: '5px 15px',
+        background: 'linear-gradient(180deg, #52be72 0%, #2e6f40 46%, #1b4527 50%, #29683c 100%)',
+        padding: '6px 16px',
         display: 'flex',
-        gap: '20px',
+        gap: '15px',
         color: '#ffffff',
         fontSize: '14px',
-        fontWeight: '500',
-        position: 'relative' // Added for absolute positioning of dropdowns
+        fontWeight: '600',
+        position: 'relative',
+        borderBottom: '1px solid #1a4427',
+        boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 3px 10px rgba(0, 0, 0, 0.25)',
+        textShadow: '0 1px 1px rgba(0, 0, 0, 0.3)'
       }}>
         <div 
           ref={fileMenuRef} 
@@ -124,10 +127,14 @@ const PosLayout = () => {
           <div 
             style={{ 
               cursor: 'pointer', 
-              padding: '2px 8px',
-              backgroundColor: fileMenuOpen ? '#ffffff' : 'transparent',
-              color: fileMenuOpen ? '#000000' : '#ffffff',
-              borderRadius: fileMenuOpen ? '2px 2px 0 0' : '0'
+              padding: '3px 12px',
+              background: fileMenuOpen ? 'linear-gradient(180deg, #ffffff 0%, #e0f2fe 50%, #bae6fd 100%)' : 'transparent',
+              color: fileMenuOpen ? '#0f172a' : '#ffffff',
+              borderRadius: '4px 4px 0 0',
+              border: fileMenuOpen ? '1px solid #7dd3fc' : '1px solid transparent',
+              borderBottom: fileMenuOpen ? 'none' : '1px solid transparent',
+              boxShadow: fileMenuOpen ? 'inset 0 1px 0 #ffffff' : 'none',
+              textShadow: fileMenuOpen ? 'none' : '0 1px 1px rgba(0, 0, 0, 0.3)'
             }}
             onClick={() => setFileMenuOpen(!fileMenuOpen)}
           >
@@ -139,28 +146,30 @@ const PosLayout = () => {
               position: 'absolute',
               top: '100%',
               left: 0,
-              backgroundColor: '#ffffff',
-              color: '#000000',
-              minWidth: 'max-content', // changed to max-content to prevent wrapping
-              boxShadow: '2px 2px 8px rgba(0,0,0,0.3)',
+              background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 249, 255, 0.96) 100%)',
+              color: '#0f172a',
+              minWidth: 'max-content',
+              boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3), inset 0 1px 0 #ffffff',
               zIndex: 1000,
-              padding: '2px 0',
-              border: '1px solid #ddd',
-              whiteSpace: 'nowrap' // prevent text wrapping
+              padding: '4px 0',
+              border: '1px solid #7dd3fc',
+              borderRadius: '0 4px 6px 6px',
+              whiteSpace: 'nowrap',
+              backdropFilter: 'blur(10px)'
             }}>
               <div 
-                style={{ padding: '4px 20px 4px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} 
+                style={{ padding: '6px 20px 6px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} 
                 className="pos-menu-item"
                 onClick={handleCustomerManagementClick}
               >
                 <User size={14} /> Customer Management
               </div>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Day Close Session</div>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Cash Return</div>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Issue Credit Note</div>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item" onClick={handleStockSearchClick}>Stock Search</div>
+              <div style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} className="pos-menu-item">Day Close Session</div>
+              <div style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} className="pos-menu-item">Cash Return</div>
+              <div style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} className="pos-menu-item">Issue Credit Note</div>
+              <div style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} className="pos-menu-item" onClick={handleStockSearchClick}>Stock Search</div>
               <div 
-                style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} 
+                style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} 
                 className="pos-menu-item"
                 onClick={() => {
                   setFileMenuOpen(false);
@@ -169,20 +178,15 @@ const PosLayout = () => {
               >
                 Invoice Payment Type Change
               </div>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Manual Data Download-Upload</div>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Change Password</div>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Settings</div>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Data Sync</div>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Exit</div>
-              
-              <style>{`
-                .pos-menu-item:hover {
-                  background-color: #e5f1fb;
-                }
-              `}</style>
+              <div style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} className="pos-menu-item">Manual Data Download-Upload</div>
+              <div style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} className="pos-menu-item">Change Password</div>
+              <div style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} className="pos-menu-item">Settings</div>
+              <div style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} className="pos-menu-item">Data Sync</div>
+              <div style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} className="pos-menu-item">Exit</div>
             </div>
           )}
         </div>
+
         <div 
           ref={inventoryMenuRef} 
           style={{ position: 'relative' }}
@@ -190,10 +194,14 @@ const PosLayout = () => {
           <div 
             style={{ 
               cursor: 'pointer', 
-              padding: '2px 8px',
-              backgroundColor: inventoryMenuOpen ? '#ffffff' : 'transparent',
-              color: inventoryMenuOpen ? '#000000' : '#ffffff',
-              borderRadius: inventoryMenuOpen ? '2px 2px 0 0' : '0'
+              padding: '3px 12px',
+              background: inventoryMenuOpen ? 'linear-gradient(180deg, #ffffff 0%, #e0f2fe 50%, #bae6fd 100%)' : 'transparent',
+              color: inventoryMenuOpen ? '#0f172a' : '#ffffff',
+              borderRadius: '4px 4px 0 0',
+              border: inventoryMenuOpen ? '1px solid #7dd3fc' : '1px solid transparent',
+              borderBottom: inventoryMenuOpen ? 'none' : '1px solid transparent',
+              boxShadow: inventoryMenuOpen ? 'inset 0 1px 0 #ffffff' : 'none',
+              textShadow: inventoryMenuOpen ? 'none' : '0 1px 1px rgba(0, 0, 0, 0.3)'
             }}
             onClick={() => setInventoryMenuOpen(!inventoryMenuOpen)}
           >
@@ -205,14 +213,16 @@ const PosLayout = () => {
               position: 'absolute',
               top: '100%',
               left: 0,
-              backgroundColor: '#ffffff',
-              color: '#000000',
+              background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 249, 255, 0.96) 100%)',
+              color: '#0f172a',
               minWidth: 'max-content',
-              boxShadow: '2px 2px 8px rgba(0,0,0,0.3)',
+              boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3), inset 0 1px 0 #ffffff',
               zIndex: 1000,
-              padding: '2px 0',
-              border: '1px solid #ddd',
-              whiteSpace: 'nowrap'
+              padding: '4px 0',
+              border: '1px solid #7dd3fc',
+              borderRadius: '0 4px 6px 6px',
+              whiteSpace: 'nowrap',
+              backdropFilter: 'blur(10px)'
             }}>
               <div 
                 style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} 

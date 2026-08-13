@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Country, City } from 'country-state-city';
 import { useAuth } from '../../context/AuthContext';
 import { Search } from 'lucide-react';
+import CustomSelect from '../../components/CustomSelect';
 
 const initialFormState = {
   customer_type_id: '',
@@ -266,12 +267,14 @@ const PosCustomerManagement = () => {
                 <div>
                   <div style={{ display: 'flex', marginBottom: '8px', alignItems: 'center' }}>
                     <label style={{ width: '100px', fontSize: '13px' }}>Gender</label>
-                    <select value={formData.gender} onChange={(e) => setFormData({...formData, gender: e.target.value})} style={{ flex: 1, padding: '4px' }}>
-                      <option value="">--Select--</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
-                    </select>
+                    <div style={{ flex: 1 }}>
+                      <CustomSelect value={formData.gender} onChange={(e) => setFormData({...formData, gender: e.target.value})}>
+                        <option value="">--Select--</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                      </CustomSelect>
+                    </div>
                   </div>
                   <div style={{ display: 'flex', marginBottom: '8px', alignItems: 'center' }}>
                     <label style={{ width: '100px', fontSize: '13px' }}>First Name <span style={{ color: 'red' }}>*</span></label>
@@ -287,24 +290,30 @@ const PosCustomerManagement = () => {
                   </div>
                   <div style={{ display: 'flex', marginBottom: '8px', alignItems: 'center' }}>
                     <label style={{ width: '100px', fontSize: '13px' }}>City <span style={{ color: 'red' }}>*</span></label>
-                    <select required value={formData.city} onChange={(e) => setFormData({...formData, city: e.target.value})} style={{ flex: 1, padding: '4px' }}>
-                      <option value="">--Select--</option>
-                      {cities.map(city => <option key={city.name} value={city.name}>{city.name}</option>)}
-                    </select>
+                    <div style={{ flex: 1 }}>
+                      <CustomSelect required value={formData.city} onChange={(e) => setFormData({...formData, city: e.target.value})}>
+                        <option value="">--Select--</option>
+                        {cities.map(city => <option key={city.name} value={city.name}>{city.name}</option>)}
+                      </CustomSelect>
+                    </div>
                   </div>
                   <div style={{ display: 'flex', marginBottom: '8px', alignItems: 'center' }}>
                     <label style={{ width: '100px', fontSize: '13px' }}>Country</label>
-                    <select value={formData.country} onChange={(e) => setFormData({...formData, country: e.target.value})} style={{ flex: 1, padding: '4px' }}>
-                      {countries.map(c => <option key={c.isoCode} value={c.isoCode}>{c.name}</option>)}
-                    </select>
+                    <div style={{ flex: 1 }}>
+                      <CustomSelect value={formData.country} onChange={(e) => setFormData({...formData, country: e.target.value})}>
+                        {countries.map(c => <option key={c.isoCode} value={c.isoCode}>{c.name}</option>)}
+                      </CustomSelect>
+                    </div>
                   </div>
                   <div style={{ display: 'flex', marginBottom: '8px', alignItems: 'center' }}>
                     <label style={{ width: '100px', fontSize: '13px' }}>Age Range</label>
-                    <select style={{ flex: 1, padding: '4px' }}>
-                      <option value="">--Select--</option>
-                      <option value="18-25">18-25</option>
-                      <option value="26-40">26-40</option>
-                    </select>
+                    <div style={{ flex: 1 }}>
+                      <CustomSelect>
+                        <option value="">--Select--</option>
+                        <option value="18-25">18-25</option>
+                        <option value="26-40">26-40</option>
+                      </CustomSelect>
+                    </div>
                   </div>
                   <div style={{ display: 'flex', marginBottom: '8px', alignItems: 'center' }}>
                     <label style={{ width: '100px', fontSize: '13px' }}>Date of Birth</label>
@@ -332,10 +341,12 @@ const PosCustomerManagement = () => {
                   </div>
                   <div style={{ display: 'flex', marginBottom: '8px', alignItems: 'center' }}>
                     <label style={{ width: '100px', fontSize: '13px' }}>Type</label>
-                    <select value={formData.customer_type_id} onChange={(e) => setFormData({...formData, customer_type_id: e.target.value})} style={{ flex: 1, padding: '4px' }}>
-                      <option value="">--Select--</option>
-                      {customerTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
+                    <div style={{ flex: 1 }}>
+                      <CustomSelect value={formData.customer_type_id} onChange={(e) => setFormData({...formData, customer_type_id: e.target.value})}>
+                        <option value="">--Select--</option>
+                        {customerTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </CustomSelect>
+                    </div>
                   </div>
                   <div style={{ display: 'flex', marginBottom: '8px', alignItems: 'center' }}>
                     <label style={{ width: '100px', fontSize: '13px' }}>Middle Name</label>

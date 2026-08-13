@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabaseClient';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAuth } from '../../context/AuthContext';
+import CustomSelect from '../../components/CustomSelect';
 
 const PosStockTransfer = () => {
   const { posTerminal } = useAuth();
@@ -528,17 +529,18 @@ const PosStockTransfer = () => {
             
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
               <label style={{ width: '80px', fontSize: '0.8rem', fontWeight: 'bold' }}>Transfer To</label>
-              <select 
-                value={transferTo} 
-                onChange={(e) => setTransferTo(e.target.value)}
-                style={{ flex: 1, padding: '4px', border: '1px solid #ccc' }}
-              >
-                <option value="central_store">Central Store</option>
-                {stores.map(s => {
-                  if (s.id === posTerminal?.store_id) return null; // Don't allow transfer to self
-                  return <option key={s.id} value={s.id}>{s.name}</option>;
-                })}
-              </select>
+              <div style={{ flex: 1 }}>
+                <CustomSelect 
+                  value={transferTo} 
+                  onChange={(e) => setTransferTo(e.target.value)}
+                >
+                  <option value="central_store">Central Store</option>
+                  {stores.map(s => {
+                    if (s.id === posTerminal?.store_id) return null;
+                    return <option key={s.id} value={s.id}>{s.name}</option>;
+                  })}
+                </CustomSelect>
+              </div>
             </div>
             
             <div style={{ display: 'flex', alignItems: 'center', marginTop: '15px', borderTop: '1px solid #eee', paddingTop: '10px' }}>

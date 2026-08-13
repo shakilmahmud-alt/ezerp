@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabaseClient';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
 import { Search, Plus, Trash2, Send, Building, FileText } from 'lucide-react';
+import CustomSelect from '../../components/CustomSelect';
 
 const PosRequisitionVendorwise = () => {
   const { posTerminal, user } = useAuth();
@@ -392,16 +393,15 @@ const PosRequisitionVendorwise = () => {
         {/* Vendor Selector Dropdown */}
         <div style={{ marginBottom: '16px', maxWidth: '400px' }}>
           <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: '#0d47a1' }}>Select Vendor / Supplier :</label>
-          <select 
+          <CustomSelect 
             value={selectedVendorId} 
             onChange={(e) => handleVendorChange(e.target.value)}
-            style={{ width: '100%', padding: '8px 12px', border: '1px solid #00bcd4', borderRadius: '4px', backgroundColor: '#e0f7fa', fontWeight: 'bold' }}
           >
             <option value="">-- Select Vendor (or Search All) --</option>
             {vendorsList.map(v => (
               <option key={v.id} value={v.id}>{v.code ? `${v.code} - ${v.name}` : v.name}</option>
             ))}
-          </select>
+          </CustomSelect>
         </div>
 
         <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '10px', color: 'var(--accent-primary, #2e6f40)' }}>

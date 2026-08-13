@@ -51,16 +51,17 @@ export default function CustomSelect({ children, value, onChange, name, classNam
     control: (base, state) => ({
       ...base,
       minHeight: '36px',
-      borderColor: state.isFocused ? 'var(--accent-primary)' : 'var(--border-color, #ddd)',
-      boxShadow: state.isFocused ? '0 0 0 1px var(--accent-primary)' : 'none',
-      borderTop: 'none',
-      borderLeft: 'none',
-      borderRight: 'none',
-      borderRadius: '0',
-      backgroundColor: 'transparent',
-      padding: '0',
+      borderColor: state.isFocused ? '#2e6f40' : '#2e6f40',
+      boxShadow: state.isFocused 
+        ? '0 0 8px rgba(46, 111, 64, 0.5), inset 0 1px 0 #ffffff' 
+        : 'inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 1px 2px rgba(0, 0, 0, 0.08)',
+      borderRadius: '4px',
+      background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 50%, #e2e8f0 100%)',
+      padding: '0 4px',
+      cursor: 'pointer',
       '&:hover': {
-        borderColor: 'var(--accent-primary)'
+        borderColor: '#1b4527',
+        boxShadow: '0 0 6px rgba(46, 111, 64, 0.4), inset 0 1px 0 #ffffff'
       },
       ...style
     }),
@@ -78,28 +79,34 @@ export default function CustomSelect({ children, value, onChange, name, classNam
     }),
     dropdownIndicator: (base) => ({
       ...base,
-      color: '#666',
+      color: '#2e6f40',
       padding: '4px'
     }),
     option: (base, state) => ({
       ...base,
-      backgroundColor: state.isSelected 
-        ? 'var(--accent-primary)' 
-        : state.isFocused 
-          ? 'var(--accent-primary)' 
-          : 'transparent',
-      color: state.isSelected || state.isFocused ? 'white' : '#333',
+      background: (state.isSelected || state.isFocused)
+        ? 'linear-gradient(180deg, #52be72 0%, #2e6f40 46%, #1b4527 50%, #29683c 100%)' 
+        : 'transparent',
+      color: (state.isSelected || state.isFocused) ? '#ffffff' : '#1e293b',
+      fontWeight: (state.isSelected || state.isFocused) ? '600' : '400',
+      textShadow: (state.isSelected || state.isFocused) ? '0 1px 1px rgba(0, 0, 0, 0.3)' : 'none',
+      boxShadow: (state.isSelected || state.isFocused) ? 'inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -1px 0 rgba(0, 0, 0, 0.2)' : 'none',
       cursor: 'pointer',
       fontSize: '13px',
+      padding: '8px 12px',
+      transition: 'all 0.15s ease',
       '&:active': {
-        backgroundColor: 'var(--accent-primary)'
+        background: 'linear-gradient(180deg, #1b4527 0%, #29683c 50%, #2e6f40 100%)'
       }
     }),
     menu: (base) => ({
       ...base,
       zIndex: 9999,
-      borderRadius: '4px',
-      boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+      borderRadius: '6px',
+      background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 249, 255, 0.96) 100%)',
+      border: '1px solid #7dd3fc',
+      boxShadow: '0 10px 25px rgba(0, 0, 0, 0.25), inset 0 1px 0 #ffffff',
+      overflow: 'hidden'
     }),
     menuPortal: base => ({ ...base, zIndex: 9999 })
   };

@@ -5,6 +5,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Trash2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import CustomSelect from '../../components/CustomSelect';
 
 const PosPurchaseReturn = () => {
   const { posTerminal, user } = useAuth();
@@ -389,14 +390,13 @@ const PosPurchaseReturn = () => {
           {/* Vendor Name */}
           <div style={{ marginBottom: '14px' }}>
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#d32f2f', marginBottom: '4px' }}>Vendor Name *</label>
-            <select 
+            <CustomSelect 
               value={formData.vendorId} 
               onChange={(e) => loadChallansForVendor(e.target.value)}
-              style={{ width: '100%', padding: '6px 8px', border: '1px solid #00bcd4', borderRadius: '4px', backgroundColor: '#e0f7fa', fontWeight: 'bold' }}
             >
               <option value="">-- Select Vendor --</option>
               {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-            </select>
+            </CustomSelect>
           </div>
 
           {/* Last Return Challan */}
@@ -408,13 +408,12 @@ const PosPurchaseReturn = () => {
           {/* Challan No Dropdown (Filtered for THIS STORE!) */}
           <div style={{ marginBottom: '14px' }}>
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#d32f2f', marginBottom: '4px' }}>Challan No *</label>
-            <select 
+            <CustomSelect 
               value={formData.purchaseReceiveId} 
               onChange={(e) => {
                 const selectedChallan = vendorChallans.find(c => c.id === e.target.value);
                 loadChallanItems(e.target.value, selectedChallan?.reference_no, selectedChallan?.last_challan_no);
               }}
-              style={{ width: '100%', padding: '6px 8px', border: '1px solid #00bcd4', borderRadius: '4px', backgroundColor: '#e0f7fa', fontWeight: 'bold' }}
             >
               <option value="">-- Select Challan --</option>
               {vendorChallans.map(c => (
@@ -422,7 +421,7 @@ const PosPurchaseReturn = () => {
                   {c.last_challan_no} ({c.created_at ? c.created_at.slice(0, 10) : ''})
                 </option>
               ))}
-            </select>
+            </CustomSelect>
           </div>
 
           {/* Return Date */}

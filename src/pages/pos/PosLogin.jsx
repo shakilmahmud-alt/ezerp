@@ -41,26 +41,31 @@ const PosLogin = () => {
       fontFamily: 'sans-serif'
     }}>
       <div style={{
-        width: '600px',
-        backgroundColor: '#ffffff', // changed to white
-        boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-        borderRadius: '4px',
+        width: '620px',
+        background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(240, 249, 255, 0.88) 100%)',
+        backdropFilter: 'blur(20px)',
+        border: '1px solid rgba(255, 255, 255, 0.9)',
+        boxShadow: 'inset 0 1px 0 #ffffff, 0 15px 40px rgba(0,0,0,0.35)',
+        borderRadius: '8px',
         overflow: 'hidden'
       }}>
-        {/* Header */}
+        {/* Header - Windows 7 Aero Glass Title Bar */}
         <div style={{
-          backgroundColor: 'var(--accent-primary)', // Theme green
-          padding: '10px 20px',
+          background: 'linear-gradient(180deg, #52be72 0%, #2e6f40 46%, #1b4527 50%, #29683c 100%)',
+          padding: '12px 20px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           color: '#ffffff',
-          fontWeight: 'bold'
+          fontWeight: 'bold',
+          borderBottom: '1px solid #1a4427',
+          boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 2px 5px rgba(0,0,0,0.2)',
+          textShadow: '0 1px 2px rgba(0,0,0,0.4)'
         }}>
-          <div style={{ flex: 1, textAlign: 'center', fontSize: '18px' }}>
-            CLOUD POS
+          <div style={{ flex: 1, textAlign: 'center', fontSize: '18px', letterSpacing: '0.5px' }}>
+            CLOUD POS SYSTEM
           </div>
-          <div style={{ fontSize: '12px' }}>
+          <div style={{ fontSize: '12px', opacity: 0.9 }}>
             Version 2.2.2.7
           </div>
         </div>
@@ -113,54 +118,20 @@ const PosLogin = () => {
                 />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '10px' }}>
                 <button 
                   type="submit" 
                   disabled={isSubmitting}
-                  style={{ 
-                    backgroundColor: 'var(--accent-primary)', 
-                    color: 'white', 
-                    border: 'none', 
-                    padding: '8px 25px', 
-                    cursor: 'pointer',
-                    fontWeight: 'bold',
-                    borderRadius: '4px',
-                    transition: 'transform 0.2s, box-shadow 0.2s',
-                    boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 6px 15px rgba(46, 111, 64, 0.4)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
-                  }}
+                  className="btn-theme"
+                  style={{ padding: '8px 25px', fontSize: '13px', fontWeight: 'bold' }}
                 >
-                  {isSubmitting ? '...' : 'Login'}
+                  {isSubmitting ? 'Logging in...' : 'Login'}
                 </button>
                 <button 
                   type="button" 
                   onClick={() => navigate('/')}
-                  style={{ 
-                    backgroundColor: 'var(--danger)', 
-                    color: 'white', 
-                    border: 'none', 
-                    padding: '8px 25px', 
-                    cursor: 'pointer',
-                    fontWeight: 'bold',
-                    borderRadius: '4px',
-                    transition: 'transform 0.2s, box-shadow 0.2s',
-                    boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 6px 15px rgba(239, 68, 68, 0.4)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
-                  }}
+                  className="btn-danger"
+                  style={{ padding: '8px 25px', fontSize: '13px', fontWeight: 'bold' }}
                 >
                   Close
                 </button>
