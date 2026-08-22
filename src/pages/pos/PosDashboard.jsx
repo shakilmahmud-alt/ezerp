@@ -302,29 +302,32 @@ const PosDashboard = () => {
     setSelectedCustomer(null);
   };
 
-  // Helper: Get Effective Store Stock Quantity (Enforces strict zero stock check)
+  // Helper: Get Effective Store Stock Quantity (Follows POS Stock Reports exact branch stock)
   const getEffectiveStockQty = (prod, storeId) => {
     if (!prod) return 0;
+    
+    // Target Store ID: use provided storeId, fallback to posTerminal?.store_id
+    const targetStoreId = storeId || posTerminal?.store_id;
 
-    // 1. Check store_stocks table array if available
+    // 1. Check store_stocks for targetStoreId
     if (Array.isArray(prod.store_stocks) && prod.store_stocks.length > 0) {
-      if (storeId) {
-        const match = prod.store_stocks.find(s => String(s.store_id) === String(storeId));
-        if (match && match.stock_qty !== undefined && match.stock_qty !== null) {
-          return Number(match.stock_qty);
+      if (targetStoreId) {
+        const match = prod.store_stocks.find(s => String(s.store_id) === String(targetStoreId));
+        if (match) {
+          return Math.max(0, Number(match.stock_qty || 0));
         }
       }
-      // Fallback: If storeId is empty or no exact match, get max stock or any positive stock from store_stocks
-      const maxStock = Math.max(...prod.store_stocks.map(s => Number(s.stock_qty) || 0));
-      if (maxStock > 0) return maxStock;
     }
 
-    // 2. Check direct numeric stock properties on product object
-    if (prod.branch_stock !== undefined && prod.branch_stock !== null) return Number(prod.branch_stock);
-    if (prod.stock_qty !== undefined && prod.stock_qty !== null) return Number(prod.stock_qty);
-    if (prod.wh_stock !== undefined && prod.wh_stock !== null) return Number(prod.wh_stock);
-    if (prod.balance !== undefined && prod.balance !== null) return Number(prod.balance);
-    if (prod.qty !== undefined && prod.qty !== null) return Number(prod.qty);
+    // 2. Direct branch_stock property set by query
+    if (prod.branch_stock !== undefined && prod.branch_stock !== null) {
+      return Math.max(0, Number(prod.branch_stock));
+    }
+
+    // 3. Fallback to product stock_qty only if no store_stocks exist
+    if (!prod.store_stocks || prod.store_stocks.length === 0) {
+      if (prod.stock_qty !== undefined && prod.stock_qty !== null) return Math.max(0, Number(prod.stock_qty));
+    }
 
     return 0;
   };
@@ -1231,10 +1234,6 @@ const PosDashboard = () => {
     }, 100);
 
     const fetchSearch = async () => {
-      if (!searchName.trim() && !searchBarcode.trim()) {
-        setSearchResults([]);
-        return;
-      }
       setIsSearching(true);
       try {
         let query = supabase
@@ -1246,7 +1245,8 @@ const PosDashboard = () => {
             vendor:vendor_id (name),
             store_stocks(store_id, stock_qty)
           `)
-          .limit(100);
+          .order('item_name')
+          .limit(150);
 
         if (searchName.trim()) query = query.ilike('item_name', `%${searchName.trim()}%`);
         if (searchBarcode.trim()) query = query.or(`barcode.ilike.%${searchBarcode.trim()}%,code.ilike.%${searchBarcode.trim()}%`);
@@ -2255,11 +2255,15 @@ const PosDashboard = () => {
                     <th style={{ padding: '8px 10px', textAlign: 'center', width: '50px' }}>Select</th>
                     <th style={{ padding: '8px 10px', textAlign: 'left' }}>Barcode</th>
                     <th style={{ padding: '8px 10px', textAlign: 'left' }}>Item Name</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'center', width: '100px' }}>Stock Qty</th>
                     <th style={{ padding: '8px 10px', textAlign: 'right' }}>MRP / Price</th>
                   </tr>
                 </thead>
                 <tbody>
                   {barcodeSearchResults.filter(p => {
+                    const stockQty = getEffectiveStockQty(p, exchangeStoreId || posTerminal?.store_id);
+                    if (stockQty <= 0) return false; // Strictly show ONLY in-stock products!
+
                     if (!exchangeBarcode.trim()) return true;
                     const q = exchangeBarcode.trim().toLowerCase();
                     return (
@@ -2269,13 +2273,16 @@ const PosDashboard = () => {
                     );
                   }).length === 0 ? (
                     <tr>
-                      <td colSpan="4" style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>
-                        No replacement products found matching "{exchangeBarcode}"
+                      <td colSpan="5" style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>
+                        No in-stock replacement products found matching "{exchangeBarcode}"
                       </td>
                     </tr>
                   ) : (
                     barcodeSearchResults
                       .filter(p => {
+                        const stockQty = getEffectiveStockQty(p, exchangeStoreId || posTerminal?.store_id);
+                        if (stockQty <= 0) return false; // Strictly show ONLY in-stock products!
+
                         if (!exchangeBarcode.trim()) return true;
                         const q = exchangeBarcode.trim().toLowerCase();
                         return (
@@ -2286,34 +2293,33 @@ const PosDashboard = () => {
                       })
                       .map((p, idx) => {
                         const stockQty = getEffectiveStockQty(p, exchangeStoreId || posTerminal?.store_id);
-                        const isZero = stockQty <= 0;
                         const isSelected = exchangeSelectedNewProducts.some(item => item.id === p.id || item.product_id === p.id);
                         const price = Number(p.mrp || p.purchase_price || 0);
                         return (
                           <tr 
                             key={p.id || idx} 
-                            style={{ borderBottom: '1px solid #e2e8f0', cursor: isZero ? 'not-allowed' : 'pointer', backgroundColor: isZero ? '#fef2f2' : (isSelected ? '#dcfce7' : (idx % 2 === 0 ? '#ffffff' : '#f8fafc')) }}
+                            style={{ borderBottom: '1px solid #e2e8f0', cursor: 'pointer', backgroundColor: isSelected ? '#dcfce7' : (idx % 2 === 0 ? '#ffffff' : '#f8fafc') }}
                             className="win7-table-row"
-                            onClick={() => !isZero && handleToggleSelectNewExchangeProduct(p)}
+                            onClick={() => handleToggleSelectNewExchangeProduct(p)}
                           >
                             <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                               <input 
                                 type="checkbox" 
                                 checked={isSelected} 
-                                disabled={isZero}
                                 onClick={(e) => e.stopPropagation()}
                                 onChange={(e) => {
                                   e.stopPropagation();
                                   handleToggleSelectNewExchangeProduct(p);
                                 }}
-                                style={{ accentColor: '#2e6f40', cursor: isZero ? 'not-allowed' : 'pointer', width: '16px', height: '16px' }} 
+                                style={{ accentColor: '#2e6f40', cursor: 'pointer', width: '16px', height: '16px' }} 
                               />
                             </td>
-                            <td style={{ padding: '8px 10px', fontWeight: 'bold', color: isZero ? '#94a3b8' : '#0369a1' }}>{p.barcode || p.user_barcode || '-'}</td>
-                            <td style={{ padding: '8px 10px', fontWeight: 'bold', color: isZero ? '#991b1b' : 'inherit' }}>
-                              {p.item_name} {isZero && <span style={{ color: '#dc2626', fontSize: '10px', fontWeight: 'bold', marginLeft: '6px' }}>(Out of Stock)</span>}
+                            <td style={{ padding: '8px 10px', fontWeight: 'bold', color: '#0369a1' }}>{p.barcode || p.user_barcode || '-'}</td>
+                            <td style={{ padding: '8px 10px', fontWeight: 'bold', color: '#0f172a' }}>{p.item_name}</td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 'bold', color: '#166534' }}>
+                              {stockQty} pcs
                             </td>
-                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 'bold', color: isZero ? '#94a3b8' : '#166534' }}>
+                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 'bold', color: '#166534' }}>
                               Tk {price.toFixed(2)}
                             </td>
                           </tr>
