@@ -61,14 +61,19 @@ const PosDashboard = () => {
   const [addedPayments, setAddedPayments] = useState([]);
   const [tenderedPaidAmount, setTenderedPaidAmount] = useState('');
 
-  // Exchange Session Modal States (2nd Image - F3)
+  // Exchange Session Modal States (F3)
   const [exchangeStoreId, setExchangeStoreId] = useState('');
   const [exchangeInvoiceNo, setExchangeInvoiceNo] = useState('');
   const [exchangeBarcode, setExchangeBarcode] = useState('');
   const [exchangeOtherStore, setExchangeOtherStore] = useState(false);
-  const [exchangeProductDetails, setExchangeProductDetails] = useState(null);
-  const [exchangeAmt, setExchangeAmt] = useState(0);
+  const [exchangeProductDetails, setExchangeProductDetails] = useState(null); // Returned item details
+  const [exchangeSelectedNewProducts, setExchangeSelectedNewProducts] = useState([]); // Multiple replacement items for exchange
+  const [exchangeAmt, setExchangeAmt] = useState(0); // Returned item credit amount
   const [exchangeQty, setExchangeQty] = useState(1);
+  const [showInvoiceItemsModal, setShowInvoiceItemsModal] = useState(false);
+  const [invoiceItemsList, setInvoiceItemsList] = useState([]);
+  const [showBarcodeSearchModal, setShowBarcodeSearchModal] = useState(false);
+  const [barcodeSearchResults, setBarcodeSearchResults] = useState([]);
 
   // Return Session Modal States (3rd Image - F8)
   const [returnInvoiceNo, setReturnInvoiceNo] = useState('');
@@ -252,27 +257,34 @@ const PosDashboard = () => {
         .select('*')
         .eq('status', 'ACTIVE')
         .order('name');
-      if (!error && data && data.length > 0) {
-        setPaymentMethodsList(data);
-        setSelectedPaymentType(data[0].name);
+      
+      const defaultMethods = [
+        { id: '12', name: 'Cash' },
+        { id: '1', name: 'AMEX' },
+        { id: '2', name: 'bKash' },
+        { id: '3', name: 'BRAC BANK' },
+        { id: '4', name: 'City Bank' },
+        { id: '5', name: 'DBBL' },
+        { id: '6', name: 'EBL' },
+        { id: '7', name: 'NAGAD' },
+        { id: '8', name: 'NEXUS PAY' },
+        { id: '9', name: 'Pubali Bank' },
+        { id: '10', name: 'SCBL' },
+        { id: '11', name: 'TBL' }
+      ];
+
+      let list = (!error && data && data.length > 0) ? data : defaultMethods;
+      // Ensure Cash is present and at the top
+      const hasCash = list.some(m => m.name?.toLowerCase() === 'cash');
+      if (!hasCash) {
+        list = [{ id: 'cash-0', name: 'Cash' }, ...list];
       } else {
-        const defaultMethods = [
-          { id: '1', name: 'AMEX' },
-          { id: '2', name: 'bKash' },
-          { id: '3', name: 'BRAC BANK' },
-          { id: '4', name: 'City Bank' },
-          { id: '5', name: 'DBBL' },
-          { id: '6', name: 'EBL' },
-          { id: '7', name: 'NAGAD' },
-          { id: '8', name: 'NEXUS PAY' },
-          { id: '9', name: 'Pubali Bank' },
-          { id: '10', name: 'SCBL' },
-          { id: '11', name: 'TBL' },
-          { id: '12', name: 'Cash' }
-        ];
-        setPaymentMethodsList(defaultMethods);
-        setSelectedPaymentType('AMEX');
+        // Sort so Cash comes first
+        list = [...list].sort((a, b) => (a.name?.toLowerCase() === 'cash' ? -1 : b.name?.toLowerCase() === 'cash' ? 1 : 0));
       }
+
+      setPaymentMethodsList(list);
+      setSelectedPaymentType('Cash');
     } catch (err) {
       console.error("Error loading payment methods:", err);
     }
@@ -594,13 +606,27 @@ const PosDashboard = () => {
   const handleConfirmSaleAndSave = async () => {
     setShowConfirmSaveModal(false);
 
+    // Determine exact payment type string selected by cashier
+    let determinedPaymentType = 'Cash';
+    if (addedPayments && addedPayments.length > 0) {
+      const pTypes = [...new Set(addedPayments.map(p => p.description))];
+      if (cashAmountRemaining > 0) {
+        pTypes.push('Cash');
+      }
+      determinedPaymentType = pTypes.join(' + ');
+    } else if (selectedPaymentType) {
+      determinedPaymentType = selectedPaymentType;
+    }
+
+    const noteWithPayment = invoiceNote ? `[Payment: ${determinedPaymentType}] ${invoiceNote}` : `[Payment: ${determinedPaymentType}]`;
+
     const salePayload = {
       invoice_no: invoiceNo,
       sale_date: new Date().toISOString(),
-      store_id: posTerminal?.store_id,
-      terminal_id: posTerminal?.id,
-      counter_no: posTerminal?.counter_id,
-      sales_executive_id: selectedExecutiveId,
+      store_id: posTerminal?.store_id || null,
+      terminal_id: posTerminal?.id || null,
+      counter_no: posTerminal?.counter_id || null,
+      sales_executive_id: selectedExecutiveId || null,
       sales_executive_name: executives.find(e => e.id === selectedExecutiveId)?.name || 'Executive',
       customer_id: selectedCustomerId || null,
       customer_name: selectedCustomer?.name || 'Walk-in Customer',
@@ -619,9 +645,9 @@ const PosDashboard = () => {
       net_amount: netAmountCalculated,
       paid_amount: finalPaidAmount,
       change_amount: finalChangeAmount,
-      invoice_note: invoiceNote,
+      invoice_note: noteWithPayment,
       status: 'COMPLETED',
-      created_by: user?.id
+      created_by: user?.id || null
     };
 
     try {
@@ -632,7 +658,7 @@ const PosDashboard = () => {
         .select()
         .single();
 
-      if (saleErr) console.warn("Supabase sale insert warning:", saleErr);
+      if (saleErr) console.error("Supabase sale insert error:", saleErr);
 
       const saleId = saleData?.id || `SALE-${Date.now()}`;
 
@@ -640,20 +666,20 @@ const PosDashboard = () => {
       const itemPayloads = cart.map(item => ({
         sale_id: saleId,
         invoice_no: invoiceNo,
-        product_id: item.product_id,
-        barcode: item.barcode,
-        user_barcode: item.user_barcode,
-        product_name: item.product_name,
-        unit_price: item.price,
-        qty: item.qty,
-        sd_percent: item.sd_percent,
-        sd_amount: item.sd_amount,
-        vat_percent: item.vat_percent,
-        vat_amount: item.vat_amount,
-        discount_percent: item.discount_percent,
-        discount_amount: item.discount_amount,
-        total_value: item.total_value,
-        sales_executive_id: item.sales_executive_id
+        product_id: item.product_id || null,
+        barcode: item.barcode || '',
+        user_barcode: item.user_barcode || '',
+        product_name: item.product_name || 'Product',
+        unit_price: item.price || 0,
+        qty: item.qty || 1,
+        sd_percent: item.sd_percent || 0,
+        sd_amount: item.sd_amount || 0,
+        vat_percent: item.vat_percent || 0,
+        vat_amount: item.vat_amount || 0,
+        discount_percent: item.discount_percent || 0,
+        discount_amount: item.discount_amount || 0,
+        total_value: item.total_value || ((Number(item.qty) || 1) * (Number(item.price) || 0)),
+        sales_executive_id: item.sales_executive_id || null
       }));
 
       await supabase.from('sale_items').insert(itemPayloads);
@@ -718,58 +744,149 @@ const PosDashboard = () => {
     }
   };
 
-  // Request 2: Exchange Session Lookup & Execute (2nd Image - F3)
-  const handleLookupExchangeInvoice = async () => {
-    if (!exchangeInvoiceNo.trim() && !exchangeBarcode.trim()) {
-      toast.error('Please enter Invoice# or Barcode to search');
+  // Request 2: Exchange Session Lookup & Execute (F3)
+  // 1. Lookup Items for Invoice# field
+  const handleLookupInvoiceItems = async () => {
+    if (!exchangeInvoiceNo.trim()) {
+      toast.error('Please enter an Invoice Number to search past invoice items');
       return;
     }
-
     try {
-      let query = supabase.from('sale_items').select('*, sale:sale_id(*)');
-      if (exchangeInvoiceNo.trim()) query = query.eq('invoice_no', exchangeInvoiceNo.trim());
-      if (exchangeBarcode.trim()) query = query.or(`barcode.eq.${exchangeBarcode.trim()},user_barcode.eq.${exchangeBarcode.trim()}`);
+      const { data, error } = await supabase
+        .from('sale_items')
+        .select('*, sale:sale_id(*)')
+        .eq('invoice_no', exchangeInvoiceNo.trim());
 
-      const { data, error } = await query.limit(1);
       if (!error && data && data.length > 0) {
-        const item = data[0];
-        setExchangeProductDetails({
-          name: item.product_name,
-          soldQty: item.qty,
-          mrp: item.unit_price,
-          vat: item.vat_amount,
-          discount: item.discount_amount,
-          spDisc: 0,
-          sdAmt: item.sd_amount,
-          saleDate: item.sale?.sale_date ? new Date(item.sale.sale_date).toLocaleDateString() : 'N/A',
-          servedBy: item.sale?.sales_executive_name || 'Executive',
-          terminal: item.sale?.counter_no || posTerminal?.counter_id || '01',
-          returnableAmount: item.total_value,
-          product_id: item.product_id,
-          barcode: item.barcode
-        });
-        setExchangeAmt(item.total_value);
-        toast.success(`Product details loaded for ${item.product_name}`);
+        setInvoiceItemsList(data);
+        setShowInvoiceItemsModal(true);
+        toast.success(`Found ${data.length} item(s) in Invoice #${exchangeInvoiceNo.trim()}`);
       } else {
-        toast.error('Invoice or Barcode details not found');
-        setExchangeProductDetails(null);
+        toast.error(`No sold items found for Invoice #${exchangeInvoiceNo.trim()}`);
       }
     } catch (err) {
       console.error(err);
-      toast.error('Error fetching exchange details');
+      toast.error('Error fetching invoice items');
     }
   };
 
+  // Select returned item from Invoice items modal
+  const handleSelectReturnedInvoiceItem = (item) => {
+    const retAmt = Number(item.total_value || (Number(item.qty || 1) * Number(item.unit_price || 0)));
+    setExchangeProductDetails({
+      name: item.product_name || 'Item',
+      soldQty: item.qty || 1,
+      mrp: item.unit_price || 0,
+      vat: item.vat_amount || 0,
+      discount: item.discount_amount || 0,
+      spDisc: 0,
+      sdAmt: item.sd_amount || 0,
+      saleDate: item.sale?.sale_date ? new Date(item.sale.sale_date).toLocaleDateString() : new Date().toLocaleDateString(),
+      servedBy: item.sale?.sales_executive_name || 'Staff',
+      terminal: item.sale?.counter_no || posTerminal?.counter_id || '01',
+      returnableAmount: retAmt,
+      product_id: item.product_id || item.id,
+      barcode: item.barcode || ''
+    });
+    setExchangeAmt(retAmt);
+    setShowInvoiceItemsModal(false);
+    toast.success(`Selected "${item.product_name}" (Tk ${retAmt}) as returned item`);
+  };
+
+  // 2. Search Store Products for Barcode field (Opens Product Selection Modal)
+  const handleSearchBarcodeProduct = async () => {
+    try {
+      // Fetch products list for local instant search
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('item_name')
+        .limit(200);
+
+      if (!error && data) {
+        setBarcodeSearchResults(data);
+        setShowBarcodeSearchModal(true);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Toggle Selection for Multiple Replacement Products (Deduplicated with Functional Updater)
+  const handleToggleSelectNewExchangeProduct = (p) => {
+    const unitPrice = Number(p.mrp || p.purchase_price || 0);
+
+    setExchangeSelectedNewProducts(prev => {
+      const exists = prev.some(item => (item.id && item.id === p.id) || (item.product_id && item.product_id === p.id));
+      if (exists) {
+        toast('Deselected ' + p.item_name, { icon: '🗑️' });
+        return prev.filter(item => item.id !== p.id && item.product_id !== p.id);
+      } else {
+        toast.success(`Selected "${p.item_name}" (Tk ${unitPrice})`);
+        const newItem = {
+          id: p.id,
+          product_id: p.id,
+          product_name: p.item_name,
+          barcode: p.barcode || p.user_barcode || '',
+          price: unitPrice,
+          qty: Number(exchangeQty) || 1,
+          sd_percent: Number(p.sd_percent) || 0,
+          sd_amount: 0,
+          vat_percent: Number(p.sale_vat_percent) || 0,
+          vat_amount: (unitPrice * (Number(p.sale_vat_percent) || 0)) / 100,
+          discount_percent: 0,
+          discount_amount: 0,
+          total_value: unitPrice * (Number(exchangeQty) || 1)
+        };
+        return [...prev, newItem];
+      }
+    });
+  };
+
+  // 3. APPLY EXCHANGE CREDIT WITH MULTI-ITEM SUPPORT & MANDATORY PRICE RULE
   const handleExecuteExchange = () => {
     if (!exchangeProductDetails) {
-      toast.error('Please search and select a valid item for exchange first');
+      toast.error('Please enter Invoice# and select the item customer wants to return');
+      return;
+    }
+    if (exchangeSelectedNewProducts.length === 0) {
+      toast.error('Please scan/search and select at least one replacement product for exchange');
       return;
     }
 
-    const retAmt = Number(exchangeAmt) || exchangeProductDetails.returnableAmount || 0;
-    setReturnAmount(prev => Number(prev) + retAmt);
+    const returnVal = Number(exchangeAmt) || Number(exchangeProductDetails.returnableAmount) || 0;
+    const totalNewVal = exchangeSelectedNewProducts.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.qty || 1)), 0);
+
+    // CRITICAL MANDATORY PRICE VALIDATION: Total new items price MUST BE >= returned item price
+    if (totalNewVal < returnVal) {
+      toast.error(
+        `Selected exchange products total (Tk ${totalNewVal.toFixed(2)}) cannot be less than returned item price (Tk ${returnVal.toFixed(2)}). Please select items of equal or higher total value!`,
+        { duration: 6000 }
+      );
+      return;
+    }
+
+    // Difference Amount
+    const differenceDue = totalNewVal - returnVal;
+
+    // Add ALL selected replacement items to main POS cart
+    setCart(prev => [...prev, ...exchangeSelectedNewProducts]);
+
+    // Apply return credit deduction
+    setReturnAmount(prev => Number(prev) + returnVal);
+
+    // Save exchange audit history in invoice_note
+    const newItemsSummary = exchangeSelectedNewProducts.map(p => `${p.product_name} (x${p.qty})`).join(', ');
+    const exchangeHistory = `[Exchange: Returned INV#${exchangeInvoiceNo || 'N/A'} (${exchangeProductDetails.name}, Tk ${returnVal.toFixed(2)}) for ${exchangeSelectedNewProducts.length} Items [${newItemsSummary}], Total Tk ${totalNewVal.toFixed(2)}. Due Adjustment: Tk ${differenceDue.toFixed(2)}]`;
+    setInvoiceNote(prev => prev ? `${prev} | ${exchangeHistory}` : exchangeHistory);
+
     setShowExchangeModal(false);
-    toast.success(`Exchange credit of Tk ${retAmt} applied to POS invoice!`);
+
+    if (differenceDue === 0) {
+      toast.success(`Multi-item exchange applied! Total (Tk ${totalNewVal.toFixed(2)}). Net due added: Tk 0.00`);
+    } else {
+      toast.success(`Exchange applied! ${exchangeSelectedNewProducts.length} Items (Tk ${totalNewVal.toFixed(2)}) - Credit (Tk ${returnVal.toFixed(2)}) = Remaining Due: Tk ${differenceDue.toFixed(2)}`, { duration: 6000 });
+    }
   };
 
   // Request 3: Return Session Lookup & Execute (3rd Image - F8)
@@ -1359,60 +1476,69 @@ const PosDashboard = () => {
         <div style={{ width: '310px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           
           {/* Action Buttons Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '5px' }}>
             <button 
+              className="btn-warning"
               onClick={handleOpenQtyModal} 
-              style={{ backgroundColor: '#ffca28', color: '#000', border: '1px solid #d4a017', padding: '6px 2px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '3px' }}
+              style={{ padding: '8px 2px', fontSize: '10px', borderRadius: '4px' }}
             >
               Change Quantity (F2)
             </button>
             <button 
+              className="btn-warning"
               onClick={handleRemoveSelectedItem} 
-              style={{ backgroundColor: '#ffca28', color: '#000', border: '1px solid #d4a017', padding: '6px 2px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '3px' }}
+              style={{ padding: '8px 2px', fontSize: '10px', borderRadius: '4px' }}
             >
               Remove Item (F4)
             </button>
             <button 
+              className="btn-warning"
               onClick={() => setShowExchangeModal(true)} 
-              style={{ backgroundColor: '#ffca28', color: '#000', border: '1px solid #d4a017', padding: '6px 2px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '3px' }}
+              style={{ padding: '8px 2px', fontSize: '10px', borderRadius: '4px' }}
             >
               Exchange/ Debit Note (F3)
             </button>
 
             <button 
+              className="btn-theme"
               onClick={handleHoldInvoice} 
-              style={{ backgroundColor: '#7cb342', color: '#fff', border: 'none', padding: '6px 2px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '3px' }}
+              style={{ padding: '8px 2px', fontSize: '10px', borderRadius: '4px' }}
             >
               Hold Invoice (F6)
             </button>
             <button 
+              className="btn-theme"
               onClick={handleOpenRecallModal} 
-              style={{ backgroundColor: '#7cb342', color: '#fff', border: 'none', padding: '6px 2px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '3px' }}
+              style={{ padding: '8px 2px', fontSize: '10px', borderRadius: '4px' }}
             >
               Recall Invoice (F7)
             </button>
             <button 
+              className="btn-theme"
               onClick={handleCancelInvoice} 
-              style={{ backgroundColor: '#7cb342', color: '#fff', border: 'none', padding: '6px 2px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '3px' }}
+              style={{ padding: '8px 2px', fontSize: '10px', borderRadius: '4px' }}
             >
               Cancel Invoice (F10)
             </button>
 
             <button 
+              className="btn-danger"
               onClick={() => toast('Promotion Details active', { icon: '🏷️' })} 
-              style={{ backgroundColor: '#ef5350', color: '#fff', border: 'none', padding: '6px 2px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '3px' }}
+              style={{ padding: '8px 2px', fontSize: '10px', borderRadius: '4px' }}
             >
               Promotion Details
             </button>
             <button 
+              className="btn-danger"
               onClick={() => setShowReturnModal(true)} 
-              style={{ backgroundColor: '#ef5350', color: '#fff', border: 'none', padding: '6px 2px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '3px' }}
+              style={{ padding: '8px 2px', fontSize: '10px', borderRadius: '4px' }}
             >
               Return (F8)
             </button>
             <button 
+              className="btn-danger"
               onClick={handleCancelInvoice} 
-              style={{ backgroundColor: '#ef5350', color: '#fff', border: 'none', padding: '6px 2px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '3px' }}
+              style={{ padding: '8px 2px', fontSize: '10px', borderRadius: '4px' }}
             >
               Close
             </button>
@@ -1514,22 +1640,25 @@ const PosDashboard = () => {
         </div>
 
         {/* Bottom Right Checkout Action Buttons */}
-        <div style={{ display: 'flex', gap: '6px' }}>
+        <div style={{ display: 'flex', gap: '8px' }}>
           <button 
+            className="btn-theme"
             onClick={() => setShowReprintModal(true)} 
-            style={{ backgroundColor: '#7cb342', color: '#fff', border: 'none', padding: '10px 14px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}
+            style={{ padding: '8px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
             <Printer size={16} /> Reprint
           </button>
           <button 
+            className="btn-danger"
             onClick={handleCancelInvoice} 
-            style={{ backgroundColor: '#d32f2f', color: '#fff', border: 'none', padding: '10px 14px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '4px' }}
+            style={{ padding: '8px 16px', fontSize: '13px' }}
           >
             VOID
           </button>
           <button 
+            className="btn-theme"
             onClick={handleOpenPaymentModal} 
-            style={{ backgroundColor: '#43a047', color: '#fff', border: 'none', padding: '10px 20px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', gap: '6px' }}
+            style={{ padding: '8px 20px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
             <CreditCard size={18} /> Pay Now
           </button>
@@ -1768,10 +1897,10 @@ const PosDashboard = () => {
         </div>
       )}
 
-      {/* REQUEST 2: EXCHANGE SESSION MODAL (2nd Image - F3) */}
+      {/* REQUEST 2: EXCHANGE SESSION MODAL (F3) */}
       {showExchangeModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3000 }}>
-          <div style={{ backgroundColor: '#fff', width: '90%', maxWidth: '680px', borderRadius: '4px', padding: '16px 20px', boxShadow: '0 4px 20px rgba(0,0,0,0.3)', border: '1px solid #ccc', fontSize: '11px', boxSizing: 'border-box' }}>
+          <div style={{ backgroundColor: '#fff', width: '92%', maxWidth: '760px', borderRadius: '4px', padding: '16px 20px', boxShadow: '0 4px 20px rgba(0,0,0,0.3)', border: '1px solid #ccc', fontSize: '11px', boxSizing: 'border-box' }}>
             
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #ddd', paddingBottom: '6px', marginBottom: '10px' }}>
               <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#0d47a1', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1780,7 +1909,7 @@ const PosDashboard = () => {
               <button onClick={() => setShowExchangeModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={16} /></button>
             </div>
 
-            <fieldset style={{ border: '1px solid #ccc', borderRadius: '3px', padding: '10px', marginBottom: '10px' }}>
+            <fieldset style={{ border: '1px solid #ccc', borderRadius: '3px', padding: '10px', marginBottom: '10px', boxSizing: 'border-box' }}>
               <legend style={{ fontWeight: 'bold', color: '#333' }}>Exchange Session</legend>
               
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: '15px', alignItems: 'flex-start' }}>
@@ -1792,7 +1921,7 @@ const PosDashboard = () => {
                     <select 
                       value={exchangeStoreId || posTerminal?.store_id || ''} 
                       onChange={(e) => setExchangeStoreId(e.target.value)}
-                      style={{ padding: '3px 6px', border: '1px solid #00bcd4', backgroundColor: '#e0f7fa', fontWeight: 'bold' }}
+                      style={{ padding: '3px 6px', border: '1px solid #00bcd4', backgroundColor: '#e0f7fa', fontWeight: 'bold', width: '100%', boxSizing: 'border-box' }}
                     >
                       {storesList.map(s => (
                         <option key={s.id} value={s.id}>{s.name.toUpperCase()}</option>
@@ -1806,9 +1935,9 @@ const PosDashboard = () => {
                       type="text" 
                       value={exchangeInvoiceNo}
                       onChange={(e) => setExchangeInvoiceNo(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleLookupExchangeInvoice()}
-                      placeholder="Enter invoice no..."
-                      style={{ padding: '3px 6px', border: '1px solid #ccc' }}
+                      onKeyDown={(e) => e.key === 'Enter' && handleLookupInvoiceItems()}
+                      placeholder="Enter invoice no & press Enter..."
+                      style={{ padding: '3px 6px', border: '1px solid #ccc', width: '100%', boxSizing: 'border-box' }}
                     />
                     <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
                       <input 
@@ -1825,9 +1954,9 @@ const PosDashboard = () => {
                       type="text" 
                       value={exchangeBarcode}
                       onChange={(e) => setExchangeBarcode(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleLookupExchangeInvoice()}
-                      placeholder="Scan/type barcode..."
-                      style={{ padding: '3px 6px', border: '1px solid #ccc' }}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearchBarcodeProduct()}
+                      placeholder="Scan/type barcode & press Enter for replacement item..."
+                      style={{ padding: '3px 6px', border: '1px solid #ccc', width: '100%', boxSizing: 'border-box' }}
                     />
                   </div>
                 </div>
@@ -1835,14 +1964,20 @@ const PosDashboard = () => {
                 {/* Buttons Right */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <button 
-                    onClick={handleLookupExchangeInvoice}
-                    style={{ padding: '6px 12px', backgroundColor: '#e0e0e0', color: '#000', border: '1px solid #ccc', fontWeight: 'bold', cursor: 'pointer', borderRadius: '3px' }}
+                    onClick={() => {
+                      if (exchangeBarcode.trim()) handleSearchBarcodeProduct();
+                      else if (exchangeInvoiceNo.trim()) handleLookupInvoiceItems();
+                      else toast.error('Please enter Invoice# or Barcode to search');
+                    }}
+                    className="btn-theme"
+                    style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '3px' }}
                   >
                     Execute
                   </button>
                   <button 
                     onClick={() => setShowExchangeModal(false)}
-                    style={{ padding: '6px 12px', backgroundColor: '#e0e0e0', color: '#000', border: '1px solid #ccc', fontWeight: 'bold', cursor: 'pointer', borderRadius: '3px' }}
+                    className="btn-danger"
+                    style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '3px' }}
                   >
                     Cancel
                   </button>
@@ -1852,57 +1987,92 @@ const PosDashboard = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '6px', alignItems: 'center', marginTop: '8px' }}>
                 <label style={{ fontWeight: 'bold', textAlign: 'right' }}>Exchange Amt :</label>
-                <input type="text" readOnly value={exchangeAmt} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0', fontWeight: 'bold' }} />
+                <input type="text" readOnly value={exchangeAmt} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0', fontWeight: 'bold', width: '100%', boxSizing: 'border-box' }} />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '80px 60px 50px 1fr', gap: '6px', alignItems: 'center', marginTop: '4px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '80px 70px 55px 1fr', gap: '6px', alignItems: 'center', marginTop: '4px' }}>
                 <label style={{ fontWeight: 'bold', textAlign: 'right' }}>Exchange Qty :</label>
-                <input type="number" min="1" value={exchangeQty} onChange={(e) => setExchangeQty(e.target.value)} style={{ padding: '3px 6px', border: '1px solid #ccc', textAlign: 'center' }} />
+                <input type="number" min="1" value={exchangeQty} onChange={(e) => setExchangeQty(e.target.value)} style={{ padding: '3px 6px', border: '1px solid #ccc', textAlign: 'center', width: '100%', boxSizing: 'border-box' }} />
                 <label style={{ fontWeight: 'bold', textAlign: 'right' }}>Amount :</label>
-                <input type="text" readOnly value={exchangeAmt} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0' }} />
+                <input type="text" readOnly value={exchangeAmt} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0', width: '100%', boxSizing: 'border-box' }} />
               </div>
+
+              {exchangeSelectedNewProducts.length > 0 && (() => {
+                const totalNewVal = exchangeSelectedNewProducts.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.qty || 1)), 0);
+                const diffVal = totalNewVal - Number(exchangeAmt || 0);
+                const isNegative = diffVal < 0;
+                return (
+                  <div style={{ 
+                    marginTop: '8px', 
+                    padding: '8px 12px', 
+                    backgroundColor: isNegative ? '#fef2f2' : '#f0fdf4', 
+                    border: `1px solid ${isNegative ? '#fca5a5' : '#86efac'}`, 
+                    borderRadius: '4px', 
+                    display: 'flex', 
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ fontSize: '11px', color: isNegative ? '#9f1239' : '#166534', fontWeight: 'bold' }}>
+                        🛍️ Selected Replacement Items ({exchangeSelectedNewProducts.length}):
+                      </div>
+                      <div style={{ fontSize: '11px', color: isNegative ? '#dc2626' : '#0369a1', fontWeight: 'bold' }}>
+                        Diff Due: Tk {diffVal.toFixed(2)} {isNegative ? `(Remaining Credit: Tk ${Math.abs(diffVal).toFixed(2)})` : ''}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#475569' }}>
+                      {exchangeSelectedNewProducts.map(p => `${p.product_name} (Tk ${Number(p.price).toFixed(2)})`).join(', ')}
+                    </div>
+                  </div>
+                );
+              })()}
 
             </fieldset>
 
             {/* Product Details Fieldset */}
-            <fieldset style={{ border: '1px solid #ccc', borderRadius: '3px', padding: '10px', marginBottom: '10px' }}>
-              <legend style={{ fontWeight: 'bold', color: '#333' }}>Product Details</legend>
+            <fieldset style={{ border: '1px solid #ccc', borderRadius: '3px', padding: '10px', marginBottom: '10px', boxSizing: 'border-box' }}>
+              <legend style={{ fontWeight: 'bold', color: '#333' }}>Product Details (Returned Item)</legend>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 70px 1fr', gap: '6px', alignItems: 'center', marginBottom: '4px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '125px 1fr 70px 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px' }}>
                 <label style={{ fontWeight: 'bold', color: '#0d47a1', textAlign: 'right' }}>Returnable Amount :</label>
-                <input type="text" readOnly value={exchangeProductDetails?.returnableAmount || 0} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0', fontWeight: 'bold' }} />
+                <input type="text" readOnly value={exchangeProductDetails?.returnableAmount || 0} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0', fontWeight: 'bold', width: '100%', boxSizing: 'border-box' }} />
                 <label style={{ fontWeight: 'bold', textAlign: 'right' }}>Sold Qty :</label>
-                <input type="text" readOnly value={exchangeProductDetails?.soldQty || 0} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0' }} />
+                <input type="text" readOnly value={exchangeProductDetails?.soldQty || 0} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0', width: '100%', boxSizing: 'border-box' }} />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 70px 1fr', gap: '6px', alignItems: 'center', marginBottom: '4px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '125px 1fr 70px 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px' }}>
                 <label style={{ fontWeight: 'bold', textAlign: 'right' }}>Name :</label>
-                <input type="text" readOnly value={exchangeProductDetails?.name || ''} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0', fontWeight: 'bold' }} />
+                <input type="text" readOnly value={exchangeProductDetails?.name || ''} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0', fontWeight: 'bold', width: '100%', boxSizing: 'border-box' }} />
                 <label style={{ fontWeight: 'bold', textAlign: 'right' }}>MRP :</label>
-                <input type="text" readOnly value={exchangeProductDetails?.mrp || 0} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0' }} />
+                <input type="text" readOnly value={exchangeProductDetails?.mrp || 0} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0', width: '100%', boxSizing: 'border-box' }} />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 70px 1fr', gap: '6px', alignItems: 'center', marginBottom: '4px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '125px 1fr 70px 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px' }}>
                 <label style={{ fontWeight: 'bold', textAlign: 'right' }}>Sale Date :</label>
-                <input type="text" readOnly value={exchangeProductDetails?.saleDate || ''} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0' }} />
+                <input type="text" readOnly value={exchangeProductDetails?.saleDate || ''} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0', width: '100%', boxSizing: 'border-box' }} />
                 <label style={{ fontWeight: 'bold', textAlign: 'right' }}>VAT :</label>
-                <input type="text" readOnly value={exchangeProductDetails?.vat || 0} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0' }} />
+                <input type="text" readOnly value={exchangeProductDetails?.vat || 0} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0', width: '100%', boxSizing: 'border-box' }} />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 70px 1fr', gap: '6px', alignItems: 'center', marginBottom: '4px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '125px 1fr 70px 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px' }}>
                 <label style={{ fontWeight: 'bold', textAlign: 'right' }}>Served By :</label>
-                <input type="text" readOnly value={exchangeProductDetails?.servedBy || ''} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0' }} />
+                <input type="text" readOnly value={exchangeProductDetails?.servedBy || ''} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0', width: '100%', boxSizing: 'border-box' }} />
                 <label style={{ fontWeight: 'bold', textAlign: 'right' }}>Discount :</label>
-                <input type="text" readOnly value={exchangeProductDetails?.discount || 0} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0' }} />
+                <input type="text" readOnly value={exchangeProductDetails?.discount || 0} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0', width: '100%', boxSizing: 'border-box' }} />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '110px 120px 50px 1fr 70px 1fr', gap: '6px', alignItems: 'center' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '125px 1fr 70px 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px' }}>
                 <label style={{ fontWeight: 'bold', textAlign: 'right' }}>Terminal :</label>
-                <input type="text" readOnly value={exchangeProductDetails?.terminal || ''} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0' }} />
+                <input type="text" readOnly value={exchangeProductDetails?.terminal || ''} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0', width: '100%', boxSizing: 'border-box' }} />
                 <label style={{ fontWeight: 'bold', textAlign: 'right' }}>SD Amt :</label>
-                <input type="text" readOnly value={exchangeProductDetails?.sdAmt || 0} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0' }} />
+                <input type="text" readOnly value={exchangeProductDetails?.sdAmt || 0} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0', width: '100%', boxSizing: 'border-box' }} />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '125px 1fr 70px 1fr', gap: '6px', alignItems: 'center' }}>
                 <label style={{ fontWeight: 'bold', textAlign: 'right' }}>Sp. Disc :</label>
-                <input type="text" readOnly value={exchangeProductDetails?.spDisc || 0} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0' }} />
+                <input type="text" readOnly value={exchangeProductDetails?.spDisc || 0} style={{ padding: '3px 6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0', width: '100%', boxSizing: 'border-box' }} />
+                <div></div>
+                <div></div>
               </div>
 
             </fieldset>
@@ -1910,11 +2080,194 @@ const PosDashboard = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
               <button 
                 onClick={handleExecuteExchange}
-                style={{ padding: '6px 20px', backgroundColor: 'var(--accent-primary, #2e6f40)', color: '#fff', border: 'none', borderRadius: '3px', fontWeight: 'bold', cursor: 'pointer' }}
+                className="btn-theme"
+                style={{ padding: '6px 20px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '3px' }}
               >
                 Apply Exchange Credit
               </button>
               <div style={{ color: '#d32f2f', fontWeight: 'bold' }}>Press ESC for Close</div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* POPUP MODAL 1: INVOICE SOLD ITEMS SELECTION MODAL (Left Checkbox) */}
+      {showInvoiceItemsModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3500, backdropFilter: 'blur(3px)' }}>
+          <div style={{ backgroundColor: '#fff', width: '90%', maxWidth: '700px', borderRadius: '6px', padding: '16px 20px', boxShadow: '0 10px 30px rgba(0,0,0,0.3)', border: '1px solid #7dd3fc', fontSize: '12px' }}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px', marginBottom: '12px' }}>
+              <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#0d47a1', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Search size={16} /> Select Returned Item from Invoice #{exchangeInvoiceNo}
+              </div>
+              <button onClick={() => setShowInvoiceItemsModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} /></button>
+            </div>
+
+            <p style={{ color: '#64748b', fontSize: '11px', marginBottom: '10px' }}>
+              Click the checkbox on the left to select which item from the customer's previous invoice is being returned:
+            </p>
+
+            <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #cbd5e1', borderRadius: '4px', marginBottom: '15px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                <thead>
+                  <tr style={{ background: 'linear-gradient(180deg, #0284c7 0%, #0369a1 100%)', color: '#fff' }}>
+                    <th style={{ padding: '8px 10px', textAlign: 'center', width: '50px' }}>Select</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left' }}>Barcode</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left' }}>Item Name</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'center' }}>Sold Qty</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right' }}>Unit Price</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right' }}>Returnable Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoiceItemsList.map((item, idx) => {
+                    const isSelected = exchangeProductDetails?.barcode === item.barcode || exchangeProductDetails?.name === item.product_name;
+                    return (
+                      <tr 
+                        key={item.id || idx} 
+                        style={{ borderBottom: '1px solid #e2e8f0', cursor: 'pointer', backgroundColor: isSelected ? '#e0f2fe' : (idx % 2 === 0 ? '#ffffff' : '#f8fafc') }}
+                        className="win7-table-row"
+                        onClick={() => handleSelectReturnedInvoiceItem(item)}
+                      >
+                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={isSelected} 
+                            onChange={() => handleSelectReturnedInvoiceItem(item)}
+                            style={{ accentColor: '#0284c7', cursor: 'pointer', width: '16px', height: '16px' }} 
+                          />
+                        </td>
+                        <td style={{ padding: '8px 10px', fontWeight: 'bold', color: '#0369a1' }}>{item.barcode || '-'}</td>
+                        <td style={{ padding: '8px 10px', fontWeight: 'bold' }}>{item.product_name}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>{item.qty || 1}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>Tk {Number(item.unit_price || 0).toFixed(2)}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 'bold', color: '#0369a1' }}>
+                          Tk {Number(item.total_value || (Number(item.qty || 1) * Number(item.unit_price || 0))).toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="btn-danger" onClick={() => setShowInvoiceItemsModal(false)}>Cancel</button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* POPUP MODAL 2: MULTI-ITEM BARCODE REPLACEMENT PRODUCT SELECTION MODAL */}
+      {showBarcodeSearchModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3500, backdropFilter: 'blur(3px)' }}>
+          <div style={{ backgroundColor: '#fff', width: '90%', maxWidth: '720px', borderRadius: '6px', padding: '16px 20px', boxShadow: '0 10px 30px rgba(0,0,0,0.3)', border: '1px solid #86efac', fontSize: '12px' }}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px', marginBottom: '12px' }}>
+              <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Search size={16} /> Select New Replacement Items for Exchange (Multi-Select Supported)
+              </div>
+              <button onClick={() => setShowBarcodeSearchModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} /></button>
+            </div>
+
+            <p style={{ color: '#64748b', fontSize: '11px', marginBottom: '8px' }}>
+              Click checkboxes on the left to select multiple replacement products customer wants in exchange:
+            </p>
+
+            <div style={{ marginBottom: '10px' }}>
+              <input 
+                type="text"
+                placeholder="Type name or barcode to filter replacement products..."
+                value={exchangeBarcode}
+                onChange={(e) => setExchangeBarcode(e.target.value)}
+                style={{ width: '100%', padding: '7px 10px', border: '1px solid #86efac', borderRadius: '4px', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <div style={{ maxHeight: '280px', overflowY: 'auto', border: '1px solid #cbd5e1', borderRadius: '4px', marginBottom: '15px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                <thead>
+                  <tr style={{ background: 'linear-gradient(180deg, #52be72 0%, #2e6f40 100%)', color: '#fff' }}>
+                    <th style={{ padding: '8px 10px', textAlign: 'center', width: '50px' }}>Select</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left' }}>Barcode</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left' }}>Item Name</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right' }}>MRP / Price</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {barcodeSearchResults.filter(p => {
+                    if (!exchangeBarcode.trim()) return true;
+                    const q = exchangeBarcode.trim().toLowerCase();
+                    return (
+                      p.item_name?.toLowerCase().includes(q) ||
+                      p.barcode?.toLowerCase().includes(q) ||
+                      p.user_barcode?.toLowerCase().includes(q)
+                    );
+                  }).length === 0 ? (
+                    <tr>
+                      <td colSpan="4" style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>
+                        No replacement products found matching "{exchangeBarcode}"
+                      </td>
+                    </tr>
+                  ) : (
+                    barcodeSearchResults
+                      .filter(p => {
+                        if (!exchangeBarcode.trim()) return true;
+                        const q = exchangeBarcode.trim().toLowerCase();
+                        return (
+                          p.item_name?.toLowerCase().includes(q) ||
+                          p.barcode?.toLowerCase().includes(q) ||
+                          p.user_barcode?.toLowerCase().includes(q)
+                        );
+                      })
+                      .map((p, idx) => {
+                        const isSelected = exchangeSelectedNewProducts.some(item => item.id === p.id || item.product_id === p.id);
+                        const price = Number(p.mrp || p.purchase_price || 0);
+                        return (
+                          <tr 
+                            key={p.id || idx} 
+                            style={{ borderBottom: '1px solid #e2e8f0', cursor: 'pointer', backgroundColor: isSelected ? '#dcfce7' : (idx % 2 === 0 ? '#ffffff' : '#f8fafc') }}
+                            className="win7-table-row"
+                            onClick={() => handleToggleSelectNewExchangeProduct(p)}
+                          >
+                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                              <input 
+                                type="checkbox" 
+                                checked={isSelected} 
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleSelectNewExchangeProduct(p);
+                                }}
+                                style={{ accentColor: '#2e6f40', cursor: 'pointer', width: '16px', height: '16px' }} 
+                              />
+                            </td>
+                            <td style={{ padding: '8px 10px', fontWeight: 'bold', color: '#0369a1' }}>{p.barcode || p.user_barcode || '-'}</td>
+                            <td style={{ padding: '8px 10px', fontWeight: 'bold' }}>{p.item_name}</td>
+                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 'bold', color: '#166534' }}>
+                              Tk {price.toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Selection Summary Footer */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '10px 14px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#166534' }}>
+                Selected: <span style={{ color: '#0284c7' }}>{exchangeSelectedNewProducts.length} Items</span> | Total: <span style={{ color: '#166534' }}>Tk {exchangeSelectedNewProducts.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.qty || 1)), 0).toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button className="btn-theme" onClick={() => setShowBarcodeSearchModal(false)} style={{ padding: '6px 16px' }}>
+                  Confirm Selection ({exchangeSelectedNewProducts.length})
+                </button>
+                <button className="btn-danger" onClick={() => setShowBarcodeSearchModal(false)}>Cancel</button>
+              </div>
             </div>
 
           </div>

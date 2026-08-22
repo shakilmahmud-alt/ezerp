@@ -12,10 +12,14 @@ const PosLayout = () => {
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
   const [inventoryMenuOpen, setInventoryMenuOpen] = useState(false);
+  const [reportMenuOpen, setReportMenuOpen] = useState(false);
+  const [saleSubmenuOpen, setSaleSubmenuOpen] = useState(false);
+  const [stockSubmenuOpen, setStockSubmenuOpen] = useState(false);
 
   const fileMenuRef = useRef(null);
   const hamburgerMenuRef = useRef(null);
   const inventoryMenuRef = useRef(null);
+  const reportMenuRef = useRef(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -28,6 +32,11 @@ const PosLayout = () => {
       }
       if (inventoryMenuRef.current && !inventoryMenuRef.current.contains(event.target)) {
         setInventoryMenuOpen(false);
+      }
+      if (reportMenuRef.current && !reportMenuRef.current.contains(event.target)) {
+        setReportMenuOpen(false);
+        setSaleSubmenuOpen(false);
+        setStockSubmenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -292,7 +301,174 @@ const PosLayout = () => {
             </div>
           )}
         </div>
-        <div style={{ cursor: 'pointer', padding: '2px 8px' }}>Report</div>
+        {/* Report Menu */}
+        <div 
+          ref={reportMenuRef} 
+          style={{ position: 'relative' }}
+        >
+          <div 
+            style={{ 
+              cursor: 'pointer', 
+              padding: '3px 12px',
+              background: reportMenuOpen ? 'linear-gradient(180deg, #ffffff 0%, #e0f2fe 50%, #bae6fd 100%)' : 'transparent',
+              color: reportMenuOpen ? '#0f172a' : '#ffffff',
+              borderRadius: '4px 4px 0 0',
+              border: reportMenuOpen ? '1px solid #7dd3fc' : '1px solid transparent',
+              borderBottom: reportMenuOpen ? 'none' : '1px solid transparent',
+              boxShadow: reportMenuOpen ? 'inset 0 1px 0 #ffffff' : 'none',
+              textShadow: reportMenuOpen ? 'none' : '0 1px 1px rgba(0, 0, 0, 0.3)'
+            }}
+            onClick={() => setReportMenuOpen(!reportMenuOpen)}
+          >
+            Report
+          </div>
+          
+          {reportMenuOpen && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 249, 255, 0.96) 100%)',
+              color: '#0f172a',
+              minWidth: '200px',
+              boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3), inset 0 1px 0 #ffffff',
+              zIndex: 1000,
+              padding: '4px 0',
+              border: '1px solid #7dd3fc',
+              borderRadius: '0 4px 6px 6px',
+              whiteSpace: 'nowrap',
+              backdropFilter: 'blur(10px)'
+            }}>
+              {/* Reprint */}
+              <div 
+                style={{ padding: '6px 20px 6px 24px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/reprint'); }}
+              >
+                Reprint
+              </div>
+
+              {/* Sale (Submenu Trigger) */}
+              <div 
+                style={{ position: 'relative' }}
+                onMouseEnter={() => setSaleSubmenuOpen(true)}
+                onMouseLeave={() => setSaleSubmenuOpen(false)}
+              >
+                <div 
+                  style={{ padding: '6px 20px 6px 24px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} 
+                  className="pos-menu-item"
+                  onClick={() => setSaleSubmenuOpen(!saleSubmenuOpen)}
+                >
+                  <span>Sale</span>
+                  <span style={{ fontSize: '10px' }}>▶</span>
+                </div>
+
+                {saleSubmenuOpen && (
+                  <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: '100%',
+                    background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 249, 255, 0.96) 100%)',
+                    color: '#0f172a',
+                    minWidth: '220px',
+                    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3)',
+                    zIndex: 1010,
+                    padding: '4px 0',
+                    border: '1px solid #7dd3fc',
+                    borderRadius: '4px',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    <div className="pos-menu-item" style={{ padding: '6px 20px' }} onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/sale-daily'); }}>Daily Sale Report</div>
+                    <div className="pos-menu-item" style={{ padding: '6px 20px' }} onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/sale-summary'); }}>Summary Sale Report</div>
+                    <div className="pos-menu-item" style={{ padding: '6px 20px' }} onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/sale-itemwise'); }}>Itemwise Sale Report</div>
+                    <div className="pos-menu-item" style={{ padding: '6px 20px' }} onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/sale-payment-type'); }}>Payment Type Sale Report</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Receive */}
+              <div 
+                style={{ padding: '6px 20px 6px 24px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/receive'); }}
+              >
+                Receive
+              </div>
+
+              {/* Transfer */}
+              <div 
+                style={{ padding: '6px 20px 6px 24px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/transfer'); }}
+              >
+                Transfer
+              </div>
+
+              {/* Stock (Submenu Trigger) */}
+              <div 
+                style={{ position: 'relative' }}
+                onMouseEnter={() => setStockSubmenuOpen(true)}
+                onMouseLeave={() => setStockSubmenuOpen(false)}
+              >
+                <div 
+                  style={{ padding: '6px 20px 6px 24px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} 
+                  className="pos-menu-item"
+                  onClick={() => setStockSubmenuOpen(!stockSubmenuOpen)}
+                >
+                  <span>Stock</span>
+                  <span style={{ fontSize: '10px' }}>▶</span>
+                </div>
+
+                {stockSubmenuOpen && (
+                  <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: '100%',
+                    background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 249, 255, 0.96) 100%)',
+                    color: '#0f172a',
+                    minWidth: '200px',
+                    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3)',
+                    zIndex: 1010,
+                    padding: '4px 0',
+                    border: '1px solid #7dd3fc',
+                    borderRadius: '4px',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    <div className="pos-menu-item" style={{ padding: '6px 20px' }} onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/stock-current'); }}>Current Stock Report</div>
+                    <div className="pos-menu-item" style={{ padding: '6px 20px' }} onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/stock-journal'); }}>Product Stock Journal</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Invoice Search */}
+              <div 
+                style={{ padding: '6px 20px 6px 24px', cursor: 'pointer', fontWeight: 'bold', color: '#0284c7' }} 
+                className="pos-menu-item"
+                onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/invoice-search'); }}
+              >
+                Invoice Search
+              </div>
+
+              {/* Reprint Log */}
+              <div 
+                style={{ padding: '6px 20px 6px 24px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/reprint-log'); }}
+              >
+                Reprint Log
+              </div>
+
+              {/* Discount Circular Report */}
+              <div 
+                style={{ padding: '6px 20px 6px 24px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/discount-circular'); }}
+              >
+                Discount Circular Report
+              </div>
+            </div>
+          )}
+        </div>
         <div style={{ cursor: 'pointer', padding: '2px 8px' }}>Help</div>
         <div style={{ cursor: 'pointer', padding: '2px 8px' }}>QuickDo</div>
       </div>

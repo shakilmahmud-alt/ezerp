@@ -57,6 +57,14 @@ import PosRequisition from './pages/pos/PosRequisition';
 import PosRequisitionVendorwise from './pages/pos/PosRequisitionVendorwise';
 import PosPurchaseReceive from './pages/pos/PosPurchaseReceive';
 import PosPurchaseReturn from './pages/pos/PosPurchaseReturn';
+import PosInvoiceSearch from './pages/pos/reports/PosInvoiceSearch';
+import PosReprint from './pages/pos/reports/PosReprint';
+import PosSaleReports from './pages/pos/reports/PosSaleReports';
+import PosReceiveReport from './pages/pos/reports/PosReceiveReport';
+import PosTransferReport from './pages/pos/reports/PosTransferReport';
+import PosStockReports from './pages/pos/reports/PosStockReports';
+import PosReprintLog from './pages/pos/reports/PosReprintLog';
+import PosDiscountCircularReport from './pages/pos/reports/PosDiscountCircularReport';
 
 function App() {
   return (
@@ -85,6 +93,21 @@ function App() {
             <Route path="requisition-vendorwise" element={<PosRequisitionVendorwise />} />
             <Route path="purchase-receive" element={<PosPurchaseReceive />} />
             <Route path="purchase-return" element={<PosPurchaseReturn />} />
+            <Route path="invoice-search" element={<PosInvoiceSearch />} />
+            <Route path="reports/invoice-search" element={<PosInvoiceSearch />} />
+            <Route path="reports/reprint" element={<PosReprint />} />
+            <Route path="reports/sale" element={<PosSaleReports />} />
+            <Route path="reports/sale-daily" element={<PosSaleReports initialTab="daily" />} />
+            <Route path="reports/sale-summary" element={<PosSaleReports initialTab="summary" />} />
+            <Route path="reports/sale-itemwise" element={<PosSaleReports initialTab="itemwise" />} />
+            <Route path="reports/sale-payment-type" element={<PosSaleReports initialTab="payment-type" />} />
+            <Route path="reports/receive" element={<PosReceiveReport />} />
+            <Route path="reports/transfer" element={<PosTransferReport />} />
+            <Route path="reports/stock" element={<PosStockReports />} />
+            <Route path="reports/stock-current" element={<PosStockReports initialTab="current" />} />
+            <Route path="reports/stock-journal" element={<PosStockReports initialTab="journal" />} />
+            <Route path="reports/reprint-log" element={<PosReprintLog />} />
+            <Route path="reports/discount-circular" element={<PosDiscountCircularReport />} />
           </Route>
           
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
