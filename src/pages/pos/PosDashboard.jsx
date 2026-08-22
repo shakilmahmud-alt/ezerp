@@ -302,6 +302,34 @@ const PosDashboard = () => {
     setSelectedCustomer(null);
   };
 
+  // Helper: Get Effective Store Stock Quantity (Enforces strict zero stock check)
+  const getEffectiveStockQty = (prod, storeId) => {
+    if (!prod) return 0;
+    
+    // 1. If inStock property exists on activeProduct
+    if (typeof prod.inStock === 'number') return prod.inStock;
+
+    // 2. Check store_stocks table array if available
+    if (Array.isArray(prod.store_stocks) && prod.store_stocks.length > 0) {
+      if (storeId) {
+        const match = prod.store_stocks.find(s => s.store_id === storeId);
+        if (match && match.stock_qty !== undefined && match.stock_qty !== null) {
+          return Number(match.stock_qty);
+        }
+      }
+      const anyStock = prod.store_stocks.find(s => Number(s.stock_qty) > 0)?.stock_qty;
+      if (anyStock !== undefined && anyStock !== null) {
+        return Number(anyStock);
+      }
+    }
+
+    // 3. Fallback to product level stock_qty or branch_stock
+    if (prod.stock_qty !== undefined && prod.stock_qty !== null) return Number(prod.stock_qty);
+    if (prod.branch_stock !== undefined && prod.branch_stock !== null) return Number(prod.branch_stock);
+
+    return 0;
+  };
+
   // Barcode Lookup when typing / pasting
   const handleBarcodeInputChange = async (val) => {
     setBarcodeInput(val);
@@ -322,11 +350,16 @@ const PosDashboard = () => {
 
       if (data && data.length > 0) {
         const prod = data[0];
-        const stockQty = prod.store_stocks?.find(s => s.store_id === posTerminal?.store_id)?.stock_qty || 0;
-        setActiveProduct({
-          ...prod,
-          inStock: stockQty
-        });
+        const stockQty = getEffectiveStockQty(prod, posTerminal?.store_id);
+        if (stockQty <= 0) {
+          setActiveProduct(null);
+          toast.error(`Out of stock! "${prod.item_name}" has 0 stock. Cannot add to invoice.`, { duration: 4000 });
+        } else {
+          setActiveProduct({
+            ...prod,
+            inStock: stockQty
+          });
+        }
       } else {
         setActiveProduct(null);
       }
@@ -340,6 +373,11 @@ const PosDashboard = () => {
     if (e.key === 'Enter') {
       e.preventDefault();
       if (activeProduct) {
+        const stockQty = getEffectiveStockQty(activeProduct, posTerminal?.store_id);
+        if (stockQty <= 0) {
+          toast.error(`Out of stock! "${activeProduct.item_name}" has 0 stock balance.`, { duration: 4000 });
+          return;
+        }
         addItemToCart(activeProduct, Number(saleQty) || 1);
         setBarcodeInput('');
         setActiveProduct(null);
@@ -353,11 +391,9 @@ const PosDashboard = () => {
     }
   };
 
-  // Add Item to Cart (Enforces Stock > 0 Validation)
+  // Add Item to Cart (Enforces Strict Stock > 0 Validation)
   const addItemToCart = (product, qtyToAdd = 1) => {
-    const stockQty = product.inStock !== undefined 
-      ? product.inStock 
-      : (product.store_stocks?.find(s => s.store_id === posTerminal?.store_id)?.stock_qty ?? product.stock_qty ?? 0);
+    const stockQty = getEffectiveStockQty(product, posTerminal?.store_id);
 
     if (stockQty <= 0) {
       toast.error(`Out of stock! "${product.item_name}" currently has 0 stock balance. Cannot add to invoice.`, { duration: 4000 });
@@ -1217,8 +1253,8 @@ const PosDashboard = () => {
         let res = data || [];
         if (!searchShowZero) {
           res = res.filter(p => {
-            const sStock = p.store_stocks?.find(s => s.store_id === posTerminal?.store_id)?.stock_qty || 0;
-            return p.wh_stock > 0 || sStock > 0;
+            const sStock = getEffectiveStockQty(p, posTerminal?.store_id);
+            return sStock > 0;
           });
         }
         setSearchResults(res);
@@ -2540,18 +2576,18 @@ const PosDashboard = () => {
                   {isSearching ? (
                     <tr><td colSpan="11" style={{ padding: '20px', textAlign: 'center' }}>Searching stock...</td></tr>
                   ) : searchResults.filter(prod => {
-                    const stockQty = prod.store_stocks?.find(s => s.store_id === posTerminal?.store_id)?.stock_qty || 0;
+                    const stockQty = getEffectiveStockQty(prod, posTerminal?.store_id);
                     return searchShowZero || stockQty > 0;
                   }).length === 0 ? (
                     <tr><td colSpan="11" style={{ padding: '20px', textAlign: 'center', color: '#999' }}>No products found (Zero stock hidden)</td></tr>
                   ) : (
                     searchResults
                       .filter(prod => {
-                        const stockQty = prod.store_stocks?.find(s => s.store_id === posTerminal?.store_id)?.stock_qty || 0;
+                        const stockQty = getEffectiveStockQty(prod, posTerminal?.store_id);
                         return searchShowZero || stockQty > 0;
                       })
                       .map((prod) => {
-                        const stockQty = prod.store_stocks?.find(s => s.store_id === posTerminal?.store_id)?.stock_qty || 0;
+                        const stockQty = getEffectiveStockQty(prod, posTerminal?.store_id);
                         const isZero = stockQty <= 0;
                         return (
                           <tr 
@@ -2573,7 +2609,7 @@ const PosDashboard = () => {
                               <button 
                                 onClick={() => {
                                   if (stockQty <= 0) {
-                                    toast.error(`Out of stock! "${prod.item_name}" currently has 0 stock.`, { duration: 4000 });
+                                    toast.error(`Out of stock! "${prod.item_name}" currently has 0 stock in this store.`, { duration: 4000 });
                                     return;
                                   }
                                   const added = addItemToCart(prod, 1);
