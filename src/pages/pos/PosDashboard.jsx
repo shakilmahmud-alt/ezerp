@@ -305,27 +305,26 @@ const PosDashboard = () => {
   // Helper: Get Effective Store Stock Quantity (Enforces strict zero stock check)
   const getEffectiveStockQty = (prod, storeId) => {
     if (!prod) return 0;
-    
-    // 1. If inStock property exists on activeProduct
-    if (typeof prod.inStock === 'number') return prod.inStock;
 
-    // 2. Check store_stocks table array if available
+    // 1. Check store_stocks table array if available
     if (Array.isArray(prod.store_stocks) && prod.store_stocks.length > 0) {
       if (storeId) {
-        const match = prod.store_stocks.find(s => s.store_id === storeId);
+        const match = prod.store_stocks.find(s => String(s.store_id) === String(storeId));
         if (match && match.stock_qty !== undefined && match.stock_qty !== null) {
           return Number(match.stock_qty);
         }
       }
-      const anyStock = prod.store_stocks.find(s => Number(s.stock_qty) > 0)?.stock_qty;
-      if (anyStock !== undefined && anyStock !== null) {
-        return Number(anyStock);
-      }
+      // Fallback: If storeId is empty or no exact match, get max stock or any positive stock from store_stocks
+      const maxStock = Math.max(...prod.store_stocks.map(s => Number(s.stock_qty) || 0));
+      if (maxStock > 0) return maxStock;
     }
 
-    // 3. Fallback to product level stock_qty or branch_stock
-    if (prod.stock_qty !== undefined && prod.stock_qty !== null) return Number(prod.stock_qty);
+    // 2. Check direct numeric stock properties on product object
     if (prod.branch_stock !== undefined && prod.branch_stock !== null) return Number(prod.branch_stock);
+    if (prod.stock_qty !== undefined && prod.stock_qty !== null) return Number(prod.stock_qty);
+    if (prod.wh_stock !== undefined && prod.wh_stock !== null) return Number(prod.wh_stock);
+    if (prod.balance !== undefined && prod.balance !== null) return Number(prod.balance);
+    if (prod.qty !== undefined && prod.qty !== null) return Number(prod.qty);
 
     return 0;
   };
@@ -845,13 +844,16 @@ const PosDashboard = () => {
     toast.success(`Selected "${item.product_name}" (Tk ${retAmt}) as returned item`);
   };
 
-  // 2. Search Store Products for Barcode field (Opens Product Selection Modal)
+  // 2. Search Store Products for Barcode field (Opens Product Selection Modal with Store Stock)
   const handleSearchBarcodeProduct = async () => {
     try {
-      // Fetch products list for local instant search
+      // Fetch products list with branch store_stocks for accurate stock calculation
       const { data, error } = await supabase
         .from('products')
-        .select('*')
+        .select(`
+          *,
+          store_stocks(store_id, stock_qty)
+        `)
         .order('item_name')
         .limit(200);
 
@@ -866,11 +868,11 @@ const PosDashboard = () => {
 
   // Toggle Selection for Multiple Replacement Products (Enforces Stock > 0)
   const handleToggleSelectNewExchangeProduct = (p) => {
-    const stockQty = p.store_stocks?.find(s => s.store_id === posTerminal?.store_id)?.stock_qty ?? p.stock_qty ?? 0;
+    const stockQty = getEffectiveStockQty(p, posTerminal?.store_id);
     const exists = exchangeSelectedNewProducts.some(item => (item.id && item.id === p.id) || (item.product_id && item.product_id === p.id));
 
     if (!exists && stockQty <= 0) {
-      toast.error(`Out of stock! "${p.item_name}" currently has 0 stock and cannot be selected for exchange.`, { duration: 4000 });
+      toast.error(`Out of stock! "${p.item_name}" currently has 0 stock in this store and cannot be selected for exchange.`, { duration: 4000 });
       return;
     }
 
@@ -2283,7 +2285,7 @@ const PosDashboard = () => {
                         );
                       })
                       .map((p, idx) => {
-                        const stockQty = p.store_stocks?.find(s => s.store_id === posTerminal?.store_id)?.stock_qty ?? p.stock_qty ?? 0;
+                        const stockQty = getEffectiveStockQty(p, exchangeStoreId || posTerminal?.store_id);
                         const isZero = stockQty <= 0;
                         const isSelected = exchangeSelectedNewProducts.some(item => item.id === p.id || item.product_id === p.id);
                         const price = Number(p.mrp || p.purchase_price || 0);
