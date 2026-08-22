@@ -55,9 +55,9 @@ const PosInvoiceSearch = () => {
       }
 
       const { data, error } = await query;
-      if (error) {
-        console.warn('PosInvoiceSearch fetch error:', error);
-        // Fallback without date filter if empty
+      
+      // If error occurs OR if no records found under strict filter, fetch all sales fallback
+      if (error || !data || data.length === 0) {
         const { data: fallbackData } = await supabase
           .from('sales')
           .select('*')

@@ -353,11 +353,26 @@ const PosDashboard = () => {
     }
   };
 
-  // Add Item to Cart
+  // Add Item to Cart (Enforces Stock > 0 Validation)
   const addItemToCart = (product, qtyToAdd = 1) => {
-    const existingIndex = cart.findIndex(item => item.product_id === product.id);
-    const execName = executives.find(e => e.id === selectedExecutiveId)?.name || 'Executive';
+    const stockQty = product.inStock !== undefined 
+      ? product.inStock 
+      : (product.store_stocks?.find(s => s.store_id === posTerminal?.store_id)?.stock_qty ?? product.stock_qty ?? 0);
 
+    if (stockQty <= 0) {
+      toast.error(`Out of stock! "${product.item_name}" currently has 0 stock balance. Cannot add to invoice.`, { duration: 4000 });
+      return false;
+    }
+
+    const existingIndex = cart.findIndex(item => item.product_id === product.id);
+    const existingQty = existingIndex > -1 ? cart[existingIndex].qty : 0;
+    
+    if (existingQty + qtyToAdd > stockQty) {
+      toast.error(`Stock limit reached! Available stock for "${product.item_name}" is ${stockQty}.`, { duration: 4000 });
+      return false;
+    }
+
+    const execName = executives.find(e => e.id === selectedExecutiveId)?.name || 'Executive';
     const price = Number(product.mrp || product.purchase_price || 0);
     const vatPct = Number(product.sale_vat_percent || 0);
 
@@ -400,6 +415,7 @@ const PosDashboard = () => {
       setCart([...cart, newItem]);
       setSelectedRowIndex(cart.length);
     }
+    return true;
   };
 
   // Cart Row Removal (F4)
@@ -812,13 +828,21 @@ const PosDashboard = () => {
     }
   };
 
-  // Toggle Selection for Multiple Replacement Products (Deduplicated with Functional Updater)
+  // Toggle Selection for Multiple Replacement Products (Enforces Stock > 0)
   const handleToggleSelectNewExchangeProduct = (p) => {
+    const stockQty = p.store_stocks?.find(s => s.store_id === posTerminal?.store_id)?.stock_qty ?? p.stock_qty ?? 0;
+    const exists = exchangeSelectedNewProducts.some(item => (item.id && item.id === p.id) || (item.product_id && item.product_id === p.id));
+
+    if (!exists && stockQty <= 0) {
+      toast.error(`Out of stock! "${p.item_name}" currently has 0 stock and cannot be selected for exchange.`, { duration: 4000 });
+      return;
+    }
+
     const unitPrice = Number(p.mrp || p.purchase_price || 0);
 
     setExchangeSelectedNewProducts(prev => {
-      const exists = prev.some(item => (item.id && item.id === p.id) || (item.product_id && item.product_id === p.id));
-      if (exists) {
+      const isAlreadySelected = prev.some(item => (item.id && item.id === p.id) || (item.product_id && item.product_id === p.id));
+      if (isAlreadySelected) {
         toast('Deselected ' + p.item_name, { icon: '🗑️' });
         return prev.filter(item => item.id !== p.id && item.product_id !== p.id);
       } else {
@@ -2223,30 +2247,35 @@ const PosDashboard = () => {
                         );
                       })
                       .map((p, idx) => {
+                        const stockQty = p.store_stocks?.find(s => s.store_id === posTerminal?.store_id)?.stock_qty ?? p.stock_qty ?? 0;
+                        const isZero = stockQty <= 0;
                         const isSelected = exchangeSelectedNewProducts.some(item => item.id === p.id || item.product_id === p.id);
                         const price = Number(p.mrp || p.purchase_price || 0);
                         return (
                           <tr 
                             key={p.id || idx} 
-                            style={{ borderBottom: '1px solid #e2e8f0', cursor: 'pointer', backgroundColor: isSelected ? '#dcfce7' : (idx % 2 === 0 ? '#ffffff' : '#f8fafc') }}
+                            style={{ borderBottom: '1px solid #e2e8f0', cursor: isZero ? 'not-allowed' : 'pointer', backgroundColor: isZero ? '#fef2f2' : (isSelected ? '#dcfce7' : (idx % 2 === 0 ? '#ffffff' : '#f8fafc')) }}
                             className="win7-table-row"
-                            onClick={() => handleToggleSelectNewExchangeProduct(p)}
+                            onClick={() => !isZero && handleToggleSelectNewExchangeProduct(p)}
                           >
                             <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                               <input 
                                 type="checkbox" 
                                 checked={isSelected} 
+                                disabled={isZero}
                                 onClick={(e) => e.stopPropagation()}
                                 onChange={(e) => {
                                   e.stopPropagation();
                                   handleToggleSelectNewExchangeProduct(p);
                                 }}
-                                style={{ accentColor: '#2e6f40', cursor: 'pointer', width: '16px', height: '16px' }} 
+                                style={{ accentColor: '#2e6f40', cursor: isZero ? 'not-allowed' : 'pointer', width: '16px', height: '16px' }} 
                               />
                             </td>
-                            <td style={{ padding: '8px 10px', fontWeight: 'bold', color: '#0369a1' }}>{p.barcode || p.user_barcode || '-'}</td>
-                            <td style={{ padding: '8px 10px', fontWeight: 'bold' }}>{p.item_name}</td>
-                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 'bold', color: '#166534' }}>
+                            <td style={{ padding: '8px 10px', fontWeight: 'bold', color: isZero ? '#94a3b8' : '#0369a1' }}>{p.barcode || p.user_barcode || '-'}</td>
+                            <td style={{ padding: '8px 10px', fontWeight: 'bold', color: isZero ? '#991b1b' : 'inherit' }}>
+                              {p.item_name} {isZero && <span style={{ color: '#dc2626', fontSize: '10px', fontWeight: 'bold', marginLeft: '6px' }}>(Out of Stock)</span>}
+                            </td>
+                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 'bold', color: isZero ? '#94a3b8' : '#166534' }}>
                               Tk {price.toFixed(2)}
                             </td>
                           </tr>
@@ -2510,42 +2539,58 @@ const PosDashboard = () => {
                 <tbody>
                   {isSearching ? (
                     <tr><td colSpan="11" style={{ padding: '20px', textAlign: 'center' }}>Searching stock...</td></tr>
-                  ) : searchResults.length === 0 ? (
-                    <tr><td colSpan="11" style={{ padding: '20px', textAlign: 'center', color: '#999' }}>No products found</td></tr>
+                  ) : searchResults.filter(prod => {
+                    const stockQty = prod.store_stocks?.find(s => s.store_id === posTerminal?.store_id)?.stock_qty || 0;
+                    return searchShowZero || stockQty > 0;
+                  }).length === 0 ? (
+                    <tr><td colSpan="11" style={{ padding: '20px', textAlign: 'center', color: '#999' }}>No products found (Zero stock hidden)</td></tr>
                   ) : (
-                    searchResults.map((prod) => {
-                      const stockQty = prod.store_stocks?.find(s => s.store_id === posTerminal?.store_id)?.stock_qty || 0;
-                      return (
-                        <tr 
-                          key={prod.id}
-                          style={{ borderBottom: '1px solid #eee' }}
-                          className="search-result-row"
-                        >
-                          <td style={{ padding: '6px' }}>{prod.barcode || prod.code}</td>
-                          <td style={{ padding: '6px' }}>{prod.user_barcode || prod.barcode}</td>
-                          <td style={{ padding: '6px', fontWeight: 'bold' }}>{prod.item_name}</td>
-                          <td style={{ padding: '6px', textAlign: 'right' }}>{prod.purchase_price}</td>
-                          <td style={{ padding: '6px', textAlign: 'right' }}>{prod.mrp}</td>
-                          <td style={{ padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#2e6f40' }}>{stockQty}</td>
-                          <td style={{ padding: '6px' }}>{prod.vendor?.name || '-'}</td>
-                          <td style={{ padding: '6px', textAlign: 'center' }}>Pcs</td>
-                          <td style={{ padding: '6px', textAlign: 'right' }}>{prod.sale_vat_percent || 0}</td>
-                          <td style={{ padding: '6px' }}>{prod.category?.name || '-'}</td>
-                          <td style={{ padding: '6px', textAlign: 'center' }}>
-                            <button 
-                              onClick={() => {
-                                addItemToCart(prod, 1);
-                                setShowSearchModal(false);
-                                toast.success(`Added ${prod.item_name} to cart`);
-                              }}
-                              style={{ backgroundColor: '#2e6f40', color: '#fff', border: 'none', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer' }}
-                            >
-                              Add
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
+                    searchResults
+                      .filter(prod => {
+                        const stockQty = prod.store_stocks?.find(s => s.store_id === posTerminal?.store_id)?.stock_qty || 0;
+                        return searchShowZero || stockQty > 0;
+                      })
+                      .map((prod) => {
+                        const stockQty = prod.store_stocks?.find(s => s.store_id === posTerminal?.store_id)?.stock_qty || 0;
+                        const isZero = stockQty <= 0;
+                        return (
+                          <tr 
+                            key={prod.id}
+                            style={{ borderBottom: '1px solid #eee', backgroundColor: isZero ? '#fff1f2' : 'inherit' }}
+                            className="search-result-row"
+                          >
+                            <td style={{ padding: '6px' }}>{prod.barcode || prod.code}</td>
+                            <td style={{ padding: '6px' }}>{prod.user_barcode || prod.barcode}</td>
+                            <td style={{ padding: '6px', fontWeight: 'bold' }}>{prod.item_name}</td>
+                            <td style={{ padding: '6px', textAlign: 'right' }}>{prod.purchase_price}</td>
+                            <td style={{ padding: '6px', textAlign: 'right' }}>{prod.mrp}</td>
+                            <td style={{ padding: '6px', textAlign: 'right', fontWeight: 'bold', color: isZero ? '#dc2626' : '#2e6f40' }}>{stockQty}</td>
+                            <td style={{ padding: '6px' }}>{prod.vendor?.name || '-'}</td>
+                            <td style={{ padding: '6px', textAlign: 'center' }}>Pcs</td>
+                            <td style={{ padding: '6px', textAlign: 'right' }}>{prod.sale_vat_percent || 0}</td>
+                            <td style={{ padding: '6px' }}>{prod.category?.name || '-'}</td>
+                            <td style={{ padding: '6px', textAlign: 'center' }}>
+                              <button 
+                                onClick={() => {
+                                  if (stockQty <= 0) {
+                                    toast.error(`Out of stock! "${prod.item_name}" currently has 0 stock.`, { duration: 4000 });
+                                    return;
+                                  }
+                                  const added = addItemToCart(prod, 1);
+                                  if (added !== false) {
+                                    setShowSearchModal(false);
+                                    toast.success(`Added ${prod.item_name} to cart`);
+                                  }
+                                }}
+                                disabled={isZero}
+                                style={{ backgroundColor: isZero ? '#94a3b8' : '#2e6f40', color: '#fff', border: 'none', padding: '3px 8px', borderRadius: '3px', cursor: isZero ? 'not-allowed' : 'pointer' }}
+                              >
+                                {isZero ? 'Out of Stock' : 'Add'}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
                   )}
                 </tbody>
               </table>

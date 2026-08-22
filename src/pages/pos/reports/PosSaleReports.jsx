@@ -10,6 +10,14 @@ import autoTable from 'jspdf-autotable';
 const PosSaleReports = ({ initialTab = 'daily' }) => {
   const { posTerminal } = useAuth();
   const [activeTab, setActiveTab] = useState(initialTab);
+
+  // Sync activeTab whenever initialTab prop changes from navigation
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
+
   const [fromDate, setFromDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -43,17 +51,18 @@ const PosSaleReports = ({ initialTab = 'daily' }) => {
         query = query.lte('created_at', `${toDate}T23:59:59.999Z`);
       }
 
-      const { data: sales, error: sErr } = await query;
-      if (sErr) {
-        console.warn('PosSaleReports fetch error:', sErr);
+      let { data: sales, error: sErr } = await query;
+      
+      // If error occurs OR if no records found under strict filter, fetch all sales fallback
+      if (sErr || !sales || sales.length === 0) {
         const { data: fallbackSales } = await supabase
           .from('sales')
           .select('*')
           .order('created_at', { ascending: false });
-        setSalesData(fallbackSales || []);
-      } else {
-        setSalesData(sales || []);
+        sales = fallbackSales || [];
       }
+      
+      setSalesData(sales || []);
 
       // Fetch sale items
       const saleIds = (sales || []).map(s => s.id);
@@ -74,6 +83,18 @@ const PosSaleReports = ({ initialTab = 'daily' }) => {
     }
   };
 
+  // Helper to extract Payment Type from payment_type column or invoice_note
+  const getPaymentType = (sale) => {
+    if (sale.payment_type && sale.payment_type.trim()) {
+      return sale.payment_type.trim();
+    }
+    if (sale.invoice_note && sale.invoice_note.includes('[Payment:')) {
+      const match = sale.invoice_note.match(/\[Payment:\s*([^\]]+)\]/);
+      if (match && match[1]) return match[1].trim();
+    }
+    return 'Cash';
+  };
+
   // Grouping for Daily Sale Report
   const dailyReport = Object.values(salesData.reduce((acc, sale) => {
     const day = (sale.sale_date || sale.created_at || '').slice(0, 10);
@@ -82,9 +103,9 @@ const PosSaleReports = ({ initialTab = 'daily' }) => {
     }
     acc[day].count += 1;
     acc[day].qty += Number(sale.total_qty || 0);
-    acc[day].gross += Number(sale.total_amount || sale.sub_total || 0);
+    acc[day].gross += Number(sale.total_amount || sale.subtotal || 0);
     acc[day].discount += Number(sale.discount_amount || 0);
-    acc[day].net += Number(sale.net_amount || sale.net_payable || 0);
+    acc[day].net += Number(sale.net_amount || sale.total_amount || 0);
     return acc;
   }, {}));
 
@@ -95,18 +116,19 @@ const PosSaleReports = ({ initialTab = 'daily' }) => {
       acc[key] = { barcode: item.barcode || '-', name: item.product_name || 'Item', qty: 0, unitPrice: item.unit_price || 0, total: 0 };
     }
     acc[key].qty += Number(item.qty || item.quantity || 1);
-    acc[key].total += Number(item.line_total || item.total_price || 0);
+    acc[key].total += Number(item.total_value || item.unit_price * (item.qty || 1) || 0);
     return acc;
   }, {}));
 
-  // Grouping for Payment Type Sale Report
+  // Grouping for Payment Type Sale Report (Extracts Cash, AMEX, bKash, BRAC Bank, City Bank, etc.)
   const paymentTypeReport = Object.values(salesData.reduce((acc, sale) => {
-    const pType = (sale.payment_type || 'Cash').toUpperCase();
-    if (!acc[pType]) {
-      acc[pType] = { type: pType, count: 0, total: 0 };
+    const pType = getPaymentType(sale);
+    const key = pType.toUpperCase();
+    if (!acc[key]) {
+      acc[key] = { type: pType, count: 0, total: 0 };
     }
-    acc[pType].count += 1;
-    acc[pType].total += Number(sale.net_amount || sale.net_payable || 0);
+    acc[key].count += 1;
+    acc[key].total += Number(sale.net_amount || sale.total_amount || 0);
     return acc;
   }, {}));
 

@@ -120,6 +120,7 @@ const PosLayout = () => {
         background: 'linear-gradient(180deg, #52be72 0%, #2e6f40 46%, #1b4527 50%, #29683c 100%)',
         padding: '6px 16px',
         display: 'flex',
+        alignItems: 'center',
         gap: '15px',
         color: '#ffffff',
         fontSize: '14px',
@@ -469,8 +470,8 @@ const PosLayout = () => {
             </div>
           )}
         </div>
-        <div style={{ cursor: 'pointer', padding: '2px 8px' }}>Help</div>
-        <div style={{ cursor: 'pointer', padding: '2px 8px' }}>QuickDo</div>
+        <div style={{ cursor: 'pointer', padding: '3px 12px', border: '1px solid transparent', borderRadius: '4px 4px 0 0' }}>Help</div>
+        <div style={{ cursor: 'pointer', padding: '3px 12px', border: '1px solid transparent', borderRadius: '4px 4px 0 0' }}>QuickDo</div>
       </div>
       
       {/* Welcome Bar */}
