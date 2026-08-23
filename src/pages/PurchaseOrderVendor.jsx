@@ -176,6 +176,10 @@ const PurchaseOrderVendor = () => {
   };
 
   const openProductModal = () => {
+    if (!headerData.vendorId) {
+      toast.error('Please select a Vendor Name first!');
+      return;
+    }
     setTempSelectedProducts(selectedItems.map(item => item.id));
     setShowModal(true);
   };
@@ -419,10 +423,23 @@ const PurchaseOrderVendor = () => {
     doc.save(`PurchaseOrder_${new Date().getTime()}.pdf`);
   };
 
-  const filteredProducts = allProducts.filter(p => 
-    p.item_name?.toLowerCase().includes(modalSearch.toLowerCase()) || 
-    p.barcode?.toLowerCase().includes(modalSearch.toLowerCase())
-  );
+  const filteredProducts = allProducts.filter(p => {
+    // 1. Strictly filter by selected Vendor ID if vendor is selected
+    if (headerData.vendorId) {
+      const isVendorMatch = String(p.vendor_id) === String(headerData.vendorId);
+      if (!isVendorMatch) return false;
+    }
+
+    // 2. Filter by search query (item_name, barcode, user_barcode, item_code)
+    if (!modalSearch.trim()) return true;
+    const q = modalSearch.trim().toLowerCase();
+    return (
+      p.item_name?.toLowerCase().includes(q) || 
+      p.barcode?.toLowerCase().includes(q) ||
+      p.user_barcode?.toLowerCase().includes(q) ||
+      p.item_code?.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="animate-fade-in" style={{ padding: '20px', backgroundColor: 'var(--bg-color)', minHeight: '100vh', position: 'relative' }}>
@@ -635,26 +652,34 @@ const PurchaseOrderVendor = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredProducts.map(p => {
-                    const isSelected = tempSelectedProducts.includes(p.id);
-                    return (
-                      <tr key={p.id} style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: isSelected ? 'rgba(46, 111, 64, 0.05)' : 'transparent' }}>
-                        <td style={{ padding: '12px 8px', cursor: 'pointer' }} onClick={() => toggleProductSelection(p.id)}>
-                          {isSelected ? (
-                            <Check size={20} color="var(--accent-primary)" />
-                          ) : (
-                            <div style={{ width: '20px', height: '20px', border: '2px solid var(--border-color)', borderRadius: '2px' }}></div>
-                          )}
-                        </td>
-                        <td style={{ padding: '12px 8px' }}>{p.barcode}</td>
-                        <td style={{ padding: '12px 8px' }}>{p.item_name}</td>
-                        <td style={{ padding: '12px 8px' }}>0</td>
-                        <td style={{ padding: '12px 8px' }}>PCS</td>
-                        <td style={{ padding: '12px 8px' }}>{p.purchase_price}</td>
-                        <td style={{ padding: '12px 8px' }}>{p.mrp}</td>
-                      </tr>
-                    );
-                  })}
+                  {filteredProducts.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '25px', color: 'var(--text-secondary)' }}>
+                        No products found for the selected Vendor.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredProducts.map(p => {
+                      const isSelected = tempSelectedProducts.includes(p.id);
+                      return (
+                        <tr key={p.id} style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: isSelected ? 'rgba(46, 111, 64, 0.05)' : 'transparent' }}>
+                          <td style={{ padding: '12px 8px', cursor: 'pointer' }} onClick={() => toggleProductSelection(p.id)}>
+                            {isSelected ? (
+                              <Check size={20} color="var(--accent-primary)" />
+                            ) : (
+                              <div style={{ width: '20px', height: '20px', border: '2px solid var(--border-color)', borderRadius: '2px' }}></div>
+                            )}
+                          </td>
+                          <td style={{ padding: '12px 8px' }}>{p.barcode || p.user_barcode || '-'}</td>
+                          <td style={{ padding: '12px 8px' }}>{p.item_name}</td>
+                          <td style={{ padding: '12px 8px' }}>{p.wh_stock || 0}</td>
+                          <td style={{ padding: '12px 8px' }}>PCS</td>
+                          <td style={{ padding: '12px 8px' }}>{p.purchase_price}</td>
+                          <td style={{ padding: '12px 8px' }}>{p.mrp}</td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

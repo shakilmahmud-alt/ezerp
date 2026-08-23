@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabaseClient';
 import jsPDF from 'jspdf';
@@ -30,19 +30,10 @@ const StoreDelivery = () => {
   
   const [formProduct, setFormProduct] = useState(null); // the product currently being searched
   const [deliveryQty, setDeliveryQty] = useState('');
-  
   const [items, setItems] = useState([]);
-  const [isAutoScan, setIsAutoScan] = useState(false);
 
-  useEffect(() => {
-    if (!isAutoScan || !barcodeSearch) return;
-    
-    const timeoutId = setTimeout(() => {
-      handleBarcodeSearch();
-    }, 400); // 400ms debounce for auto scan
-    
-    return () => clearTimeout(timeoutId);
-  }, [barcodeSearch, isAutoScan]);
+  const barcodeInputRef = useRef(null);
+  const deliveryQtyRef = useRef(null);
 
   useEffect(() => {
     if (view === 'list') {
@@ -125,55 +116,81 @@ const StoreDelivery = () => {
 
   const handleBarcodeSearch = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
-    if (!barcodeSearch) return;
+    const queryStr = barcodeSearch ? barcodeSearch.trim() : '';
+    if (!queryStr) return;
 
-    if (!isChallanWise) {
-      toast.error('Please check "Rcv. Challan Wise Delivery" first');
-      return;
-    }
-
-    if (!selectedRcvChallan) {
+    if (isChallanWise && !selectedRcvChallan) {
       toast.error('Please select a Rcv. Challan first');
       return;
     }
 
     setIsLoading(true);
     try {
-      // 1. Search product by barcode
-      const { data: prodData, error: prodErr } = await supabase
+      // 1. Search product by exact barcode, user_barcode, or item_code
+      let { data: prodData, error: prodErr } = await supabase
         .from('products')
-        .select('id, item_name, barcode, purchase_price, mrp, wh_stock')
-        .eq('barcode', barcodeSearch)
-        .single();
+        .select('*')
+        .eq('barcode', queryStr);
 
-      if (prodErr || !prodData) {
-        toast.error('Product not found in database');
+      if (!prodData || prodData.length === 0) {
+        const { data: userBarcodeData } = await supabase
+          .from('products')
+          .select('*')
+          .eq('user_barcode', queryStr);
+        if (userBarcodeData && userBarcodeData.length > 0) prodData = userBarcodeData;
+      }
+
+      if (!prodData || prodData.length === 0) {
+        const { data: itemCodeData } = await supabase
+          .from('products')
+          .select('*')
+          .or(`item_code.eq.${queryStr},barcode.ilike.%${queryStr}%`);
+        if (itemCodeData && itemCodeData.length > 0) prodData = itemCodeData;
+      }
+
+      if (!prodData || prodData.length === 0) {
+        toast.error(`Product with barcode "${queryStr}" not found in database`);
         setIsLoading(false);
         return;
       }
 
-      // 2. Check if product exists in the selected purchase receive challan
-      const { data: rcvItems, error: rcvErr } = await supabase
-        .from('purchase_receive_items')
-        .select('id, rcv_qty')
-        .eq('purchase_receive_id', selectedRcvChallan)
-        .eq('product_id', prodData.id)
-        .single();
+      const prod = prodData[0];
 
-      if (rcvErr || !rcvItems) {
-        toast.error('This product does not exist in the selected Purchase Challan.');
-        setIsLoading(false);
-        return;
+      // 2. If Challan Wise Delivery is enabled, verify product belongs to selected challan
+      if (isChallanWise && selectedRcvChallan) {
+        const { data: rcvItems, error: rcvErr } = await supabase
+          .from('purchase_receive_items')
+          .select('id, rcv_qty')
+          .eq('purchase_receive_id', selectedRcvChallan)
+          .eq('product_id', prod.id);
+
+        if (rcvErr || !rcvItems || rcvItems.length === 0) {
+          toast.error('This product does not exist in the selected Purchase Challan.');
+          setIsLoading(false);
+          return;
+        }
       }
 
-      setFormProduct({
-        ...prodData,
-        c_stock: prodData.wh_stock || 0
-      });
-      
+      // 3. Central Store Stock (wh_stock) for Store Delivery
+      const centralStock = prod.wh_stock !== undefined && prod.wh_stock !== null ? Number(prod.wh_stock) : 0;
+
+      const targetProduct = {
+        ...prod,
+        c_stock: centralStock
+      };
+
+      // Populate form fields ONLY. Delivery Quantity remains BLANK. DO NOT auto-add to list.
+      setFormProduct(targetProduct);
       setBarcodeSearch('');
-      toast.success('Product found!');
-      
+      setDeliveryQty('');
+
+      // Focus Delivery Quantity input field for manual quantity entry
+      setTimeout(() => {
+        deliveryQtyRef.current?.focus();
+      }, 100);
+
+      toast.success(`Product "${prod.item_name}" details loaded`);
+
     } catch (err) {
       console.error(err);
       toast.error('Error finding product');
@@ -184,31 +201,54 @@ const StoreDelivery = () => {
 
   const handleAddDeliveryQty = () => {
     if (!formProduct) return toast.error('No product selected');
-    if (!deliveryQty || isNaN(deliveryQty) || Number(deliveryQty) <= 0) return toast.error('Enter a valid delivery quantity');
-    
-    if (Number(deliveryQty) > formProduct.c_stock) {
-      return toast.error('Delivery quantity cannot exceed Current Stock');
+    if (!deliveryQty || isNaN(deliveryQty) || Number(deliveryQty) <= 0) {
+      return toast.error('Please enter a valid delivery quantity');
     }
 
-    const newItem = {
-      id: `temp-${Date.now()}`,
-      product_id: formProduct.id,
-      code: formProduct.barcode,
-      barcode: formProduct.barcode,
-      productName: formProduct.item_name,
-      delQty: Number(deliveryQty),
-      cStock: formProduct.c_stock,
-      cpu: formProduct.purchase_price || 0,
-      salePrice: formProduct.mrp || 0,
-      costValue: (formProduct.purchase_price || 0) * Number(deliveryQty),
-      saleValue: (formProduct.mrp || 0) * Number(deliveryQty)
-    };
+    const qtyNum = Number(deliveryQty);
+    const centralStock = Number(formProduct.c_stock ?? formProduct.wh_stock ?? 0);
 
-    setItems([...items, newItem]);
-    
-    // reset form
+    // Central Store Stock Warning Validation
+    if (qtyNum > centralStock) {
+      return toast.error(`Delivery quantity (${qtyNum} pcs) cannot exceed Central Store Stock (${centralStock} pcs)!`);
+    }
+
+    const existingIdx = items.findIndex(i => i.product_id === formProduct.id);
+    if (existingIdx > -1) {
+      const updated = [...items];
+      const newQty = updated[existingIdx].delQty + qtyNum;
+      if (newQty > centralStock) {
+        return toast.error(`Total delivery quantity (${newQty} pcs) cannot exceed Central Store Stock (${centralStock} pcs)!`);
+      }
+      updated[existingIdx].delQty = newQty;
+      updated[existingIdx].costValue = (formProduct.purchase_price || 0) * newQty;
+      updated[existingIdx].saleValue = (formProduct.mrp || 0) * newQty;
+      setItems(updated);
+      toast.success(`Updated "${formProduct.item_name}" quantity to ${newQty} pcs`);
+    } else {
+      const newItem = {
+        id: `temp-${Date.now()}`,
+        product_id: formProduct.id,
+        code: formProduct.barcode || formProduct.code,
+        barcode: formProduct.barcode || formProduct.code,
+        productName: formProduct.item_name,
+        delQty: qtyNum,
+        cStock: centralStock,
+        cpu: formProduct.purchase_price || 0,
+        salePrice: formProduct.mrp || 0,
+        costValue: (formProduct.purchase_price || 0) * qtyNum,
+        saleValue: (formProduct.mrp || 0) * qtyNum
+      };
+      setItems([...items, newItem]);
+      toast.success(`Added "${formProduct.item_name}" (${qtyNum} pcs) to delivery list`);
+    }
+
+    // Reset form product & refocus barcode search input
     setFormProduct(null);
     setDeliveryQty('');
+    setTimeout(() => {
+      barcodeInputRef.current?.focus();
+    }, 100);
   };
 
   const handleStatusUpdate = async (id, newStatus) => {
@@ -636,6 +676,7 @@ const StoreDelivery = () => {
             <form onSubmit={handleBarcodeSearch}>
               <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Barcode</label>
               <input 
+                ref={barcodeInputRef}
                 type="text" 
                 placeholder="Barcode Scan" 
                 value={barcodeSearch}
@@ -668,8 +709,8 @@ const StoreDelivery = () => {
           
           <div style={{ marginBottom: '15px' }}>
             <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Current Stock</label>
-            <div style={{ padding: '5px 0', borderBottom: '1px dotted var(--border-color)', minHeight: '25px', fontSize: '0.85rem' }}>
-              {formProduct ? formProduct.c_stock : ''}
+            <div style={{ padding: '5px 0', borderBottom: '1px dotted var(--border-color)', minHeight: '25px', fontSize: '0.85rem', color: 'var(--accent-primary)', fontWeight: 'bold' }}>
+              {formProduct ? `${formProduct.c_stock} pcs` : ''}
             </div>
           </div>
           
@@ -677,9 +718,17 @@ const StoreDelivery = () => {
             <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Delivery Quantity</label>
             <div style={{ display: 'flex', gap: '10px' }}>
               <input 
+                ref={deliveryQtyRef}
                 type="number" 
                 value={deliveryQty}
                 onChange={e => setDeliveryQty(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddDeliveryQty();
+                  }
+                }}
+                placeholder="Qty"
                 style={{ width: '100%', border: 'none', borderBottom: '1px dotted var(--border-color)', padding: '5px 0', outline: 'none' }} 
               />
               <button 
@@ -690,18 +739,6 @@ const StoreDelivery = () => {
                 Add
               </button>
             </div>
-          </div>
-          
-          <div style={{ marginTop: '20px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', cursor: 'pointer' }}>
-              <input 
-                type="checkbox" 
-                checked={isAutoScan}
-                onChange={(e) => setIsAutoScan(e.target.checked)}
-                style={{ width: '16px', height: '16px', accentColor: 'var(--accent-primary)' }} 
-              />
-              Auto Scan
-            </label>
           </div>
 
         </div>

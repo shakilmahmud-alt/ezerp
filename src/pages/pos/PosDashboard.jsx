@@ -341,14 +341,38 @@ const PosDashboard = () => {
     }
 
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('products')
         .select(`
           *,
           store_stocks(store_id, stock_qty)
         `)
-        .or(`barcode.eq.${val.trim()},user_barcode.eq.${val.trim()},code.eq.${val.trim()}`)
+        .eq('barcode', val.trim())
         .limit(1);
+
+      if (!data || data.length === 0) {
+        const { data: userBarcodeData } = await supabase
+          .from('products')
+          .select(`
+            *,
+            store_stocks(store_id, stock_qty)
+          `)
+          .eq('user_barcode', val.trim())
+          .limit(1);
+        if (userBarcodeData && userBarcodeData.length > 0) data = userBarcodeData;
+      }
+
+      if (!data || data.length === 0) {
+        const { data: itemCodeData } = await supabase
+          .from('products')
+          .select(`
+            *,
+            store_stocks(store_id, stock_qty)
+          `)
+          .eq('item_code', val.trim())
+          .limit(1);
+        if (itemCodeData && itemCodeData.length > 0) data = itemCodeData;
+      }
 
       if (data && data.length > 0) {
         const prod = data[0];
