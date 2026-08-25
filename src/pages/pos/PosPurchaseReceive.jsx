@@ -132,7 +132,7 @@ const PosPurchaseReceive = () => {
 
       const { data: posData } = await supabase
         .from('purchase_orders')
-        .select('id, po_number, created_at')
+        .select('id, po_number, reference_no, created_at')
         .eq('vendor_id', vendorId)
         .neq('status', 'Received')
         .order('created_at', { ascending: false });
@@ -156,6 +156,10 @@ const PosPurchaseReceive = () => {
         setSelectedItems([]);
       }
     } else if (name === 'purchaseOrderId') {
+      const selectedPO = vendorPOs.find(p => String(p.id) === String(value));
+      if (selectedPO?.reference_no) {
+        setHeaderData(prev => ({ ...prev, referenceNo: selectedPO.reference_no }));
+      }
       if (value) {
         loadItemsForPO(value);
       }
@@ -476,7 +480,7 @@ const PosPurchaseReceive = () => {
               onChange={handleHeaderChange}
             >
               <option value="">-- Select PO --</option>
-              {vendorPOs.map(po => <option key={po.id} value={po.id}>{po.po_number}</option>)}
+              {vendorPOs.map(po => <option key={po.id} value={po.id}>{po.po_number || po.reference_no || 'PO'}</option>)}
             </CustomSelect>
           </div>
 

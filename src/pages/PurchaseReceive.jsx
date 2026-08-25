@@ -144,9 +144,9 @@ const PurchaseReceive = () => {
     try {
       const { data, error } = await supabase
         .from('purchase_orders')
-        .select('id, reference_no, order_date')
+        .select('id, po_number, reference_no, order_date')
         .eq('vendor_id', vendorId)
-        .eq('status', 'Saved')
+        .neq('status', 'Received')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -232,10 +232,15 @@ const PurchaseReceive = () => {
     if (name === 'vendorId') {
       loadPOsForVendor(value);
     } else if (name === 'purchaseOrderId') {
-      setHeaderData({ ...headerData, [name]: value });
+      const selectedPO = vendorPOs.find(p => String(p.id) === String(value));
+      setHeaderData(prev => ({
+        ...prev,
+        [name]: value,
+        referenceNo: selectedPO?.reference_no || prev.referenceNo || ''
+      }));
       loadPOItems(value);
     } else {
-      setHeaderData({ ...headerData, [name]: value });
+      setHeaderData(prev => ({ ...prev, [name]: value }));
     }
   };
 
@@ -552,9 +557,14 @@ const PurchaseReceive = () => {
             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Purchase Order <span style={{color:'red'}}>*</span></label>
             <CustomSelect name="purchaseOrderId" value={headerData.purchaseOrderId} onChange={handleHeaderChange} className="input-animated">
               <option value="">-- Select --</option>
-              {vendorPOs.map(po => (
-                <option key={po.id} value={po.id}>{po.reference_no || 'PO'} - {po.order_date}</option>
-              ))}
+              {vendorPOs.map(po => {
+                const poLabel = po.po_number || po.reference_no || 'PO';
+                return (
+                  <option key={po.id} value={po.id}>
+                    {poLabel} {po.order_date ? `- ${po.order_date}` : ''}
+                  </option>
+                );
+              })}
             </CustomSelect>
           </div>
           <div>
