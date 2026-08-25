@@ -320,6 +320,23 @@ const StoreDelivery = () => {
       const { error: itemsErr } = await supabase.from('requisition_items').insert(itemPayload);
       if (itemsErr) throw itemsErr;
 
+      // Deduct from Central Store (wh_stock)
+      for (const item of items) {
+        const { data: prod } = await supabase
+          .from('products')
+          .select('wh_stock')
+          .eq('id', item.product_id)
+          .single();
+        if (prod) {
+          const currentWh = Number(prod.wh_stock || 0);
+          const newWh = Math.max(0, currentWh - Number(item.delQty || 0));
+          await supabase
+            .from('products')
+            .update({ wh_stock: newWh })
+            .eq('id', item.product_id);
+        }
+      }
+
       toast.success(`Delivery saved successfully! Challan No: ${challanNo}`);
       generatePDF(challanNo);
       handleReset();

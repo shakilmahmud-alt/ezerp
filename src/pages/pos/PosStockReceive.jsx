@@ -326,64 +326,53 @@ const PosStockReceive = () => {
             .single();
 
           if (prodData) {
-            if (!isShopToShop) {
-              const newWhStock = Number(prodData.wh_stock || 0) - qty;
-              await supabase
-                .from('products')
-                .update({ 
-                  wh_stock: newWhStock,
-                  mrp: item.mrp
-                })
-                .eq('id', item.productId);
-            } else {
-              // Just update MRP if needed for shop-to-shop transfer
-              await supabase
-                .from('products')
-                .update({ 
-                  mrp: item.mrp
-                })
-                .eq('id', item.productId);
-            }
-              
-            // Update store_stocks
-            const { data: existingStock } = await supabase
-              .from('store_stocks')
-              .select('id, stock_qty')
-              .eq('store_id', posTerminal.store_id)
-              .eq('product_id', item.productId)
-              .single();
-
-            const newStoreQty = existingStock 
-              ? Number(existingStock.stock_qty || 0) + qty 
-              : qty;
-
-            if (existingStock) {
-              await supabase
-                .from('store_stocks')
-                .update({ stock_qty: newStoreQty })
-                .eq('id', existingStock.id);
-            } else {
-              await supabase
-                .from('store_stocks')
-                .insert({
-                  store_id: posTerminal.store_id,
-                  product_id: item.productId,
-                  stock_qty: newStoreQty
-                });
-            }
-
-            // Also sync str_stock on products table (used by POS stock view)
-            const { data: freshProd } = await supabase
-              .from('products')
-              .select('str_stock')
-              .eq('id', item.productId)
-              .single();
-            const newStrStock = Number(freshProd?.str_stock || 0) + qty;
+            // Update MRP on products table if necessary
             await supabase
               .from('products')
-              .update({ str_stock: newStrStock })
+              .update({ 
+                mrp: item.mrp
+              })
               .eq('id', item.productId);
+          }    
+          
+          // Update store_stocks
+          const { data: existingStock } = await supabase
+            .from('store_stocks')
+            .select('id, stock_qty')
+            .eq('store_id', posTerminal.store_id)
+            .eq('product_id', item.productId)
+            .single();
+
+          const newStoreQty = existingStock 
+            ? Number(existingStock.stock_qty || 0) + qty 
+            : qty;
+
+          if (existingStock) {
+            await supabase
+              .from('store_stocks')
+              .update({ stock_qty: newStoreQty })
+              .eq('id', existingStock.id);
+          } else {
+            await supabase
+              .from('store_stocks')
+              .insert({
+                store_id: posTerminal.store_id,
+                product_id: item.productId,
+                stock_qty: newStoreQty
+              });
           }
+
+          // Also sync str_stock on products table (used by POS stock view)
+          const { data: freshProd } = await supabase
+            .from('products')
+            .select('str_stock')
+            .eq('id', item.productId)
+            .single();
+          const newStrStock = Number(freshProd?.str_stock || 0) + qty;
+          await supabase
+            .from('products')
+            .update({ str_stock: newStrStock })
+            .eq('id', item.productId);
         }
       }
 

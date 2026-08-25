@@ -67,6 +67,14 @@ const ProductQuickSearch = () => {
     }));
   };
 
+  const getStoreStock = (product, storeKeyword) => {
+    if (!product.store_stocks || !Array.isArray(product.store_stocks)) return 0;
+    const store = stores.find(s => s.name?.toLowerCase().includes(storeKeyword.toLowerCase()));
+    if (!store) return 0;
+    const ss = product.store_stocks.find(s => String(s.store_id) === String(store.id));
+    return Number(ss?.stock_qty) || 0;
+  };
+
   const handleSearch = async () => {
     setIsLoading(true);
     try {
@@ -91,13 +99,6 @@ const ProductQuickSearch = () => {
       if (filters.itemName) query = query.ilike('item_name', `%${filters.itemName}%`);
       if (filters.searchQuery) {
         query = query.or(`item_name.ilike.%${filters.searchQuery}%,code.ilike.%${filters.searchQuery}%,barcode.ilike.%${filters.searchQuery}%`);
-      }
-      
-      if (!filters.showZeroStock) {
-        // If a specific store is selected, we filter on-the-fly in JS below
-        if (!filters.store) {
-          query = query.or('wh_stock.gt.0,str_stock.gt.0');
-        }
       }
 
       if (filters.mrpOperator && filters.mrpValue) {
@@ -152,6 +153,19 @@ const ProductQuickSearch = () => {
         data = filtered;
       }
 
+      // Always ensure store_stocks are attached
+      const { data: allStoreStocks } = await supabase.from('store_stocks').select('*');
+      if (allStoreStocks && allStoreStocks.length > 0 && data) {
+        const ssGroup = {};
+        allStoreStocks.forEach(ss => {
+          if (!ssGroup[ss.product_id]) ssGroup[ss.product_id] = [];
+          ssGroup[ss.product_id].push(ss);
+        });
+        data.forEach(p => {
+          p.store_stocks = ssGroup[p.id] || p.store_stocks || [];
+        });
+      }
+
       // Attach category/brand labels if missing from nested joins
       if (data && data.length > 0) {
         data.forEach(p => {
@@ -163,18 +177,30 @@ const ProductQuickSearch = () => {
         });
       }
       
-      // Perform JS filtering for selected store stock
-      if (filters.store && data) {
-        if (filters.store === 'central_store') {
-          if (!filters.showZeroStock) {
-            data = data.filter(p => (p.wh_stock || 0) > 0);
-          }
-        } else {
-          if (!filters.showZeroStock) {
+      // Perform Zero Stock and Store Filtering
+      if (data) {
+        if (!filters.showZeroStock) {
+          if (filters.store === 'central_store') {
+            data = data.filter(p => (Number(p.wh_stock) || 0) > 0);
+          } else if (filters.store) {
             data = data.filter(p => {
-              const qty = p.store_stocks?.find(s => s.store_id === filters.store)?.stock_qty || 0;
-              return qty > 0;
+              const qty = p.store_stocks?.find(s => String(s.store_id) === String(filters.store))?.stock_qty || 0;
+              return Number(qty) > 0;
             });
+          } else {
+            // When no store is selected, filter out if total stock across CS and all stores is 0
+            data = data.filter(p => {
+              const csStock = Number(p.wh_stock) || 0;
+              const storeStocksTotal = (p.store_stocks || []).reduce((sum, s) => sum + (Number(s.stock_qty) || 0), 0);
+              return (csStock + storeStocksTotal) > 0;
+            });
+          }
+        } else if (filters.store) {
+          // If showZeroStock is checked but a specific store is filtered
+          if (filters.store === 'central_store') {
+            // No extra filter needed or keep all
+          } else {
+            data = data.filter(p => p.store_stocks?.some(s => String(s.store_id) === String(filters.store)));
           }
         }
       }
@@ -214,20 +240,11 @@ const ProductQuickSearch = () => {
       Brand: p.brand?.name || '',
       Vendor: p.vendor?.name || '',
       Status: p.status || 'Active',
-      Stock: filters.store === 'central_store'
-        ? (p.wh_stock || 0)
-        : filters.store
-          ? (p.store_stocks?.find(s => s.store_id === filters.store)?.stock_qty || 0)
-          : (() => {
-              const whStockText = (p.wh_stock || 0) > 0 ? [`${p.wh_stock} (Central Store)`] : [];
-              const shopStocksText = p.store_stocks
-                ?.filter(s => s.stock_qty > 0)
-                ?.map(s => {
-                  const storeName = stores.find(st => st.id === s.store_id)?.name || 'Store';
-                  return `${s.stock_qty} (${storeName})`;
-                }) || [];
-              return [...whStockText, ...shopStocksText].join(', ') || '0';
-            })(),
+      'CS Stock': Number(p.wh_stock) || 0,
+      'Banani': getStoreStock(p, 'banani'),
+      'Dhn': getStoreStock(p, 'dhanmondi'),
+      'Gul 1': getStoreStock(p, 'gulshan'),
+      'Uttara': getStoreStock(p, 'uttara'),
       'VAT(%)': p.sale_vat_percent || 0,
       CPU: p.purchase_price,
       MRP: p.mrp,
@@ -380,7 +397,11 @@ const ProductQuickSearch = () => {
                 <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>Brand</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>Vendor</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>Status</th>
-                <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>Stock</th>
+                <th style={{ textAlign: 'center', padding: '12px', fontWeight: 600, backgroundColor: 'rgba(46,111,64,0.08)' }}>CS Stock</th>
+                <th style={{ textAlign: 'center', padding: '12px', fontWeight: 600, backgroundColor: 'rgba(46,111,64,0.08)' }}>Banani</th>
+                <th style={{ textAlign: 'center', padding: '12px', fontWeight: 600, backgroundColor: 'rgba(46,111,64,0.08)' }}>Dhn</th>
+                <th style={{ textAlign: 'center', padding: '12px', fontWeight: 600, backgroundColor: 'rgba(46,111,64,0.08)' }}>Gul 1</th>
+                <th style={{ textAlign: 'center', padding: '12px', fontWeight: 600, backgroundColor: 'rgba(46,111,64,0.08)' }}>Uttara</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>VAT(%)</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>CPU</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>MRP</th>
@@ -391,7 +412,7 @@ const ProductQuickSearch = () => {
             <tbody>
               {isLoading && products.length === 0 ? (
                 <tr>
-                  <td colSpan="16" style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  <td colSpan="21" style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                     Loading...
                   </td>
                 </tr>
@@ -409,22 +430,20 @@ const ProductQuickSearch = () => {
                     <td style={{ padding: '12px' }}>{p.brand?.name}</td>
                     <td style={{ padding: '12px' }}>{p.vendor?.name}</td>
                     <td style={{ padding: '12px' }}>{p.status || 'Active'}</td>
-                    <td style={{ padding: '12px', fontWeight: 'bold' }}>
-                      {filters.store === 'central_store'
-                        ? (p.wh_stock || 0)
-                        : filters.store
-                          ? (p.store_stocks?.find(s => s.store_id === filters.store)?.stock_qty || 0)
-                          : (() => {
-                              const whStockText = (p.wh_stock || 0) > 0 ? [`${p.wh_stock} (Central Store)`] : [];
-                              const shopStocksText = p.store_stocks
-                                ?.filter(s => s.stock_qty > 0)
-                                ?.map(s => {
-                                  const storeName = stores.find(st => st.id === s.store_id)?.name || 'Store';
-                                  return `${s.stock_qty} (${storeName})`;
-                                }) || [];
-                              return [...whStockText, ...shopStocksText].join(', ') || '0';
-                            })()
-                      }
+                    <td style={{ padding: '12px', textAlign: 'center', fontWeight: 'bold', backgroundColor: 'rgba(46,111,64,0.03)' }}>
+                      {Number(p.wh_stock) || 0}
+                    </td>
+                    <td style={{ padding: '12px', textAlign: 'center', fontWeight: 'bold', backgroundColor: 'rgba(46,111,64,0.03)' }}>
+                      {getStoreStock(p, 'banani')}
+                    </td>
+                    <td style={{ padding: '12px', textAlign: 'center', fontWeight: 'bold', backgroundColor: 'rgba(46,111,64,0.03)' }}>
+                      {getStoreStock(p, 'dhanmondi')}
+                    </td>
+                    <td style={{ padding: '12px', textAlign: 'center', fontWeight: 'bold', backgroundColor: 'rgba(46,111,64,0.03)' }}>
+                      {getStoreStock(p, 'gulshan')}
+                    </td>
+                    <td style={{ padding: '12px', textAlign: 'center', fontWeight: 'bold', backgroundColor: 'rgba(46,111,64,0.03)' }}>
+                      {getStoreStock(p, 'uttara')}
                     </td>
                     <td style={{ padding: '12px' }}>{p.sale_vat_percent || 0}</td>
                     <td style={{ padding: '12px' }}>{p.purchase_price}</td>
@@ -435,7 +454,7 @@ const ProductQuickSearch = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="16" style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  <td colSpan="21" style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                     No products found matching the search criteria.
                   </td>
                 </tr>
