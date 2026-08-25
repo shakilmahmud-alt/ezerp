@@ -87,8 +87,31 @@ class QueryBuilder {
     return this;
   }
 
+  is(column, value) {
+    if (value === null) {
+      this.filters.push(`${encodeURIComponent(column)}=is.null`);
+    } else {
+      this.filters.push(`${encodeURIComponent(column)}=eq.${encodeURIComponent(value)}`);
+    }
+    return this;
+  }
+
+  not(column, operator, value) {
+    if (operator === 'in') {
+      const list = Array.isArray(value) ? value.join(',') : String(value).replace(/[()]/g, '');
+      this.filters.push(`${encodeURIComponent(column)}=not.in.(${encodeURIComponent(list)})`);
+    } else if (operator === 'is' && value === null) {
+      this.filters.push(`${encodeURIComponent(column)}=not.is.null`);
+    } else if (operator === 'eq') {
+      this.filters.push(`${encodeURIComponent(column)}=neq.${encodeURIComponent(value)}`);
+    } else {
+      this.filters.push(`${encodeURIComponent(column)}=neq.${encodeURIComponent(value)}`);
+    }
+    return this;
+  }
+
   in(column, values) {
-    const list = Array.isArray(values) ? values.join(',') : values;
+    const list = Array.isArray(values) ? values.join(',') : String(values).replace(/[()]/g, '');
     this.filters.push(`${encodeURIComponent(column)}=in.(${encodeURIComponent(list)})`);
     return this;
   }

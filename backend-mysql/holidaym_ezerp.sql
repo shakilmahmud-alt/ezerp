@@ -1,7 +1,7 @@
 -- ========================================================
--- EG ERP MySQL Database Migration Export
+-- EG ERP MySQL Complete Database Migration Dump
 -- Target Database: holidaym_ezerp
--- Generated Date: 2026-08-25T05:21:11.362Z
+-- Generated Date: 2026-08-25T06:02:15.515Z
 -- ========================================================
 
 SET FOREIGN_KEY_CHECKS = 0;
@@ -1091,10 +1091,10 @@ CREATE TABLE `promotions` (
   `get_item_count` VARCHAR(255),
   `coupon_no` VARCHAR(255),
   `coupon_type` VARCHAR(255),
-  `coupon_disc_val` VARCHAR(255),
-  `coupon_max_disc_amt` VARCHAR(255),
-  `coupon_redeem_limit` VARCHAR(255),
-  `coupon_min_purchase` VARCHAR(255)
+  `coupon_disc_val` DECIMAL(15,2) DEFAULT 0.00,
+  `coupon_max_disc_amt` DECIMAL(15,2) DEFAULT 0.00,
+  `coupon_redeem_limit` DECIMAL(15,2) DEFAULT 0.00,
+  `coupon_min_purchase` DECIMAL(15,2) DEFAULT 0.00
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dumping data for table `promotions` (3 rows)

@@ -29,7 +29,7 @@ $body = json_decode($rawInput, true);
 $table = isset($_GET['table']) ? trim($_GET['table']) : '';
 $action = isset($_GET['action']) ? trim($_GET['action']) : '';
 
-// Validate Table Name (alphanumeric and underscores only to prevent SQL injection)
+// Validate Table Name
 if ($table && !preg_match('/^[a-zA-Z0-9_]+$/', $table)) {
     http_response_code(400);
     echo json_encode(["status" => "error", "message" => "Invalid table name"]);
@@ -38,14 +38,14 @@ if ($table && !preg_match('/^[a-zA-Z0-9_]+$/', $table)) {
 
 try {
     // ----------------------------------------------------
-    // 1. GET Requests: Querying & Filtering
+    // 1. GET Requests: Querying, Filtering & Relations
     // ----------------------------------------------------
     if ($method === 'GET') {
         if (!$table) {
             echo json_encode([
                 "status" => "online",
                 "service" => "EG ERP MySQL REST API",
-                "version" => "2.0.0",
+                "version" => "2.1.0",
                 "database" => DB_NAME
             ]);
             exit();
@@ -68,48 +68,69 @@ try {
             if (!preg_match('/^[a-zA-Z0-9_]+$/', $key)) continue;
 
             if (is_string($val)) {
-                // Pattern matching for eq, in, gte, lte, like, is
-                if (str_starts_with($val, 'eq.')) {
-                    $whereClauses[] = "`{$key}` = ?";
-                    $params[] = substr($val, 3);
-                } elseif (str_starts_with($val, 'neq.')) {
-                    $whereClauses[] = "`{$key}` != ?";
-                    $params[] = substr($val, 4);
-                } elseif (str_starts_with($val, 'gt.')) {
-                    $whereClauses[] = "`{$key}` > ?";
-                    $params[] = substr($val, 3);
-                } elseif (str_starts_with($val, 'gte.')) {
-                    $whereClauses[] = "`{$key}` >= ?";
-                    $params[] = substr($val, 4);
-                } elseif (str_starts_with($val, 'lt.')) {
-                    $whereClauses[] = "`{$key}` < ?";
-                    $params[] = substr($val, 3);
-                } elseif (str_starts_with($val, 'lte.')) {
-                    $whereClauses[] = "`{$key}` <= ?";
-                    $params[] = substr($val, 4);
-                } elseif (str_starts_with($val, 'like.')) {
-                    $whereClauses[] = "`{$key}` LIKE ?";
-                    $params[] = substr($val, 5);
-                } elseif (str_starts_with($val, 'ilike.')) {
-                    $whereClauses[] = "`{$key}` LIKE ?";
-                    $params[] = substr($val, 6);
+                // NOT IN pattern
+                if (str_starts_with($val, 'not.in.(') && str_ends_with($val, ')')) {
+                    $inValues = explode(',', substr($val, 8, -1));
+                    $cleanVals = [];
+                    foreach ($inValues as $iv) {
+                        $c = trim($iv, " '\"()");
+                        if ($c !== '') $cleanVals[] = $c;
+                    }
+                    if (count($cleanVals) > 0) {
+                        $placeholders = implode(',', array_fill(0, count($cleanVals), '?'));
+                        $whereClauses[] = "`{$table}`.`{$key}` NOT IN ({$placeholders})";
+                        foreach ($cleanVals as $cv) {
+                            $params[] = $cv;
+                        }
+                    }
                 } elseif (str_starts_with($val, 'in.(') && str_ends_with($val, ')')) {
                     $inValues = explode(',', substr($val, 4, -1));
-                    $placeholders = implode(',', array_fill(0, count($inValues), '?'));
-                    $whereClauses[] = "`{$key}` IN ({$placeholders})";
+                    $cleanVals = [];
                     foreach ($inValues as $iv) {
-                        $params[] = trim($iv, " '\"");
+                        $c = trim($iv, " '\"()");
+                        if ($c !== '') $cleanVals[] = $c;
                     }
-                } elseif ($val === 'is.null') {
-                    $whereClauses[] = "`{$key}` IS NULL";
+                    if (count($cleanVals) > 0) {
+                        $placeholders = implode(',', array_fill(0, count($cleanVals), '?'));
+                        $whereClauses[] = "`{$table}`.`{$key}` IN ({$placeholders})";
+                        foreach ($cleanVals as $cv) {
+                            $params[] = $cv;
+                        }
+                    }
                 } elseif ($val === 'not.is.null') {
-                    $whereClauses[] = "`{$key}` IS NOT NULL";
+                    $whereClauses[] = "`{$table}`.`{$key}` IS NOT NULL";
+                } elseif ($val === 'is.null') {
+                    $whereClauses[] = "`{$table}`.`{$key}` IS NULL";
+                } elseif (str_starts_with($val, 'eq.')) {
+                    $whereClauses[] = "`{$table}`.`{$key}` = ?";
+                    $params[] = substr($val, 3);
+                } elseif (str_starts_with($val, 'neq.')) {
+                    $whereClauses[] = "`{$table}`.`{$key}` != ?";
+                    $params[] = substr($val, 4);
+                } elseif (str_starts_with($val, 'gt.')) {
+                    $whereClauses[] = "`{$table}`.`{$key}` > ?";
+                    $params[] = substr($val, 3);
+                } elseif (str_starts_with($val, 'gte.')) {
+                    $whereClauses[] = "`{$table}`.`{$key}` >= ?";
+                    $params[] = substr($val, 4);
+                } elseif (str_starts_with($val, 'lt.')) {
+                    $whereClauses[] = "`{$table}`.`{$key}` < ?";
+                    $params[] = substr($val, 3);
+                } elseif (str_starts_with($val, 'lte.')) {
+                    $whereClauses[] = "`{$table}`.`{$key}` <= ?";
+                    $params[] = substr($val, 4);
+                } elseif (str_starts_with($val, 'like.')) {
+                    $whereClauses[] = "`{$table}`.`{$key}` LIKE ?";
+                    $params[] = substr($val, 5);
+                } elseif (str_starts_with($val, 'ilike.')) {
+                    $whereClauses[] = "`{$table}`.`{$key}` LIKE ?";
+                    $params[] = substr($val, 6);
                 } else {
-                    $whereClauses[] = "`{$key}` = ?";
+                    $whereClauses[] = "`{$table}`.`{$key}` = ?";
                     $params[] = $val;
                 }
             } else {
-                $whereClauses[] = "`{$key}` = ?";
+                $whereClauses[] = "`{$table}`.`{$key}` = ?";
                 $params[] = $val;
             }
         }
@@ -137,7 +158,7 @@ try {
                 $col = $parts[0];
                 $dir = isset($parts[1]) && strtolower($parts[1]) === 'desc' ? 'DESC' : 'ASC';
                 if (preg_match('/^[a-zA-Z0-9_]+$/', $col)) {
-                    $orderList[] = "`{$col}` {$dir}";
+                    $orderList[] = "`{$table}`.`{$col}` {$dir}";
                 }
             }
             if (count($orderList) > 0) {
@@ -155,12 +176,81 @@ try {
         }
 
         // Execute Select
-        $querySql = "SELECT * FROM `{$table}` {$whereSql}{$orderSql}{$limitSql}";
+        $querySql = "SELECT `{$table}`.* FROM `{$table}` {$whereSql}{$orderSql}{$limitSql}";
         $stmt = $pdo->prepare($querySql);
         $stmt->execute($params);
         $rows = $stmt->fetchAll();
 
-        // Decode JSON fields if any
+        // ----------------------------------------------------
+        // Foreign Key Relation Resolution (Auto Nested Objects)
+        // ----------------------------------------------------
+        if (count($rows) > 0) {
+            // 1. If table is 'employees' and select requested 'stores' or 'stores(name)'
+            if ($table === 'employees' && str_contains($select, 'stores')) {
+                $storeIds = array_unique(array_filter(array_column($rows, 'store_id')));
+                $storesMap = [];
+                if (count($storeIds) > 0) {
+                    $stPh = implode(',', array_fill(0, count($storeIds), '?'));
+                    $stStmt = $pdo->prepare("SELECT `id`, `name` FROM `stores` WHERE `id` IN ({$stPh})");
+                    $stStmt->execute(array_values($storeIds));
+                    foreach ($stStmt->fetchAll() as $st) {
+                        $storesMap[$st['id']] = $st;
+                    }
+                }
+                foreach ($rows as &$r) {
+                    $r['stores'] = isset($r['store_id']) && isset($storesMap[$r['store_id']]) ? $storesMap[$r['store_id']] : null;
+                }
+            }
+
+            // 2. If table is 'products' and select requested category, brand, vendor, or store_stocks
+            if ($table === 'products') {
+                $catIds = array_unique(array_filter(array_column($rows, 'category_id')));
+                if (count($catIds) > 0 && str_contains($select, 'category')) {
+                    $ph = implode(',', array_fill(0, count($catIds), '?'));
+                    $cStmt = $pdo->prepare("SELECT `id`, `name` FROM `categories` WHERE `id` IN ({$ph})");
+                    $cStmt->execute(array_values($catIds));
+                    $catMap = [];
+                    foreach ($cStmt->fetchAll() as $c) { $catMap[$c['id']] = $c; }
+                    foreach ($rows as &$r) {
+                        $r['category'] = isset($r['category_id']) && isset($catMap[$r['category_id']]) ? $catMap[$r['category_id']] : null;
+                        $r['categories'] = $r['category'];
+                    }
+                }
+
+                if (str_contains($select, 'store_stocks')) {
+                    $prodIds = array_unique(array_filter(array_column($rows, 'id')));
+                    if (count($prodIds) > 0) {
+                        $pPh = implode(',', array_fill(0, count($prodIds), '?'));
+                        $ssStmt = $pdo->prepare("SELECT `id`, `store_id`, `product_id`, `stock_qty` FROM `store_stocks` WHERE `product_id` IN ({$pPh})");
+                        $ssStmt->execute(array_values($prodIds));
+                        $ssGroup = [];
+                        foreach ($ssStmt->fetchAll() as $ss) {
+                            $ssGroup[$ss['product_id']][] = $ss;
+                        }
+                        foreach ($rows as &$r) {
+                            $r['store_stocks'] = isset($ssGroup[$r['id']]) ? $ssGroup[$r['id']] : [];
+                        }
+                    }
+                }
+            }
+
+            // 3. If table is 'sale_items' and select requested 'sale'
+            if ($table === 'sale_items' && str_contains($select, 'sale')) {
+                $saleIds = array_unique(array_filter(array_column($rows, 'sale_id')));
+                if (count($saleIds) > 0) {
+                    $sPh = implode(',', array_fill(0, count($saleIds), '?'));
+                    $sStmt = $pdo->prepare("SELECT `id`, `invoice_no`, `sale_date`, `sales_executive_name`, `created_at` FROM `sales` WHERE `id` IN ({$sPh})");
+                    $sStmt->execute(array_values($saleIds));
+                    $salesMap = [];
+                    foreach ($sStmt->fetchAll() as $s) { $salesMap[$s['id']] = $s; }
+                    foreach ($rows as &$r) {
+                        $r['sale'] = isset($r['sale_id']) && isset($salesMap[$r['sale_id']]) ? $salesMap[$r['sale_id']] : null;
+                    }
+                }
+            }
+        }
+
+        // Decode JSON strings if any
         foreach ($rows as &$r) {
             foreach ($r as $k => $v) {
                 if (is_string($v) && (str_starts_with($v, '{') || str_starts_with($v, '['))) {
