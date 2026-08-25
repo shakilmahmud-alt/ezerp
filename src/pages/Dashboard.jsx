@@ -4,7 +4,7 @@ import {
   AreaChart, Area,
   PieChart, Pie, Cell, Legend
 } from 'recharts';
-import { Clock, FileText, CalendarDays, Calendar, RefreshCw, Store, MapPin, Filter, XCircle } from 'lucide-react';
+import { Clock, FileText, CalendarDays, Calendar, RefreshCw, Store, MapPin, Filter, XCircle, Award, Search, TrendingUp, PackageCheck, Layers } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import CustomSelect from '../components/CustomSelect';
 
@@ -49,9 +49,13 @@ const Dashboard = () => {
   const [categoriesData, setCategoriesData] = useState([]);
   const [customersData, setCustomersData] = useState([]);
   const [customerTypesData, setCustomerTypesData] = useState([]);
+  const [requisitionsData, setRequisitionsData] = useState([]);
+  const [requisitionItemsData, setRequisitionItemsData] = useState([]);
+  const [storeStocksData, setStoreStocksData] = useState([]);
   
   const [isLoading, setIsLoading] = useState(true);
   const [storeSearchText, setStoreSearchText] = useState('');
+  const [top20SearchText, setTop20SearchText] = useState('');
 
   const fetchDashboardData = async () => {
     setIsLoading(true);
@@ -64,16 +68,22 @@ const Dashboard = () => {
         prodRes, 
         catRes, 
         custRes, 
-        typesRes
+        typesRes,
+        reqsRes,
+        reqItemsRes,
+        storeStocksRes
       ] = await Promise.all([
         supabase.from('areas').select('id, name').order('name'),
         supabase.from('stores').select('id, name, area_id').eq('status', 'ACTIVE').order('name'),
         supabase.from('sales').select('*').order('sale_date', { ascending: false }),
         supabase.from('sale_items').select('*'),
-        supabase.from('products').select('id, item_name, barcode, category_id'),
+        supabase.from('products').select('id, code, barcode, item_name, purchase_price, mrp, category_id, wh_stock, str_stock'),
         supabase.from('categories').select('id, name'),
         supabase.from('customers').select('id, first_name, last_name, customer_type_id'),
-        supabase.from('customer_types').select('id, name')
+        supabase.from('customer_types').select('id, name'),
+        supabase.from('requisitions').select('id, shop_id, requisition_no, status, requisition_date'),
+        supabase.from('requisition_items').select('id, requisition_id, product_id, barcode, req_qty, approve_qty, cpu, mrp'),
+        supabase.from('store_stocks').select('id, store_id, product_id, stock_qty')
       ]);
 
       if (areasRes.data) setAreas(areasRes.data);
@@ -84,6 +94,9 @@ const Dashboard = () => {
       if (catRes.data) setCategoriesData(catRes.data);
       if (custRes.data) setCustomersData(custRes.data);
       if (typesRes.data) setCustomerTypesData(typesRes.data);
+      if (reqsRes.data) setRequisitionsData(reqsRes.data);
+      if (reqItemsRes.data) setRequisitionItemsData(reqItemsRes.data);
+      if (storeStocksRes.data) setStoreStocksData(storeStocksRes.data);
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
     } finally {
@@ -466,6 +479,117 @@ const Dashboard = () => {
     // Sort descending by period sales / today sales
     return searched.sort((a, b) => b.periodAmount - a.periodAmount || b.todayAmount - a.todayAmount);
   }, [filteredStores, filteredSales, salesData, todayStr, storeSearchText]);
+
+  // ----------------------------------------------------
+  // Table 3: 20 Top Selling Products (Filtered by Sell-Through Rate >= 80%, Max 20)
+  // Formula: Sell-Through Rate = (Sold Quantity ÷ Received Quantity) × 100
+  // ----------------------------------------------------
+  const top20SellingProducts = useMemo(() => {
+    // 1. Determine active store IDs in current filter scope
+    let activeStoreIds = null;
+    if (selectedStore) {
+      activeStoreIds = new Set([String(selectedStore)]);
+    } else if (selectedArea) {
+      activeStoreIds = new Set(filteredStores.map(st => String(st.id)));
+    }
+
+    // 2. Filter sales within scope & date range
+    const relevantSales = salesData.filter(s => {
+      if (activeStoreIds && !activeStoreIds.has(String(s.store_id))) return false;
+      if (startDate && toLocalDateStr(s.sale_date) < startDate) return false;
+      if (endDate && toLocalDateStr(s.sale_date) > endDate) return false;
+      return true;
+    });
+    const relevantSaleIds = new Set(relevantSales.map(s => s.id));
+
+    // 3. Aggregate sold_qty by product_id
+    const soldQtyMap = {};
+    saleItemsData.forEach(item => {
+      if (relevantSaleIds.has(item.sale_id)) {
+        soldQtyMap[item.product_id] = (soldQtyMap[item.product_id] || 0) + Number(item.qty || 0);
+      }
+    });
+
+    // 4. Aggregate received_qty by product_id
+    const relevantReqs = requisitionsData.filter(r => {
+      if (activeStoreIds && !activeStoreIds.has(String(r.shop_id))) return false;
+      return true;
+    });
+    const relevantReqIds = new Set(relevantReqs.map(r => r.id));
+
+    const receivedQtyMap = {};
+    requisitionItemsData.forEach(item => {
+      if (relevantReqIds.has(item.requisition_id)) {
+        const qty = Number(item.approve_qty || item.req_qty || 0);
+        receivedQtyMap[item.product_id] = (receivedQtyMap[item.product_id] || 0) + qty;
+      }
+    });
+
+    // 5. Aggregate branch balance / current stock
+    const branchStockMap = {};
+    storeStocksData.forEach(ss => {
+      if (!activeStoreIds || activeStoreIds.has(String(ss.store_id))) {
+        branchStockMap[ss.product_id] = (branchStockMap[ss.product_id] || 0) + Number(ss.stock_qty || 0);
+      }
+    });
+
+    // 6. Build the list strictly for products with Sell-Through Rate >= 80%
+    const qualifyingList = [];
+
+    productsData.forEach(prod => {
+      const soldQty = soldQtyMap[prod.id] || 0;
+      const receivedQty = receivedQtyMap[prod.id] || (branchStockMap[prod.id] !== undefined ? branchStockMap[prod.id] + soldQty : 0);
+      const balance = branchStockMap[prod.id] !== undefined ? branchStockMap[prod.id] : Math.max(0, receivedQty - soldQty);
+
+      // Formula: Sell-Through Rate = (Sold Quantity ÷ Received Quantity) × 100
+      if (receivedQty > 0 && soldQty > 0) {
+        const str = (soldQty / receivedQty) * 100;
+        if (str >= 80) {
+          qualifyingList.push({
+            id: prod.id,
+            barcode: prod.barcode || prod.code || 'N/A',
+            name: prod.item_name || 'Product',
+            cost_price: Number(prod.purchase_price || 0),
+            mrp: Number(prod.mrp || 0),
+            received_qty: receivedQty,
+            sold_qty: soldQty,
+            balance: balance,
+            str: str.toFixed(1)
+          });
+        }
+      }
+    });
+
+    // 7. Sort by highest Sell-Through Rate descending, take top 20 max
+    const top20 = qualifyingList
+      .sort((a, b) => parseFloat(b.str) - parseFloat(a.str) || b.sold_qty - a.sold_qty)
+      .slice(0, 20)
+      .map((item, idx) => ({ ...item, sl: idx + 1 }));
+
+    return top20;
+  }, [
+    productsData, 
+    saleItemsData, 
+    salesData, 
+    requisitionsData, 
+    requisitionItemsData, 
+    storeStocksData, 
+    selectedStore, 
+    selectedArea, 
+    filteredStores, 
+    startDate, 
+    endDate
+  ]);
+
+  // Filtered Top 20 based on user's table search input
+  const filteredTop20Products = useMemo(() => {
+    if (!top20SearchText.trim()) return top20SellingProducts;
+    const q = top20SearchText.trim().toLowerCase();
+    return top20SellingProducts.filter(p => 
+      p.name.toLowerCase().includes(q) || 
+      p.barcode.toLowerCase().includes(q)
+    );
+  }, [top20SellingProducts, top20SearchText]);
 
   return (
     <div style={{ backgroundColor: '#f4f6f9', minHeight: '100vh', padding: '20px', color: '#1e293b', fontFamily: 'Segoe UI, Roboto, Helvetica, Arial, sans-serif' }}>
@@ -982,6 +1106,151 @@ const Dashboard = () => {
               </ResponsiveContainer>
             )}
           </div>
+        </div>
+
+      </div>
+
+      {/* Premier Full-Width Section: 20 Top Selling Products Table */}
+      <div style={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '18px', boxShadow: '0 2px 6px rgba(0,0,0,0.03)', marginBottom: '20px' }}>
+        
+        {/* Table Header Row */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Award size={18} color="#2e6f40" />
+              <h3 style={{ fontSize: '1.05rem', color: '#0f172a', margin: 0, fontWeight: 700 }}>
+                20 Top Selling Products
+              </h3>
+              {isDateFilterActive && (
+                <span style={{ fontSize: '0.75rem', backgroundColor: '#eff6ff', color: '#1d4ed8', fontWeight: 600, padding: '2px 8px', borderRadius: '12px' }}>
+                  Selected Period
+                </span>
+              )}
+            </div>
+            <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#64748b' }}>
+              {selectedStore 
+                ? `Showing top selling products for: ${stores.find(s => String(s.id) === String(selectedStore))?.name || 'Selected Branch'}` 
+                : selectedArea 
+                  ? `Aggregated across branches in Area: ${areas.find(a => String(a.id) === String(selectedArea))?.name || 'Selected Area'} (${filteredStores.length} Branches)` 
+                  : 'Total aggregated received qty, sold qty, and stock balance across all branches'}
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ position: 'relative' }}>
+              <Search size={14} color="#94a3b8" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
+              <input 
+                type="text" 
+                placeholder="Filter products..." 
+                value={top20SearchText}
+                onChange={(e) => setTop20SearchText(e.target.value)}
+                style={{ 
+                  padding: '6px 12px 6px 30px', 
+                  border: '1px solid #cbd5e1', 
+                  borderRadius: '4px', 
+                  width: '200px', 
+                  fontSize: '0.8rem',
+                  outline: 'none'
+                }} 
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Wide Table */}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
+            <thead>
+              <tr style={{ background: '#f8fafc', borderBottom: '2px solid #cbd5e1', color: '#334155' }}>
+                <th style={{ textAlign: 'center', padding: '10px 8px', width: '45px' }}>SL</th>
+                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Barcode</th>
+                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Product Name</th>
+                <th style={{ textAlign: 'right', padding: '10px 12px' }}>Cost Price</th>
+                <th style={{ textAlign: 'right', padding: '10px 12px' }}>MRP</th>
+                <th style={{ textAlign: 'right', padding: '10px 12px' }}>Received Qty</th>
+                <th style={{ textAlign: 'right', padding: '10px 12px' }}>Sold Qty</th>
+                <th style={{ textAlign: 'right', padding: '10px 12px' }}>Balance</th>
+                <th style={{ textAlign: 'right', padding: '10px 12px' }}>Sell-Through Rate (%)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTop20Products.length === 0 ? (
+                <tr>
+                  <td colSpan="9" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                    No top selling products found for the selected scope/filters
+                  </td>
+                </tr>
+              ) : (
+                filteredTop20Products.map((row) => (
+                  <tr key={row.id || row.sl} style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: row.sl % 2 === 0 ? '#fcfdfd' : '#ffffff' }}>
+                    <td style={{ padding: '9px 8px', textAlign: 'center', color: '#64748b', fontWeight: 600 }}>
+                      {row.sl}
+                    </td>
+                    <td style={{ padding: '9px 12px', fontWeight: 600, color: '#2e6f40', fontFamily: 'monospace' }}>
+                      {row.barcode}
+                    </td>
+                    <td style={{ padding: '9px 12px', fontWeight: 600, color: '#0f172a', maxWidth: '320px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {row.name}
+                    </td>
+                    <td style={{ padding: '9px 12px', textAlign: 'right', color: '#475569', fontWeight: 500 }}>
+                      {formatCurrency(row.cost_price)}
+                    </td>
+                    <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600, color: '#0f172a' }}>
+                      {formatCurrency(row.mrp)}
+                    </td>
+                    <td style={{ padding: '9px 12px', textAlign: 'right' }}>
+                      <span style={{ 
+                        padding: '3px 8px', 
+                        borderRadius: '4px', 
+                        backgroundColor: '#eff6ff', 
+                        color: '#1d4ed8', 
+                        fontWeight: 600, 
+                        fontSize: '0.78rem' 
+                      }}>
+                        {Number(row.received_qty).toLocaleString()} pcs
+                      </span>
+                    </td>
+                    <td style={{ padding: '9px 12px', textAlign: 'right' }}>
+                      <span style={{ 
+                        padding: '3px 8px', 
+                        borderRadius: '4px', 
+                        backgroundColor: '#dcfce7', 
+                        color: '#166534', 
+                        fontWeight: 700, 
+                        fontSize: '0.8rem' 
+                      }}>
+                        {Number(row.sold_qty).toLocaleString()} pcs
+                      </span>
+                    </td>
+                    <td style={{ padding: '9px 12px', textAlign: 'right' }}>
+                      <span style={{ 
+                        padding: '3px 8px', 
+                        borderRadius: '4px', 
+                        backgroundColor: row.balance > 0 ? '#e0f2fe' : '#fee2e2', 
+                        color: row.balance > 0 ? '#0369a1' : '#991b1b', 
+                        fontWeight: 600, 
+                        fontSize: '0.78rem' 
+                      }}>
+                        {Number(row.balance).toLocaleString()} pcs
+                      </span>
+                    </td>
+                    <td style={{ padding: '9px 12px', textAlign: 'right' }}>
+                      <span style={{ 
+                        padding: '3px 8px', 
+                        borderRadius: '4px', 
+                        backgroundColor: '#fef3c7', 
+                        color: '#92400e', 
+                        fontWeight: 700, 
+                        fontSize: '0.8rem' 
+                      }}>
+                        {row.str}%
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
 
       </div>
