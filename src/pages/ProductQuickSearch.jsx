@@ -4,6 +4,7 @@ import { Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
 import CustomSelect from '../components/CustomSelect';
+import LoadingOverlay from '../components/LoadingOverlay';
 
 const ProductQuickSearch = () => {
   const [categories, setCategories] = useState([]);
@@ -21,12 +22,12 @@ const ProductQuickSearch = () => {
     brandId: '',
     vendorId: '',
     itemName: '',
+    searchQuery: '',
     mrpOperator: '',
     mrpValue: '',
     cpuOperator: '',
     cpuValue: '',
     store: '',
-    searchQuery: '',
     showZeroStock: false
   });
 
@@ -39,12 +40,12 @@ const ProductQuickSearch = () => {
   const fetchDropdownData = async () => {
     try {
       const [catRes, subcatRes, subsubRes, brandRes, vendorRes, storeRes] = await Promise.all([
-        supabase.from('categories').select('id, name'),
-        supabase.from('subcategories').select('id, name'),
-        supabase.from('sub_subcategories').select('id, name'),
-        supabase.from('brands').select('id, name'),
-        supabase.from('vendors').select('id, name'),
-        supabase.from('stores').select('id, name').eq('status', 'ACTIVE').order('name')
+        supabase.from('categories').select('*').order('name'),
+        supabase.from('subcategories').select('*').order('name'),
+        supabase.from('sub_subcategories').select('*').order('name'),
+        supabase.from('brands').select('*').order('name'),
+        supabase.from('vendors').select('*').order('name'),
+        supabase.from('stores').select('*').order('name')
       ]);
       
       setCategories(catRes.data || []);
@@ -124,7 +125,43 @@ const ProductQuickSearch = () => {
       }
 
       let { data, error } = await query;
-      if (error) throw error;
+      
+      // Fallback: If backend returns error, query base products and filter client-side
+      if (error) {
+        console.warn("Retrying with simple query and client-side filtering:", error);
+        const { data: allProds, error: fallbackError } = await supabase
+          .from('products')
+          .select('*, store_stocks(store_id, stock_qty)');
+        if (fallbackError) throw fallbackError;
+
+        let filtered = allProds || [];
+        if (filters.categoryId) filtered = filtered.filter(p => String(p.category_id) === String(filters.categoryId));
+        if (filters.subcategoryId) filtered = filtered.filter(p => String(p.subcategory_id) === String(filters.subcategoryId));
+        if (filters.subSubcategoryId) filtered = filtered.filter(p => String(p.sub_subcategory_id) === String(filters.subSubcategoryId));
+        if (filters.brandId) filtered = filtered.filter(p => String(p.brand_id) === String(filters.brandId));
+        if (filters.vendorId) filtered = filtered.filter(p => String(p.vendor_id) === String(filters.vendorId));
+        if (filters.itemName) filtered = filtered.filter(p => (p.item_name || '').toLowerCase().includes(filters.itemName.toLowerCase()));
+        if (filters.searchQuery) {
+          const sq = filters.searchQuery.toLowerCase();
+          filtered = filtered.filter(p => 
+            (p.item_name || '').toLowerCase().includes(sq) || 
+            (p.code || '').toLowerCase().includes(sq) || 
+            (p.barcode || '').toLowerCase().includes(sq)
+          );
+        }
+        data = filtered;
+      }
+
+      // Attach category/brand labels if missing from nested joins
+      if (data && data.length > 0) {
+        data.forEach(p => {
+          if (!p.category && p.category_id) p.category = categories.find(c => String(c.id) === String(p.category_id)) || null;
+          if (!p.subcategory && p.subcategory_id) p.subcategory = subcategories.find(c => String(c.id) === String(p.subcategory_id)) || null;
+          if (!p.sub_subcategory && p.sub_subcategory_id) p.sub_subcategory = subSubcategories.find(c => String(c.id) === String(p.sub_subcategory_id)) || null;
+          if (!p.brand && p.brand_id) p.brand = brands.find(b => String(b.id) === String(p.brand_id)) || null;
+          if (!p.vendor && p.vendor_id) p.vendor = vendors.find(v => String(v.id) === String(p.vendor_id)) || null;
+        });
+      }
       
       // Perform JS filtering for selected store stock
       if (filters.store && data) {
@@ -145,7 +182,7 @@ const ProductQuickSearch = () => {
       setProducts(data || []);
     } catch (error) {
       console.error("Error fetching products:", error);
-      toast.error("Error fetching products");
+      toast.error("Error fetching products: " + (error?.message || 'Check database connection'));
     } finally {
       setIsLoading(false);
     }
@@ -215,6 +252,7 @@ const ProductQuickSearch = () => {
 
   return (
     <div className="animate-fade-in" style={{ padding: '20px', backgroundColor: 'var(--bg-color)' }}>
+      <LoadingOverlay isLoading={isLoading} message="Searching products... Please wait" />
       <div style={{ backgroundColor: 'var(--card-bg)', borderRadius: '8px', padding: '20px', border: '1px solid var(--border-color)', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)' }}>
         <h2 style={{ fontSize: '1.25rem', fontWeight: 600, borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', marginBottom: '20px' }}>Product Search</h2>
         

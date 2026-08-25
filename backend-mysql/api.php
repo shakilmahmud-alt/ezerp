@@ -62,7 +62,66 @@ try {
         $params = [];
 
         // Reserved GET params
-        $reserved = ['table', 'select', 'order', 'limit', 'offset', 'count', 'action', 'on_conflict'];
+        $reserved = ['table', 'select', 'order', 'limit', 'offset', 'count', 'action', 'on_conflict', 'or'];
+
+        // ----------------------------------------------------
+        // Process OR filter parameter: or=(col.op.val,col.op.val)
+        // ----------------------------------------------------
+        if (isset($_GET['or'])) {
+            $orList = is_array($_GET['or']) ? $_GET['or'] : [$_GET['or']];
+            foreach ($orList as $orRaw) {
+                $rawTrim = trim($orRaw, " ()");
+                $conditions = explode(',', $rawTrim);
+                $subClauses = [];
+                foreach ($conditions as $cond) {
+                    $cond = trim($cond);
+                    if (empty($cond)) continue;
+                    $firstDot = strpos($cond, '.');
+                    if ($firstDot === false) continue;
+                    $col = substr($cond, 0, $firstDot);
+                    $rest = substr($cond, $firstDot + 1);
+                    if (!preg_match('/^[a-zA-Z0-9_]+$/', $col)) continue;
+
+                    if ($rest === 'is.null') {
+                        $subClauses[] = "`{$table}`.`{$col}` IS NULL";
+                    } elseif ($rest === 'not.is.null') {
+                        $subClauses[] = "`{$table}`.`{$col}` IS NOT NULL";
+                    } else {
+                        $secondDot = strpos($rest, '.');
+                        if ($secondDot !== false) {
+                            $op = substr($rest, 0, $secondDot);
+                            $val = substr($rest, $secondDot + 1);
+
+                            if ($op === 'eq') {
+                                $subClauses[] = "`{$table}`.`{$col}` = ?";
+                                $params[] = $val;
+                            } elseif ($op === 'neq') {
+                                $subClauses[] = "`{$table}`.`{$col}` != ?";
+                                $params[] = $val;
+                            } elseif ($op === 'gt') {
+                                $subClauses[] = "`{$table}`.`{$col}` > ?";
+                                $params[] = $val;
+                            } elseif ($op === 'gte') {
+                                $subClauses[] = "`{$table}`.`{$col}` >= ?";
+                                $params[] = $val;
+                            } elseif ($op === 'lt') {
+                                $subClauses[] = "`{$table}`.`{$col}` < ?";
+                                $params[] = $val;
+                            } elseif ($op === 'lte') {
+                                $subClauses[] = "`{$table}`.`{$col}` <= ?";
+                                $params[] = $val;
+                            } elseif ($op === 'like' || $op === 'ilike') {
+                                $subClauses[] = "`{$table}`.`{$col}` LIKE ?";
+                                $params[] = $val;
+                            }
+                        }
+                    }
+                }
+                if (count($subClauses) > 0) {
+                    $whereClauses[] = '(' . implode(' OR ', $subClauses) . ')';
+                }
+            }
+        }
 
         foreach ($_GET as $key => $val) {
             if (in_array($key, $reserved)) continue;
@@ -270,6 +329,45 @@ try {
                     foreach ($rows as &$r) {
                         $r['category'] = isset($r['category_id']) && isset($catMap[$r['category_id']]) ? $catMap[$r['category_id']] : null;
                         $r['categories'] = $r['category'];
+                    }
+                }
+
+                $subCatIds = array_unique(array_filter(array_column($rows, 'subcategory_id')));
+                if (count($subCatIds) > 0 && str_contains($select, 'subcategory')) {
+                    $ph = implode(',', array_fill(0, count($subCatIds), '?'));
+                    $cStmt = $pdo->prepare("SELECT `id`, `name` FROM `subcategories` WHERE `id` IN ({$ph})");
+                    $cStmt->execute(array_values($subCatIds));
+                    $subCatMap = [];
+                    foreach ($cStmt->fetchAll() as $c) { $subCatMap[$c['id']] = $c; }
+                    foreach ($rows as &$r) {
+                        $r['subcategory'] = isset($r['subcategory_id']) && isset($subCatMap[$r['subcategory_id']]) ? $subCatMap[$r['subcategory_id']] : null;
+                        $r['subcategories'] = $r['subcategory'];
+                    }
+                }
+
+                $subSubCatIds = array_unique(array_filter(array_column($rows, 'sub_subcategory_id')));
+                if (count($subSubCatIds) > 0 && (str_contains($select, 'sub_subcategory') || str_contains($select, 'sub_subcategories'))) {
+                    $ph = implode(',', array_fill(0, count($subSubCatIds), '?'));
+                    $cStmt = $pdo->prepare("SELECT `id`, `name` FROM `sub_subcategories` WHERE `id` IN ({$ph})");
+                    $cStmt->execute(array_values($subSubCatIds));
+                    $subSubMap = [];
+                    foreach ($cStmt->fetchAll() as $c) { $subSubMap[$c['id']] = $c; }
+                    foreach ($rows as &$r) {
+                        $r['sub_subcategory'] = isset($r['sub_subcategory_id']) && isset($subSubMap[$r['sub_subcategory_id']]) ? $subSubMap[$r['sub_subcategory_id']] : null;
+                        $r['sub_subcategories'] = $r['sub_subcategory'];
+                    }
+                }
+
+                $brandIds = array_unique(array_filter(array_column($rows, 'brand_id')));
+                if (count($brandIds) > 0 && str_contains($select, 'brand')) {
+                    $ph = implode(',', array_fill(0, count($brandIds), '?'));
+                    $cStmt = $pdo->prepare("SELECT `id`, `name` FROM `brands` WHERE `id` IN ({$ph})");
+                    $cStmt->execute(array_values($brandIds));
+                    $brandMap = [];
+                    foreach ($cStmt->fetchAll() as $c) { $brandMap[$c['id']] = $c; }
+                    foreach ($rows as &$r) {
+                        $r['brand'] = isset($r['brand_id']) && isset($brandMap[$r['brand_id']]) ? $brandMap[$r['brand_id']] : null;
+                        $r['brands'] = $r['brand'];
                     }
                 }
 

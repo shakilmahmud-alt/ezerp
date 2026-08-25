@@ -129,6 +129,13 @@ class QueryBuilder {
     return this;
   }
 
+  or(filters) {
+    if (filters) {
+      this.filters.push(`or=(${encodeURIComponent(filters)})`);
+    }
+    return this;
+  }
+
   order(column, { ascending = true } = {}) {
     const dir = ascending ? 'asc' : 'desc';
     this.orderBy = `${column}.${dir}`;
