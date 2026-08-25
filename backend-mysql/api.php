@@ -28,6 +28,7 @@ $body = json_decode($rawInput, true);
 // Parse Query Parameters
 $table = isset($_GET['table']) ? trim($_GET['table']) : '';
 $action = isset($_GET['action']) ? trim($_GET['action']) : '';
+$onConflict = isset($_GET['on_conflict']) ? trim($_GET['on_conflict']) : '';
 
 // Validate Table Name
 if ($table && !preg_match('/^[a-zA-Z0-9_]+$/', $table)) {
@@ -45,7 +46,7 @@ try {
             echo json_encode([
                 "status" => "online",
                 "service" => "EG ERP MySQL REST API",
-                "version" => "2.1.0",
+                "version" => "2.2.0",
                 "database" => DB_NAME
             ]);
             exit();
@@ -61,7 +62,7 @@ try {
         $params = [];
 
         // Reserved GET params
-        $reserved = ['table', 'select', 'order', 'limit', 'offset', 'count', 'action'];
+        $reserved = ['table', 'select', 'order', 'limit', 'offset', 'count', 'action', 'on_conflict'];
 
         foreach ($_GET as $key => $val) {
             if (in_array($key, $reserved)) continue;
@@ -271,7 +272,7 @@ try {
     }
 
     // ----------------------------------------------------
-    // 2. POST Requests: Insert Single or Bulk Rows
+    // 2. POST Requests: Insert, Bulk Insert & Upsert
     // ----------------------------------------------------
     if ($method === 'POST') {
         if (!$table) {
@@ -282,9 +283,9 @@ try {
 
         $records = [];
         if (isset($body[0]) && is_array($body[0])) {
-            $records = $body; // Bulk insert
+            $records = $body;
         } else {
-            $records = [$body]; // Single row insert
+            $records = [$body];
         }
 
         $insertedRows = [];
@@ -293,7 +294,40 @@ try {
         foreach ($records as $row) {
             if (!is_array($row)) continue;
 
-            // Generate UUID if id is missing or empty
+            // Handle UPSERT with on_conflict
+            if ($action === 'upsert' && $onConflict && isset($row[$onConflict])) {
+                $checkStmt = $pdo->prepare("SELECT * FROM `{$table}` WHERE `{$onConflict}` = ?");
+                $checkStmt->execute([$row[$onConflict]]);
+                $existing = $checkStmt->fetch();
+
+                if ($existing) {
+                    $setClauses = [];
+                    $setVals = [];
+                    foreach ($row as $k => $v) {
+                        if ($k === 'id') continue;
+                        if (!preg_match('/^[a-zA-Z0-9_]+$/', $k)) continue;
+                        $setClauses[] = "`{$k}` = ?";
+                        if (is_array($v) || is_object($v)) {
+                            $setVals[] = json_encode($v, JSON_UNESCAPED_UNICODE);
+                        } elseif (is_bool($v)) {
+                            $setVals[] = $v ? 1 : 0;
+                        } else {
+                            $setVals[] = $v;
+                        }
+                    }
+                    if (count($setClauses) > 0) {
+                        $setVals[] = $row[$onConflict];
+                        $updSql = "UPDATE `{$table}` SET " . implode(', ', $setClauses) . " WHERE `{$onConflict}` = ?";
+                        $uStmt = $pdo->prepare($updSql);
+                        $uStmt->execute($setVals);
+                    }
+                    $checkStmt->execute([$row[$onConflict]]);
+                    $insertedRows[] = $checkStmt->fetch();
+                    continue;
+                }
+            }
+
+            // Normal Insert
             if (empty($row['id'])) {
                 $row['id'] = generateUuid();
             }
@@ -353,7 +387,7 @@ try {
         $whereParams = [];
 
         // Build WHERE filter from query string
-        $reserved = ['table', 'action'];
+        $reserved = ['table', 'action', 'on_conflict'];
         foreach ($_GET as $key => $val) {
             if (in_array($key, $reserved)) continue;
             if (!preg_match('/^[a-zA-Z0-9_]+$/', $key)) continue;
@@ -382,7 +416,7 @@ try {
         $setParams = [];
 
         foreach ($body as $k => $v) {
-            if ($k === 'id') continue; // Don't update primary key id
+            if ($k === 'id') continue;
             if (!preg_match('/^[a-zA-Z0-9_]+$/', $k)) continue;
 
             $setClauses[] = "`{$k}` = ?";
@@ -429,7 +463,7 @@ try {
         $whereClauses = [];
         $whereParams = [];
 
-        $reserved = ['table', 'action'];
+        $reserved = ['table', 'action', 'on_conflict'];
         foreach ($_GET as $key => $val) {
             if (in_array($key, $reserved)) continue;
             if (!preg_match('/^[a-zA-Z0-9_]+$/', $key)) continue;

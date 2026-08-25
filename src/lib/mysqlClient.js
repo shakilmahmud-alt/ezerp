@@ -19,6 +19,7 @@ class QueryBuilder {
     this.isMaybeSingle = false;
     this.action = 'SELECT';
     this.payload = null;
+    this.onConflict = 'id';
   }
 
   select(columns = '*', options = {}) {
@@ -33,6 +34,15 @@ class QueryBuilder {
   insert(data) {
     this.action = 'INSERT';
     this.payload = data;
+    return this;
+  }
+
+  upsert(data, options = {}) {
+    this.action = 'UPSERT';
+    this.payload = data;
+    if (options && options.onConflict) {
+      this.onConflict = options.onConflict;
+    }
     return this;
   }
 
@@ -180,6 +190,10 @@ class QueryBuilder {
 
       if (this.action === 'INSERT') {
         fetchOptions.method = 'POST';
+        fetchOptions.body = JSON.stringify(this.payload);
+      } else if (this.action === 'UPSERT') {
+        fetchOptions.method = 'POST';
+        url += `&action=upsert&on_conflict=${encodeURIComponent(this.onConflict)}`;
         fetchOptions.body = JSON.stringify(this.payload);
       } else if (this.action === 'UPDATE') {
         fetchOptions.method = 'PUT';
