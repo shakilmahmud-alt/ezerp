@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Plus, Download, Edit, Loader } from 'lucide-react';
+import { Plus, Download, Edit, Loader, Upload, FileSpreadsheet, Check, AlertCircle, X, Trash2 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabaseClient';
 import toast from 'react-hot-toast';
 import CustomSelect from '../components/CustomSelect';
@@ -102,6 +103,612 @@ const Product = () => {
   const [newBrandName, setNewBrandName] = useState('');
   const [isSavingBrand, setIsSavingBrand] = useState(false);
 
+  // Bulk Import State
+  const [showBulkImportModal, setShowBulkImportModal] = useState(false);
+  const [bulkImportRows, setBulkImportRows] = useState([]);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0, statusText: '' });
+
+  // Download Sample Template for Bulk Import
+  const handleDownloadSampleExcel = () => {
+    const sampleData = [
+      {
+        'Item Name': 'Basketball (RI 24588) Pcs',
+        'Category': 'Toys',
+        'Sub Category': 'Outdoor Game',
+        'Sub Subcategory': 'Football',
+        'Brand': 'LIONEL SPORTS',
+        'Country of Origin': 'China',
+        'User Define Barcode': '',
+        'Vendor': 'Radiant',
+        'SDC VAT CODE': '10140445',
+        'Sale VAT(%)': '7.50%',
+        'Purchase Price *': 350,
+        'MRP *': 590
+      },
+      {
+        'Item Name': 'Football 15CM (RI 6936088) Pcs',
+        'Category': 'Toys',
+        'Sub Category': 'Outdoor Game',
+        'Sub Subcategory': 'Football',
+        'Brand': 'LIONEL SPORTS',
+        'Country of Origin': 'China',
+        'User Define Barcode': '',
+        'Vendor': 'Radiant',
+        'SDC VAT CODE': '10140445',
+        'Sale VAT(%)': '7.50%',
+        'Purchase Price *': 350,
+        'MRP *': 590
+      },
+      {
+        'Item Name': 'LE Hot Wheels Basic Car (C4982) Pcs',
+        'Category': 'Toys',
+        'Sub Category': 'Outdoor Game',
+        'Sub Subcategory': 'Hot Wheel',
+        'Brand': 'LIONEL SPORTS',
+        'Country of Origin': 'China',
+        'User Define Barcode': '',
+        'Vendor': 'Radiant',
+        'SDC VAT CODE': '10140445',
+        'Sale VAT(%)': '7.50%',
+        'Purchase Price *': 350,
+        'MRP *': 590
+      },
+      {
+        'Item Name': 'Baby 2 Pcs Rattle Toy (RI JK8821) Pcs',
+        'Category': 'Toys',
+        'Sub Category': 'Outdoor Game',
+        'Sub Subcategory': 'Hot Wheel',
+        'Brand': 'JACKY BABY',
+        'Country of Origin': 'China',
+        'User Define Barcode': '',
+        'Vendor': 'Radiant',
+        'SDC VAT CODE': '10140445',
+        'Sale VAT(%)': '7.50%',
+        'Purchase Price *': 350,
+        'MRP *': 590
+      }
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(sampleData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Product_Template');
+    XLSX.writeFile(wb, 'Product_Bulk_Import_Template.xlsx');
+    toast.success('Sample import template downloaded!');
+  };
+
+  // Helper: Normalize object keys for fuzzy header matching
+  const cleanHeaderKey = (str) => String(str || '').trim().toLowerCase().replace(/[\*\_\-\s\(\)\%\:\.\/\\\[\]]/g, '');
+
+  const getFuzzyRowVal = (row, aliases) => {
+    const rowKeys = Object.keys(row);
+    // 1. Exact normalized match
+    for (const k of rowKeys) {
+      const ck = cleanHeaderKey(k);
+      for (const a of aliases) {
+        if (ck === cleanHeaderKey(a)) return row[k];
+      }
+    }
+    // 2. Substring / contains match
+    for (const k of rowKeys) {
+      const ck = cleanHeaderKey(k);
+      for (const a of aliases) {
+        const ca = cleanHeaderKey(a);
+        if (ca && (ck.includes(ca) || ca.includes(ck))) return row[k];
+      }
+    }
+    return '';
+  };
+
+  const parseNumberSafe = (val) => {
+    if (val === undefined || val === null || val === '') return 0;
+    const num = parseFloat(String(val).replace(/[^0-9.-]+/g, ''));
+    return isNaN(num) ? 0 : num;
+  };
+
+  // Upload and Parse Excel / CSV File
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const rawJson = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        if (rawJson.length === 0) {
+          toast.error('The uploaded file contains no data rows!');
+          return;
+        }
+
+        // Base max SL from existing products
+        const baseSl = products.length > 0 ? Math.max(...products.map(p => p.sl || 0)) : 0;
+
+        const parsedRows = rawJson.map((row, idx) => {
+          const itemName = String(getFuzzyRowVal(row, ['itemname', 'item_name', 'productname', 'product_name', 'item', 'product', 'name', 'title']) || '').trim();
+          const categoryName = String(getFuzzyRowVal(row, ['category', 'categoryname', 'cat']) || '').trim();
+          const subcategoryName = String(getFuzzyRowVal(row, ['subcategory', 'sub_category', 'sub category', 'subcat']) || '').trim();
+          const subSubcategoryName = String(getFuzzyRowVal(row, ['subsubcategory', 'sub_subcategory', 'sub sub category', 'sub subcategory', 'subsubcat', 'subsub']) || '').trim();
+          const brandName = String(getFuzzyRowVal(row, ['brand', 'brandname', 'brand_name']) || 'No Brand').trim() || 'No Brand';
+          const countryOfOrigin = String(getFuzzyRowVal(row, ['countryoforigin', 'country_of_origin', 'country', 'origin']) || 'China').trim() || 'China';
+          const vendorName = String(getFuzzyRowVal(row, ['vendor', 'vendorname', 'supplier', 'vendor_name']) || '').trim();
+          const sdcVatCode = String(getFuzzyRowVal(row, ['sdcvatcode', 'sdc_vat_code', 'sdcvat', 'sdc', 'sdccode']) || '10140445').trim() || '10140445';
+          
+          const rawSaleVat = getFuzzyRowVal(row, ['salevat', 'sale_vat_percent', 'sale_vat', 'vat', 'salevat%']);
+          const saleVatPercent = parseNumberSafe(rawSaleVat) || 7.5;
+
+          const purPrice = parseNumberSafe(getFuzzyRowVal(row, ['purchaseprice', 'purchase_price', 'purprice', 'costprice', 'cpu', 'buyprice', 'tp', 'cost']));
+          const mrpVal = parseNumberSafe(getFuzzyRowVal(row, ['mrp', 'salesprice', 'saleprice', 'retailprice', 'sellingprice', 'price']));
+
+          const profitOnTp = purPrice > 0 ? (((mrpVal - purPrice) / purPrice) * 100).toFixed(2) : '0.00';
+          const profitOnMrp = mrpVal > 0 ? (((mrpVal - purPrice) / mrpVal) * 100).toFixed(2) : '0.00';
+
+          const nextSl = baseSl + idx + 1;
+          const autoCode = `A${String(nextSl).padStart(6, '0')}`;
+          const autoBarcode = `10011${String(nextSl).padStart(5, '0')}`;
+          const rawUserBarcode = String(getFuzzyRowVal(row, ['userdefinebarcode', 'user_define_barcode', 'userbarcode', 'barcode']) || '').trim();
+          const finalBarcode = rawUserBarcode || autoBarcode;
+
+          return {
+            sl: nextSl,
+            code: autoCode,
+            barcode: finalBarcode,
+            user_define_barcode: finalBarcode,
+            item_name: itemName,
+            categoryName: categoryName,
+            subcategoryName: subcategoryName,
+            subSubcategoryName: subSubcategoryName,
+            brandName: brandName,
+            vendorName: vendorName,
+            country_of_origin: countryOfOrigin,
+            sdc_vat_code: sdcVatCode,
+            sale_vat_percent: saleVatPercent,
+            retailer_service_type: "Readymade Graments (Other's Brand) : 7.5",
+            purchase_price: purPrice,
+            mrp: mrpVal,
+            wsp: 0,
+            profit_on_tp: profitOnTp,
+            profit_on_mrp: profitOnMrp,
+            product_description: 'Pcs',
+            regional_name: '',
+            is_active: true,
+            status: 'ACTIVE',
+            disc_exemption: false,
+            member_point_exemption: false,
+            gp_on_mrp: false,
+            gp_on_cost: false,
+            price_including_vat: true,
+            wh_stock: 0,
+            str_stock: 0
+          };
+        }).filter(r => r.item_name || r.purchase_price > 0 || r.mrp > 0);
+
+        setBulkImportRows(parsedRows);
+        setShowBulkImportModal(true);
+        toast.success(`Loaded ${parsedRows.length} products for import review`);
+      } catch (err) {
+        console.error('Error reading excel:', err);
+        toast.error('Failed to parse file. Please check Excel format!');
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = '';
+  };
+
+  const handleRemoveBulkRow = (idx) => {
+    setBulkImportRows(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  // Save All Imported Products to Database (with Auto Entity Resolution & Persistence)
+  const handleSaveBulkImport = async () => {
+    if (bulkImportRows.length === 0) return;
+    setIsImporting(true);
+    setImportProgress({ current: 0, total: bulkImportRows.length, statusText: 'Resolving categories, brands and vendors...' });
+
+    try {
+      // 1. Fetch latest lookups from DB
+      const [catRes, subcatRes, subsubRes, brandRes, vendorRes, maxProductSlRes] = await Promise.all([
+        supabase.from('categories').select('id, name, sl, code'),
+        supabase.from('subcategories').select('id, name, category_name, sl, code'),
+        supabase.from('sub_subcategories').select('id, name, subcategory_name, category_name, sl, code'),
+        supabase.from('brands').select('id, name, sl, code'),
+        supabase.from('vendors').select('id, name, sl, code'),
+        supabase.from('products').select('sl').order('sl', { ascending: false }).limit(1)
+      ]);
+
+      let existingCategories = [...(catRes.data || [])];
+      let existingSubcategories = [...(subcatRes.data || [])];
+      let existingSubSubcategories = [...(subsubRes.data || [])];
+      let existingBrands = [...(brandRes.data || [])];
+      let existingVendors = [...(vendorRes.data || [])];
+
+      let baseSl = maxProductSlRes.data && maxProductSlRes.data.length > 0 ? (maxProductSlRes.data[0].sl || 0) : 0;
+
+      // 2. Resolve / Auto-create Categories
+      const uniqueCatNames = [...new Set(bulkImportRows.map(r => r.categoryName).filter(Boolean))];
+      for (const cName of uniqueCatNames) {
+        const found = existingCategories.find(c => c.name?.trim().toLowerCase() === cName.trim().toLowerCase());
+        if (!found) {
+          const nextCatSl = existingCategories.length > 0 ? Math.max(...existingCategories.map(c => c.sl || 0)) + 1 : 1;
+          const nextCatCode = `00${nextCatSl}`;
+          const { data: newCat, error: cErr } = await supabase.from('categories').insert([{
+            sl: nextCatSl,
+            code: nextCatCode,
+            name: cName,
+            description: '',
+            vat: '7.5'
+          }]).select().single();
+          if (cErr) throw cErr;
+          existingCategories.push(newCat);
+        }
+      }
+
+      // 3. Resolve / Auto-create Subcategories
+      const uniqueSubcats = [...new Map(bulkImportRows.map(r => [`${r.categoryName}__${r.subcategoryName}`, r])).values()].filter(r => r.subcategoryName);
+      for (const item of uniqueSubcats) {
+        const found = existingSubcategories.find(sc => sc.name?.trim().toLowerCase() === item.subcategoryName.trim().toLowerCase());
+        if (!found) {
+          const nextSubcatSl = existingSubcategories.length > 0 ? Math.max(...existingSubcategories.map(sc => sc.sl || 0)) + 1 : 1;
+          const nextSubcatCode = `0020${String(nextSubcatSl).padStart(3, '0')}`;
+          const { data: newSubcat, error: scErr } = await supabase.from('subcategories').insert([{
+            sl: nextSubcatSl,
+            code: nextSubcatCode,
+            name: item.subcategoryName,
+            category_name: item.categoryName || '',
+            description: ''
+          }]).select().single();
+          if (scErr) throw scErr;
+          existingSubcategories.push(newSubcat);
+        }
+      }
+
+      // 4. Resolve / Auto-create Sub-Subcategories
+      const uniqueSubSubcats = [...new Map(bulkImportRows.map(r => [`${r.subcategoryName}__${r.subSubcategoryName}`, r])).values()].filter(r => r.subSubcategoryName);
+      for (const item of uniqueSubSubcats) {
+        const found = existingSubSubcategories.find(ssc => ssc.name?.trim().toLowerCase() === item.subSubcategoryName.trim().toLowerCase());
+        if (!found) {
+          const nextSscSl = existingSubSubcategories.length > 0 ? Math.max(...existingSubSubcategories.map(ssc => ssc.sl || 0)) + 1 : 1;
+          const nextSscCode = `00200${String(nextSscSl).padStart(4, '0')}`;
+          const { data: newSsc, error: sscErr } = await supabase.from('sub_subcategories').insert([{
+            sl: nextSscSl,
+            code: nextSscCode,
+            name: item.subSubcategoryName,
+            subcategory_name: item.subcategoryName || '',
+            category_name: item.categoryName || '',
+            description: ''
+          }]).select().single();
+          if (sscErr) throw sscErr;
+          existingSubSubcategories.push(newSsc);
+        }
+      }
+
+      // 5. Resolve / Auto-create Brands
+      const uniqueBrandNames = [...new Set(bulkImportRows.map(r => r.brandName).filter(Boolean))];
+      for (const bName of uniqueBrandNames) {
+        const found = existingBrands.find(b => b.name?.trim().toLowerCase() === bName.trim().toLowerCase());
+        if (!found) {
+          const nextBrandSl = existingBrands.length > 0 ? Math.max(...existingBrands.map(b => b.sl || 0)) + 1 : 1;
+          const nextBrandCode = `00${String(nextBrandSl).padStart(2, '0')}`;
+          const { data: newBrand, error: bErr } = await supabase.from('brands').insert([{
+            sl: nextBrandSl,
+            code: nextBrandCode,
+            name: bName,
+            description: ''
+          }]).select().single();
+          if (bErr) throw bErr;
+          existingBrands.push(newBrand);
+        }
+      }
+
+      // 6. Resolve / Auto-create Vendors
+      const uniqueVendorNames = [...new Set(bulkImportRows.map(r => r.vendorName).filter(Boolean))];
+      for (const vName of uniqueVendorNames) {
+        const found = existingVendors.find(v => v.name?.trim().toLowerCase() === vName.trim().toLowerCase());
+        if (!found) {
+          const nextVendorSl = existingVendors.length > 0 ? Math.max(...existingVendors.map(v => v.sl || 0)) + 1 : 1;
+          const nextVendorCode = `100${nextVendorSl}`;
+          const { data: newVendor, error: vErr } = await supabase.from('vendors').insert([{
+            sl: nextVendorSl,
+            code: nextVendorCode,
+            name: vName,
+            address: '',
+            postal_code: '',
+            city: '',
+            country: 'Bangladesh',
+            contact_no: '',
+            email: '',
+            website: '',
+            store_can_receive: false,
+            vendor_type: 'Local',
+            owner_partner: 'Owner',
+            vat_registered: false,
+            vat_registration_no: '',
+            nid: '',
+            tin: '',
+            turnover_company: false,
+            regular_contact: { name: '', designation: '', cell: '', email: '' },
+            management_contact: { name: '', designation: '', cell: '', email: '' },
+            marketing_contact: { name: '', designation: '', cell: '', email: '' },
+            financial_contact: { name: '', designation: '', cell: '', email: '' },
+            trading_info: { same_as_reg: false, name: vName, address: '', postal_code: '', city: '', country: 'Bangladesh', contact_no: '', email: '', website: '', member_director: 'Member' },
+            contract_details: {
+              date_of_enrollment: new Date().toISOString().split('T')[0],
+              manage_stock: 'Yes',
+              gross_margin_on: '',
+              margin_rate: '',
+              payment_terms: '',
+              commission_percent: '',
+              supply_schedule: '',
+              delivery_days: '',
+              transport_mode: '',
+              price_change_notice_days: '',
+              special_discount_type: '',
+              special_discount_percent: ''
+            },
+            bank_info: { bank_name: '', branch_name: '', routing_no: '', account_name: '', account_number: '' },
+            adjust_specify: { damage: '', slow_moving: '', short_dated: '', expire_product: '' },
+            status: 'ACTIVE'
+          }]).select().single();
+          if (vErr) throw vErr;
+          existingVendors.push(newVendor);
+        }
+      }
+
+      // 7. Prepare Products Payload with resolved foreign keys
+      setImportProgress({ current: 0, total: bulkImportRows.length, statusText: 'Saving products into database...' });
+
+      const productsToInsert = bulkImportRows.map((row, idx) => {
+        const catObj = existingCategories.find(c => c.name?.trim().toLowerCase() === row.categoryName?.trim().toLowerCase());
+        const subcatObj = existingSubcategories.find(sc => sc.name?.trim().toLowerCase() === row.subcategoryName?.trim().toLowerCase());
+        const subsubObj = existingSubSubcategories.find(ssc => ssc.name?.trim().toLowerCase() === row.subSubcategoryName?.trim().toLowerCase());
+        const brandObj = existingBrands.find(b => b.name?.trim().toLowerCase() === row.brandName?.trim().toLowerCase());
+        const vendorObj = existingVendors.find(v => v.name?.trim().toLowerCase() === row.vendorName?.trim().toLowerCase());
+
+        const nextSl = baseSl + idx + 1;
+        const autoCode = `A${String(nextSl).padStart(6, '0')}`;
+        const autoBarcode = `10011${String(nextSl).padStart(5, '0')}`;
+        const finalBarcode = row.user_define_barcode || autoBarcode;
+
+        return {
+          sl: nextSl,
+          code: autoCode,
+          barcode: finalBarcode,
+          user_define_barcode: finalBarcode,
+          item_name: row.item_name,
+          category_id: catObj ? catObj.id : null,
+          subcategory_id: subcatObj ? subcatObj.id : null,
+          sub_subcategory_id: subsubObj ? subsubObj.id : null,
+          brand_id: brandObj ? brandObj.id : null,
+          vendor_id: vendorObj ? vendorObj.id : null,
+          country_of_origin: row.country_of_origin || 'China',
+          sdc_vat_code: row.sdc_vat_code || '10140445',
+          sale_vat_percent: row.sale_vat_percent || 7.5,
+          retailer_service_type: "Readymade Graments (Other's Brand) : 7.5",
+          purchase_price: row.purchase_price || 0,
+          mrp: row.mrp || 0,
+          wsp: 0,
+          profit_on_tp: row.profit_on_tp || '0.00',
+          profit_on_mrp: row.profit_on_mrp || '0.00',
+          product_description: row.product_description || 'Pcs',
+          regional_name: row.regional_name || '',
+          is_active: true,
+          status: 'ACTIVE',
+          disc_exemption: false,
+          member_point_exemption: false,
+          gp_on_mrp: false,
+          gp_on_cost: false,
+          price_including_vat: true,
+          wh_stock: 0,
+          str_stock: 0
+        };
+      });
+
+      // 8. Insert in batches of 50
+      const chunkSize = 50;
+      for (let i = 0; i < productsToInsert.length; i += chunkSize) {
+        const chunk = productsToInsert.slice(i, i + chunkSize);
+        const { error: insertErr } = await supabase.from('products').insert(chunk);
+        if (insertErr) throw insertErr;
+        setImportProgress({ 
+          current: Math.min(i + chunkSize, productsToInsert.length), 
+          total: productsToInsert.length, 
+          statusText: `Saved ${Math.min(i + chunkSize, productsToInsert.length)} of ${productsToInsert.length} products...` 
+        });
+      }
+
+      toast.success(`Successfully imported ${productsToInsert.length} products into the database!`);
+      setShowBulkImportModal(false);
+      setBulkImportRows([]);
+      await Promise.all([fetchProducts(), fetchDropdownData()]);
+
+    } catch (err) {
+      console.error('Error during bulk product import:', err);
+      toast.error(`Import failed: ${err.message || 'Unknown database error'}`);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const renderBulkImportModal = () => {
+    if (!showBulkImportModal) return null;
+    return (
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '20px' }}>
+        <div style={{ backgroundColor: 'var(--card-bg)', borderRadius: '8px', width: '95%', maxWidth: '1400px', height: '90vh', display: 'flex', flexDirection: 'column', border: '1px solid var(--border-color)', boxShadow: '0 10px 30px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+          
+          {/* Modal Header */}
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FileSpreadsheet color="#2e6f40" size={22} />
+                Bulk Product Import Preview
+              </h3>
+              <span style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px', display: 'block' }}>
+                Review and confirm items before saving. Auto-sequential barcodes, retailer service type, and profit percentages have been computed.
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <button 
+                type="button"
+                onClick={handleDownloadSampleExcel}
+                style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#fff', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600, color: '#334155' }}
+              >
+                <Download size={14} color="#2e6f40" />
+                Template
+              </button>
+
+              <label 
+                style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#fff', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600, color: '#0284c7' }}
+              >
+                <Upload size={14} />
+                Upload Another File
+                <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUpload} style={{ display: 'none' }} />
+              </label>
+
+              <X 
+                size={22} 
+                style={{ cursor: 'pointer', color: '#64748b', marginLeft: '10px' }} 
+                onClick={() => !isImporting && setShowBulkImportModal(false)} 
+              />
+            </div>
+          </div>
+
+          {/* Statistics Banner */}
+          <div style={{ padding: '10px 20px', backgroundColor: '#e2f5ea', borderBottom: '1px solid #bbf7d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem', color: '#166534', fontWeight: 600 }}>
+            <div style={{ display: 'flex', gap: '20px' }}>
+              <span>📦 Total Products Parsed: {bulkImportRows.length}</span>
+              <span>🏷️ Auto Barcodes Assigned: 10011XXXXX</span>
+              <span>💼 Service Type: Readymade Garments (7.5%)</span>
+              <span>💰 WSP: 0</span>
+            </div>
+            {isImporting && (
+              <div style={{ color: '#0284c7', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Loader size={14} className="animate-spin" />
+                {importProgress.statusText}
+              </div>
+            )}
+          </div>
+
+          {/* Preview Table */}
+          <div style={{ flex: 1, overflow: 'auto', padding: '0' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #cbd5e1', color: '#334155' }}>
+                  <th style={{ padding: '10px 8px', textAlign: 'center', width: '40px' }}>#</th>
+                  <th style={{ padding: '10px 8px' }}>Barcode</th>
+                  <th style={{ padding: '10px 8px' }}>Item Name</th>
+                  <th style={{ padding: '10px 8px' }}>Category</th>
+                  <th style={{ padding: '10px 8px' }}>Sub Category</th>
+                  <th style={{ padding: '10px 8px' }}>Sub Subcategory</th>
+                  <th style={{ padding: '10px 8px' }}>Brand</th>
+                  <th style={{ padding: '10px 8px' }}>Vendor</th>
+                  <th style={{ padding: '10px 8px' }}>Origin</th>
+                  <th style={{ padding: '10px 8px', textAlign: 'right' }}>Pur. Price</th>
+                  <th style={{ padding: '10px 8px', textAlign: 'right' }}>MRP</th>
+                  <th style={{ padding: '10px 8px', textAlign: 'right' }}>Profit % (TP)</th>
+                  <th style={{ padding: '10px 8px', textAlign: 'right' }}>Profit % (MRP)</th>
+                  <th style={{ padding: '10px 8px', textAlign: 'center', width: '40px' }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {bulkImportRows.map((row, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
+                    <td style={{ padding: '8px', textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
+                    <td style={{ padding: '8px', fontWeight: 600, color: '#2e6f40', fontFamily: 'monospace' }}>{row.barcode}</td>
+                    <td style={{ padding: '8px', fontWeight: 600, color: '#0f172a' }}>{row.item_name}</td>
+                    <td style={{ padding: '8px' }}>{row.categoryName || '-'}</td>
+                    <td style={{ padding: '8px' }}>{row.subcategoryName || '-'}</td>
+                    <td style={{ padding: '8px' }}>{row.subSubcategoryName || '-'}</td>
+                    <td style={{ padding: '8px' }}>{row.brandName || 'No Brand'}</td>
+                    <td style={{ padding: '8px' }}>{row.vendorName || '-'}</td>
+                    <td style={{ padding: '8px' }}>{row.country_of_origin}</td>
+                    <td style={{ padding: '8px', textAlign: 'right', fontWeight: 500 }}>৳ {Number(row.purchase_price).toFixed(2)}</td>
+                    <td style={{ padding: '8px', textAlign: 'right', fontWeight: 600, color: '#0f172a' }}>৳ {Number(row.mrp).toFixed(2)}</td>
+                    <td style={{ padding: '8px', textAlign: 'right' }}>
+                      <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#dcfce7', color: '#166534', fontWeight: 600, fontSize: '0.75rem' }}>
+                        {row.profit_on_tp}%
+                      </span>
+                    </td>
+                    <td style={{ padding: '8px', textAlign: 'right' }}>
+                      <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 600, fontSize: '0.75rem' }}>
+                        {row.profit_on_mrp}%
+                      </span>
+                    </td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>
+                      <Trash2 
+                        size={15} 
+                        color="#ef4444" 
+                        style={{ cursor: 'pointer' }} 
+                        title="Remove item" 
+                        onClick={() => handleRemoveBulkRow(idx)} 
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Modal Footer */}
+          <div style={{ padding: '15px 20px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc' }}>
+            <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+              Ready to save <strong style={{ color: '#0f172a' }}>{bulkImportRows.length}</strong> products into Central Store database.
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button 
+                type="button" 
+                className="btn-danger" 
+                onClick={() => setShowBulkImportModal(false)}
+                disabled={isImporting}
+                style={{ padding: '8px 20px', border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#334155', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+              >
+                Cancel
+              </button>
+
+              <button 
+                type="button" 
+                className="btn-theme" 
+                onClick={handleSaveBulkImport}
+                disabled={isImporting || bulkImportRows.length === 0}
+                style={{ 
+                  padding: '8px 24px', 
+                  border: 'none', 
+                  borderRadius: '4px', 
+                  cursor: 'pointer', 
+                  fontWeight: 'bold', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px',
+                  backgroundColor: '#2e6f40',
+                  color: '#fff',
+                  boxShadow: '0 2px 6px rgba(46, 111, 64, 0.3)'
+                }}
+              >
+                {isImporting ? (
+                  <>
+                    <Loader size={16} className="animate-spin" />
+                    Saving to Database...
+                  </>
+                ) : (
+                  <>
+                    <Check size={16} />
+                    Save All to Database ({bulkImportRows.length})
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    );
+  };
+
   const location = useLocation();
 
   useEffect(() => {
@@ -161,11 +768,45 @@ const Product = () => {
   };
 
   const filteredProducts = products.filter(p => {
-    const matchesSearch = p.item_name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          p.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          p.barcode?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesBrand = searchBrand ? p.brand?.name?.toLowerCase().includes(searchBrand.toLowerCase()) : true;
-    return matchesSearch && matchesBrand;
+    // All Layer Search (checks every column, attribute, and nested relation)
+    if (searchTerm.trim()) {
+      const searchTokens = searchTerm.trim().toLowerCase().split(/\s+/);
+      const fullProductContent = [
+        p.item_name,
+        p.code,
+        p.barcode,
+        p.user_define_barcode,
+        p.category?.name,
+        p.subcategory?.name,
+        p.sub_subcategory?.name,
+        p.brand?.name,
+        p.vendor?.name,
+        p.country_of_origin,
+        p.sdc_vat_code,
+        p.retailer_service_type,
+        p.purchase_price,
+        p.mrp,
+        p.wsp,
+        p.sale_vat_percent,
+        p.profit_on_tp,
+        p.profit_on_mrp,
+        p.status,
+        p.product_description,
+        p.regional_name
+      ].filter(Boolean).join(' ').toLowerCase();
+
+      const matchesAllTokens = searchTokens.every(token => fullProductContent.includes(token));
+      if (!matchesAllTokens) return false;
+    }
+
+    // Brand Search Filter
+    if (searchBrand.trim()) {
+      const brandQuery = searchBrand.trim().toLowerCase();
+      const brandName = (p.brand?.name || '').toLowerCase();
+      if (!brandName.includes(brandQuery)) return false;
+    }
+
+    return true;
   });
 
   // Sorting Logic
@@ -315,26 +956,79 @@ const Product = () => {
             {isLoading && <Loader className="animate-spin" size={20} color="var(--text-secondary)" />}
           </div>
           {canEdit && (
-            <button 
-              className="btn btn-primary btn-theme" 
-              onClick={() => {
-                const nextSl = products.length > 0 ? Math.max(...products.map(p => p.sl || 0)) + 1 : 1;
-                const nextBarcode = `10011${String(nextSl).padStart(5, '0')}`;
-                
-                const saved = localStorage.getItem('productFormCache');
-                let cachedData = initialFormState;
-                if (saved) {
-                  try { cachedData = JSON.parse(saved); } catch(e) {}
-                }
-                
-                setFormData({...cachedData, user_define_barcode: nextBarcode});
-                setEditingId(null);
-                setIsAdding(true);
-              }}
-              style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
-            >
-              <Plus size={16} /> Add New
-            </button>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              {/* Download Sample Template */}
+              <button 
+                type="button"
+                onClick={handleDownloadSampleExcel}
+                title="Download sample Excel template matching the required import format"
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '6px', 
+                  padding: '7px 14px', 
+                  borderRadius: '4px',
+                  backgroundColor: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  color: '#334155',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '0.85rem'
+                }}
+              >
+                <Download size={15} color="#2e6f40" />
+                Template
+              </button>
+
+              {/* Bulk Import Button */}
+              <label 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '6px', 
+                  cursor: 'pointer', 
+                  padding: '7px 16px', 
+                  borderRadius: '4px',
+                  backgroundColor: '#0284c7',
+                  color: '#fff',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  border: 'none',
+                  boxShadow: '0 2px 4px rgba(2, 132, 199, 0.2)'
+                }}
+              >
+                <Upload size={15} />
+                Bulk Import
+                <input 
+                  type="file" 
+                  accept=".xlsx, .xls, .csv" 
+                  onChange={handleFileUpload} 
+                  style={{ display: 'none' }} 
+                />
+              </label>
+
+              {/* Add New Button */}
+              <button 
+                className="btn btn-primary btn-theme" 
+                onClick={() => {
+                  const nextSl = products.length > 0 ? Math.max(...products.map(p => p.sl || 0)) + 1 : 1;
+                  const nextBarcode = `10011${String(nextSl).padStart(5, '0')}`;
+                  
+                  const saved = localStorage.getItem('productFormCache');
+                  let cachedData = initialFormState;
+                  if (saved) {
+                    try { cachedData = JSON.parse(saved); } catch(e) {}
+                  }
+                  
+                  setFormData({...cachedData, user_define_barcode: nextBarcode});
+                  setEditingId(null);
+                  setIsAdding(true);
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 16px', fontSize: '0.85rem' }}
+              >
+                <Plus size={16} /> Add New
+              </button>
+            </div>
           )}
         </div>
 
@@ -497,6 +1191,8 @@ const Product = () => {
             >»</button>
           </div>
         </div>
+
+        {renderBulkImportModal()}
       </div>
     );
   }
@@ -749,6 +1445,8 @@ const Product = () => {
           </div>
         </div>
       )}
+
+      {renderBulkImportModal()}
 
     </div>
   );
