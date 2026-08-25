@@ -214,29 +214,79 @@ const Reprint = () => {
     try {
       if (selectedType === 'Purchase Order') {
         const { data: po } = await supabase.from('purchase_orders').select('*, vendors(name)').eq('po_number', selectedDocument).single();
-        const { data: poItems } = await supabase.from('purchase_order_items').select('*, products(item_name, barcode)').eq('purchase_order_id', po?.id);
+        const { data: poItems } = await supabase.from('purchase_order_items').select('*, products(item_name, barcode, sale_vat_percent)').eq('purchase_order_id', po?.id);
         
+        let docNumber = po?.po_number || selectedDocument;
+        if (!docNumber.startsWith('#')) docNumber = `#${docNumber}`;
+
         headerInfo = {
-          title: selectedType.toUpperCase(),
-          docNo: po?.po_number,
+          title: 'PURCHASE ORDER CHALLAN',
+          docNo: docNumber,
           date: po?.order_date,
-          orderNo: 'DIRECT',
-          deliveryTo: po?.delivery_to,
-          vendorName: po?.vendors?.name,
-          remarks: po?.reference_no
+          orderNo: '',
+          deliveryTo: po?.delivery_to || 'Central Store',
+          vendorName: po?.vendors?.name || 'N/A',
+          remarks: po?.reference_no || 'N/A',
+          isDuplicate: true
         };
         
-        items = (poItems || []).map((i, idx) => ([
-          idx + 1,
-          i.products?.barcode || '',
-          i.products?.item_name || '',
-          Number(i.qty || 0).toFixed(2) + ' PCS',
-          '0.00',
-          Number(i.pur_price || 0).toFixed(2),
-          '0.00',
-          '0.00',
-          Number(i.amount || 0).toFixed(2)
-        ]));
+        let totalQty = 0;
+        let totalFreeQty = 0;
+        let totalValue = 0;
+        let totalDiscAmt = 0;
+        let totalVat = 0;
+        let totalAmount = 0;
+
+        items = (poItems || []).map((i, idx) => {
+          const qty = Number(i.qty || 0);
+          const purPrice = Number(i.pur_price || 0);
+          const mrp = Number(i.mrp_price || 0);
+          const disc = Number(i.disc_percent || 0);
+          const freeQty = Number(i.free_qty || 0);
+          const val = qty * purPrice;
+          const discAmt = (val * disc) / 100;
+          const vatRate = Number(i.products?.sale_vat_percent || 0);
+          const vatAmt = ((val - discAmt) * vatRate) / 100;
+          const lineAmt = val - discAmt + vatAmt;
+
+          totalQty += qty;
+          totalFreeQty += freeQty;
+          totalValue += val;
+          totalDiscAmt += discAmt;
+          totalVat += vatAmt;
+          totalAmount += lineAmt;
+
+          return [
+            idx + 1,
+            i.products?.barcode || '-',
+            i.products?.item_name || '',
+            purPrice.toFixed(2),
+            mrp.toFixed(2),
+            qty,
+            disc,
+            freeQty,
+            val.toFixed(2),
+            discAmt.toFixed(2),
+            vatAmt.toFixed(2),
+            lineAmt.toFixed(2)
+          ];
+        });
+
+        // Add Summary Row
+        items.push([
+          'Total',
+          '',
+          '',
+          '',
+          '',
+          totalQty,
+          '',
+          totalFreeQty,
+          totalValue.toFixed(2),
+          totalDiscAmt.toFixed(2),
+          totalVat.toFixed(2),
+          totalAmount.toFixed(2)
+        ]);
 
       } else if (selectedType === 'DML Challan') {
         const { data: dml } = await supabase.from('damage_and_lost').select('*').eq('id', selectedDocument).single();
@@ -426,166 +476,131 @@ const Reprint = () => {
         items = [];
       }
 
-      // Generate PDF matching the image
-      const doc = new jsPDF();
+      // Generate PDF
+      const isLandscape = (selectedType === 'Purchase Order');
+      const doc = new jsPDF(isLandscape ? 'landscape' : 'portrait', 'mm', 'a4');
       const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
 
-      // Company Header
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text("EG ERP", pageWidth / 2, 15, { align: 'center' });
+      // 1. Company Header (Center)
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.setTextColor(46, 111, 64);
+      doc.text("EZ ERP", pageWidth / 2, 13, { align: 'center' });
       
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(70, 70, 70);
+      doc.text("House: 352, Lane: 05, 2nd floor, Baridhara DOHS, Dhaka-1212, Bangladesh", pageWidth / 2, 18, { align: 'center' });
+
+      // 2. Top Right details
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(46, 111, 64);
+      doc.text(headerInfo.title || 'CHALLAN', pageWidth - 14, 13, { align: 'right' });
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(30, 30, 30);
+      doc.text(`Challan No: ${headerInfo.docNo || ''}`, pageWidth - 14, 18.5, { align: 'right' });
+      if (headerInfo.date) doc.text(`Purchase Date: ${headerInfo.date}`, pageWidth - 14, 23, { align: 'right' });
+      if (headerInfo.deliveryTo) doc.text(`Delivery To: ${headerInfo.deliveryTo}`, pageWidth - 14, 27.5, { align: 'right' });
+      
+      // Duplicate badge right below Delivery To
+      doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
-      doc.setFont('helvetica', 'normal');
-      doc.text("House:352,Lane:05,2nd floor,Baridhara DOHS,", pageWidth / 2, 20, { align: 'center' });
-      doc.text("Dhaka , Dhaka-1212 Bangladesh", pageWidth / 2, 24, { align: 'center' });
+      doc.setTextColor(220, 38, 38);
+      doc.text(`[DUPLICATE]`, pageWidth - 14, 32, { align: 'right' });
 
-      // Top Right details
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'bold');
-      doc.text(headerInfo.title, pageWidth - 14, 15, { align: 'right' });
-      
-      doc.setFontSize(8);
-      doc.text(`CHALLAN NO # ${headerInfo.docNo || ''}`, pageWidth - 14, 20, { align: 'right' });
-      if(headerInfo.date) doc.text(`PURCHASE DATE: ${headerInfo.date}`, pageWidth - 14, 25, { align: 'right' });
-      if(headerInfo.orderNo) doc.text(`ORDER NO: ${headerInfo.orderNo}`, pageWidth - 14, 30, { align: 'right' });
-      if(headerInfo.deliveryTo) doc.text(`DELIVERY TO: ${headerInfo.deliveryTo}`, pageWidth - 14, 35, { align: 'right' });
-      
-      doc.text(`(REPRINTED)`, pageWidth - 14, 40, { align: 'right' });
-
-      // Top Left details
-      if(headerInfo.vendorName) {
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'bold');
-        doc.text(`VENDOR NAME: ${headerInfo.vendorName}`, 14, 45);
+      // 3. Top Left details
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.setTextColor(30, 30, 30);
+      if (headerInfo.vendorName) {
+        doc.text(`Vendor Name:`, 14, 18.5);
+        doc.setFont("helvetica", "normal");
+        doc.text(`${headerInfo.vendorName}`, 42, 18.5);
       }
-      if(headerInfo.remarks) {
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Reference/Remarks: ${headerInfo.remarks}`, 14, 50);
+      if (headerInfo.remarks) {
+        doc.setFont("helvetica", "bold");
+        doc.text(`Reference No:`, 14, 23);
+        doc.setFont("helvetica", "normal");
+        doc.text(`${headerInfo.remarks}`, 42, 23);
       }
-      
-      // Print Date
-      const printDate = new Date().toLocaleString('en-US');
-      doc.setFontSize(7);
-      doc.text(`PRINT DATE: ${printDate}`, pageWidth - 14, 50, { align: 'right' });
 
-      // Table
-      let startY = 55;
-      
-      // Calculate totals for footer
-      let totalPurQty = 0;
-      let totalFreeQty = 0;
-      let totalAmount = 0;
-      
-      items.forEach(row => {
-        totalPurQty += parseFloat(row[3]) || 0;
-        totalFreeQty += parseFloat(row[4]) || 0;
-        totalAmount += parseFloat(row[8]) || 0;
-      });
+      // 4. Table Layout
+      let startY = 36;
+      let tableHead = [['SL', 'Barcode', 'Item Name', 'Pur. Price', 'MRP', 'Qty', 'Disc(%)', 'Free Qty', 'Value', 'Dis.Amt', 'VAT', 'Amount']];
 
-      const subTotal = totalAmount.toFixed(2);
-      const discount = "0.00";
-      const netAmount = totalAmount.toFixed(2);
-
-      let tableHead = [['S/L', 'BARCODE', 'DISPLAY_NAME', 'PUR QTY', 'FREE QTY', 'PUR PRICE', 'MRP', 'DISC AMT', 'AMOUNT']];
-      
-      let isStoreDelivery = (selectedType === 'Store Delivery Challan' || selectedType === 'Store Delivery Challan Summary' || selectedType === 'Store Delivery Receive Challan');
-      
-      if (selectedType === 'Store Delivery Receive Challan') {
-        tableHead = [['S/L', 'BARCODE', 'DISPLAY_NAME', 'RCV QTY', 'C. STOCK', 'CPU', 'SALE PRICE', 'COST VALUE', 'SALE VALUE']];
-      } else if (isStoreDelivery) {
-        tableHead = [['S/L', 'BARCODE', 'DISPLAY_NAME', 'DEL QTY', 'C. STOCK', 'CPU', 'SALE PRICE', 'COST VALUE', 'SALE VALUE']];
+      if (selectedType === 'Purchase Order') {
+        tableHead = [['SL', 'Barcode', 'Item Name', 'Pur. Price', 'MRP', 'Qty', 'Disc(%)', 'Free Qty', 'Value', 'Dis.Amt', 'VAT', 'Amount']];
+      } else if (selectedType === 'Store Delivery Receive Challan' || selectedType === 'Store Delivery Challan' || selectedType === 'Store Delivery Challan Summary') {
+        tableHead = [['SL', 'Barcode', 'Item Name', 'Del Qty', 'C. Stock', 'CPU', 'Sale Price', 'Cost Value', 'Sale Value']];
+      } else if (selectedType === 'DML Challan') {
+        tableHead = [['SL', 'Barcode', 'Item Name', 'DML Qty', 'UOM', 'CPU', 'Sale Price', 'VAT', 'Amount']];
       }
 
       autoTable(doc, {
         startY: startY,
         head: tableHead,
         body: items,
-        theme: 'plain',
-        styles: { fontSize: 7, cellPadding: 1, textColor: [0, 0, 0] },
-        headStyles: { fontStyle: 'bold', lineWidth: { top: 0.5, bottom: 0.5 }, lineColor: 0, textColor: [0, 0, 0], halign: 'right' },
+        theme: 'grid',
+        styles: { fontSize: 7.5, cellPadding: 1.8, textColor: [30, 30, 30] },
+        headStyles: { fillColor: [46, 111, 64], fontStyle: 'bold', textColor: [255, 255, 255], halign: 'right' },
         columnStyles: {
           0: { halign: 'center', cellWidth: 10 },
-          1: { halign: 'left', cellWidth: 25 },
+          1: { halign: 'left', cellWidth: isLandscape ? 26 : 22 },
           2: { halign: 'left', cellWidth: 'auto' },
-          3: { halign: 'right', cellWidth: 20 },
-          4: { halign: 'right', cellWidth: 20 },
-          5: { halign: 'right', cellWidth: 20 },
-          6: { halign: 'right', cellWidth: 20 },
-          7: { halign: 'right', cellWidth: 20 },
-          8: { halign: 'right', cellWidth: 20 }
+          3: { halign: 'right', cellWidth: isLandscape ? 20 : 18 },
+          4: { halign: 'right', cellWidth: isLandscape ? 20 : 18 },
+          5: { halign: 'right', cellWidth: isLandscape ? 16 : 14 },
+          6: { halign: 'right', cellWidth: isLandscape ? 16 : 14 },
+          7: { halign: 'right', cellWidth: isLandscape ? 16 : 14 },
+          8: { halign: 'right', cellWidth: isLandscape ? 22 : 18 },
+          9: { halign: 'right', cellWidth: isLandscape ? 18 : 16 },
+          10: { halign: 'right', cellWidth: isLandscape ? 18 : 16 },
+          11: { halign: 'right', cellWidth: isLandscape ? 24 : 18 }
         },
         didParseCell: function (data) {
           if (data.section === 'head') {
             if (data.column.index === 0) data.cell.styles.halign = 'center';
             if (data.column.index === 1 || data.column.index === 2) data.cell.styles.halign = 'left';
           }
+          if (data.row.index === items.length - 1) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = [240, 245, 240];
+            data.cell.styles.textColor = [10, 60, 20];
+          }
         },
         margin: { top: 10, left: 14, right: 14 }
       });
 
-      const finalY = doc.lastAutoTable.finalY || startY;
+      const finalY = doc.lastAutoTable.finalY || startY + 50;
 
-      doc.setFontSize(7);
-      doc.setFont('helvetica', 'bold');
-      
-      doc.line(pageWidth / 2, finalY + 2, pageWidth - 14, finalY + 2);
-      doc.text('SUB TOTAL:', pageWidth / 2, finalY + 6, { align: 'right' });
-      
-      if (isStoreDelivery) {
-        let totalDelQty = 0;
-        let totalSaleValue = 0;
-        items.forEach(row => {
-          totalDelQty += parseFloat(row[3]) || 0;
-          totalSaleValue += parseFloat(row[8]) || 0;
-        });
-        doc.text(`${totalDelQty.toFixed(2)}`, pageWidth / 2 + 20, finalY + 6, { align: 'right' });
-        doc.text(`${totalSaleValue.toFixed(2)}`, pageWidth - 14, finalY + 6, { align: 'right' });
-        
-        doc.text('DISCOUNT:', pageWidth / 2, finalY + 10, { align: 'right' });
-        doc.text('0.00', pageWidth - 14, finalY + 10, { align: 'right' });
-        
-        doc.text('ADDITIONAL COST:', pageWidth / 2, finalY + 14, { align: 'right' });
-        doc.text('0.00', pageWidth - 14, finalY + 14, { align: 'right' });
-        
-        doc.line(pageWidth / 2, finalY + 16, pageWidth - 14, finalY + 16);
-        doc.text('NET AMOUNT:', pageWidth / 2, finalY + 20, { align: 'right' });
-        doc.text(`${totalSaleValue.toFixed(2)}`, pageWidth - 14, finalY + 20, { align: 'right' });
-      } else {
-        doc.text(`${totalPurQty.toFixed(2)}`, pageWidth / 2 + 10, finalY + 6, { align: 'right' });
-        doc.text(`${totalFreeQty.toFixed(2)}`, pageWidth / 2 + 30, finalY + 6, { align: 'right' });
-        doc.text(`${subTotal}`, pageWidth - 14, finalY + 6, { align: 'right' });
-
-        doc.text('DISCOUNT:', pageWidth / 2, finalY + 10, { align: 'right' });
-        doc.text(`${discount}`, pageWidth - 14, finalY + 10, { align: 'right' });
-
-        doc.text('ADDTIONAL COST:', pageWidth / 2, finalY + 14, { align: 'right' });
-        doc.text('0.00', pageWidth - 14, finalY + 14, { align: 'right' });
-
-        doc.line(pageWidth / 2, finalY + 16, pageWidth - 14, finalY + 16);
-        doc.text('NET AMOUNT:', pageWidth / 2, finalY + 20, { align: 'right' });
-        doc.text(`${netAmount}`, pageWidth - 14, finalY + 20, { align: 'right' });
-      }
-
-      // Signatures
-      const sigY = finalY + 40;
-      doc.setLineWidth(0.5);
+      // 5. Signatures
+      const sigY = Math.max(finalY + 26, pageHeight - 20);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setLineWidth(0.4);
+      doc.setDrawColor(120, 120, 120);
+      doc.setTextColor(40, 40, 40);
       
       // Posted By
-      doc.text('Admin', 30, sigY - 2, { align: 'center' }); // Mock username
-      doc.line(14, sigY, 46, sigY);
-      doc.text('Posted By', 30, sigY + 4, { align: 'center' });
+      doc.line(20, sigY, 70, sigY);
+      doc.setFont("helvetica", "bold");
+      doc.text('Posted By', 45, sigY + 5, { align: 'center' });
 
       // Checked By
-      doc.line(80, sigY, 130, sigY);
-      doc.text('Checked By', 105, sigY + 4, { align: 'center' });
+      doc.setFont("helvetica", "bold");
+      doc.line(pageWidth / 2 - 25, sigY, pageWidth / 2 + 25, sigY);
+      doc.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
 
-      // Authorized Signatory
-      doc.line(160, sigY, pageWidth - 14, sigY);
-      doc.text('Authorized Signatory', 178, sigY + 4, { align: 'center' });
+      // Authorized Signature
+      doc.setFont("helvetica", "bold");
+      doc.line(pageWidth - 70, sigY, pageWidth - 20, sigY);
+      doc.text('Authorized Signature', pageWidth - 45, sigY + 5, { align: 'center' });
 
-      doc.save(`Reprint_${selectedDocument}.pdf`);
+      doc.save(`Reprint_${String(headerInfo.docNo || selectedDocument).replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`);
       toast.success("Reprint PDF Generated");
 
     } catch (err) {

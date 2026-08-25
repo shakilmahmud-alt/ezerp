@@ -252,6 +252,44 @@ const PurchaseOrderVendor = () => {
 
   const totals = getTotals();
 
+  const generateNextPoNo = async () => {
+    try {
+      const dateObj = new Date();
+      const yyyy = dateObj.getFullYear();
+      const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const dd = String(dateObj.getDate()).padStart(2, '0');
+      const datePrefix = `PO${yyyy}${mm}${dd}`;
+
+      const { data, error } = await supabase
+        .from('purchase_orders')
+        .select('po_number');
+
+      let maxSeq = 0;
+      if (data && data.length > 0) {
+        data.forEach(d => {
+          if (d.po_number) {
+            const clean = String(d.po_number).replace(/^[#]/, '').trim();
+            if (clean.startsWith(datePrefix)) {
+              const seqPart = parseInt(clean.substring(datePrefix.length), 10);
+              if (!isNaN(seqPart) && seqPart > maxSeq) {
+                maxSeq = seqPart;
+              }
+            }
+          }
+        });
+      }
+      const nextSeq = String(maxSeq + 1).padStart(3, '0');
+      return `#PO${yyyy}${mm}${dd}${nextSeq}`;
+    } catch (err) {
+      console.error('Error generating PO Number:', err);
+      const dateObj = new Date();
+      const yyyy = dateObj.getFullYear();
+      const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const dd = String(dateObj.getDate()).padStart(2, '0');
+      return `#PO${yyyy}${mm}${dd}001`;
+    }
+  };
+
   const handleSave = async (type) => {
     if (!headerData.vendorId) {
       toast.error('Please select a Vendor');
@@ -267,15 +305,10 @@ const PurchaseOrderVendor = () => {
       const status = type === 'hold' ? 'Hold' : 'Saved';
       let poId = headerData.id;
       
-      // Generate PO Number if saving for the first time
+      // Generate sequential PO Number if saving for the first time
       let generatedPoNo = headerData.poNumber;
       if (status === 'Saved' && !generatedPoNo) {
-        const dateObj = new Date();
-        const yyyy = dateObj.getFullYear();
-        const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
-        const dd = String(dateObj.getDate()).padStart(2, '0');
-        const countStr = String(poStats.count + 1).padStart(3, '0');
-        generatedPoNo = `PO${yyyy}${mm}${dd}${countStr}`;
+        generatedPoNo = await generateNextPoNo();
       }
 
       const poPayload = {
@@ -328,7 +361,7 @@ const PurchaseOrderVendor = () => {
       
       // Auto-generate PDF on Save
       if (status === 'Saved') {
-        generatePDF(generatedPoNo);
+        generatePDF(generatedPoNo, false);
         fetchPoStats(); // Refresh stats after saving
       }
 
@@ -352,75 +385,235 @@ const PurchaseOrderVendor = () => {
     }
   };
 
-  const generatePDF = (overridePoNo = null) => {
+  const generatePDF = (overridePoNo = null, isDuplicate = false) => {
     if (selectedItems.length === 0) {
       toast.error('Please select products to preview');
       return;
     }
     
-    const doc = new jsPDF('landscape');
-    const vendorName = vendors.find(v => v.id == headerData.vendorId)?.name || '';
-    const displayPoNo = overridePoNo || headerData.poNumber || 'DRAFT';
-
-    doc.setFontSize(16);
-    doc.text(`Purchase Order ${displayPoNo !== 'DRAFT' ? '# ' + displayPoNo : '(Draft)'}`, 14, 15);
+    const doc = new jsPDF('landscape', 'mm', 'a4');
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const vendorName = vendors.find(v => v.id == headerData.vendorId)?.name || 'N/A';
     
-    doc.setFontSize(10);
-    doc.text(`Vendor: ${vendorName}`, 14, 25);
-    doc.text(`Order Date: ${headerData.orderDate}`, 14, 30);
-    doc.text(`Delivery To: ${headerData.deliveryTo}`, 150, 25);
-    doc.text(`Delivery Date: ${headerData.deliveryDate}`, 150, 30);
+    // Determine Display PO Number
+    let displayPoNo = '';
+    if (typeof overridePoNo === 'string' && overridePoNo.trim()) {
+      displayPoNo = overridePoNo.trim();
+    } else if (headerData.poNumber) {
+      displayPoNo = headerData.poNumber;
+    } else {
+      const dateObj = new Date();
+      const yyyy = dateObj.getFullYear();
+      const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const dd = String(dateObj.getDate()).padStart(2, '0');
+      displayPoNo = `#PO${yyyy}${mm}${dd}001 (PREVIEW)`;
+    }
 
-    const tableCols = ["Name", "Barcode", "Pur. Price", "MRP", "Qty", "Disc(%)", "Free Qty", "Value", "Dis.Amt", "VAT", "Amount"];
-    const tableRows = selectedItems.map(item => {
-      const calc = calculateRow(item);
-      return [
-        item.item_name || '',
-        item.barcode || '',
-        Number(item.purPrice).toFixed(2),
-        Number(item.mrpPrice).toFixed(2),
-        item.qty,
-        item.discPercent,
-        item.freeQty,
-        calc.value.toFixed(2),
-        calc.discAmt.toFixed(2),
-        calc.vatAmt.toFixed(2),
-        calc.amount.toFixed(2)
-      ];
-    });
+    if (!displayPoNo.startsWith('#') && !displayPoNo.includes('(PREVIEW)')) {
+      displayPoNo = `#${displayPoNo}`;
+    }
 
-    // Add Total Row
-    tableRows.push([
-      'Total',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      totals.totalValue.toFixed(2),
-      '',
-      totals.totalVat.toFixed(2),
-      totals.totalAmount.toFixed(2)
-    ]);
+    const renderPageContent = (docInstance, isSecondCopy = false) => {
+      // 1. Top Middle / Center: Company Name & Address
+      docInstance.setFont("helvetica", "bold");
+      docInstance.setFontSize(16);
+      docInstance.setTextColor(46, 111, 64); // Project theme green #2e6f40
+      docInstance.text('EZ ERP', pageWidth / 2, 13, { align: 'center' });
 
-    autoTable(doc, {
-      head: [tableCols],
-      body: tableRows,
-      startY: 35,
-      theme: 'grid',
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [46, 111, 64] },
-      didParseCell: function (data) {
-        // Highlight total row
-        if (data.row.index === tableRows.length - 1) {
-          data.cell.styles.fontStyle = 'bold';
-          data.cell.styles.fillColor = [240, 240, 240];
-        }
+      docInstance.setFont("helvetica", "normal");
+      docInstance.setFontSize(8.5);
+      docInstance.setTextColor(70, 70, 70);
+      docInstance.text('House: 352, Lane: 05, 2nd floor, Baridhara DOHS, Dhaka-1212, Bangladesh', pageWidth / 2, 18, { align: 'center' });
+
+      // 2. Right Side: PURCHASE ORDER CHALLAN Info
+      docInstance.setFont("helvetica", "bold");
+      docInstance.setFontSize(11);
+      docInstance.setTextColor(46, 111, 64);
+      docInstance.text('PURCHASE ORDER CHALLAN', pageWidth - 14, 13, { align: 'right' });
+
+      docInstance.setFont("helvetica", "normal");
+      docInstance.setFontSize(8.5);
+      docInstance.setTextColor(30, 30, 30);
+      docInstance.text(`Challan No: ${displayPoNo}`, pageWidth - 14, 18.5, { align: 'right' });
+      docInstance.text(`Purchase Date: ${headerData.orderDate}`, pageWidth - 14, 23, { align: 'right' });
+      docInstance.text(`Delivery To: ${headerData.deliveryTo || 'Central Store'}`, pageWidth - 14, 27.5, { align: 'right' });
+
+      if (isDuplicate || isSecondCopy) {
+        docInstance.setFont("helvetica", "bold");
+        docInstance.setFontSize(9);
+        docInstance.setTextColor(220, 38, 38); // Bold Red
+        docInstance.text('[DUPLICATE]', pageWidth - 14, 32, { align: 'right' });
       }
-    });
 
-    doc.save(`PurchaseOrder_${new Date().getTime()}.pdf`);
+      // 3. Left Side: Vendor & Reference Info
+      docInstance.setFont("helvetica", "bold");
+      docInstance.setFontSize(8.5);
+      docInstance.setTextColor(30, 30, 30);
+      docInstance.text('Vendor Name:', 14, 18.5);
+      docInstance.setFont("helvetica", "normal");
+      docInstance.text(`${vendorName}`, 42, 18.5);
+
+      docInstance.setFont("helvetica", "bold");
+      docInstance.text('Reference No:', 14, 23);
+      docInstance.setFont("helvetica", "normal");
+      docInstance.text(`${headerData.referenceNo || 'N/A'}`, 42, 23);
+
+      if (headerData.supplierPaymentType) {
+        docInstance.setFont("helvetica", "bold");
+        docInstance.text('Payment Type:', 14, 27.5);
+        docInstance.setFont("helvetica", "normal");
+        docInstance.text(`${headerData.supplierPaymentType}`, 42, 27.5);
+      }
+
+      // 4. Table Columns: SL, Barcode, Item Name, Pur. Price, MRP, Qty, Disc(%), Free Qty, Value, Dis.Amt, VAT, Amount
+      const tableCols = [
+        "SL",
+        "Barcode",
+        "Item Name",
+        "Pur. Price",
+        "MRP",
+        "Qty",
+        "Disc(%)",
+        "Free Qty",
+        "Value",
+        "Dis.Amt",
+        "VAT",
+        "Amount"
+      ];
+
+      let totalQty = 0;
+      let totalFreeQty = 0;
+      let totalValue = 0;
+      let totalDiscAmt = 0;
+      let totalVat = 0;
+      let totalAmount = 0;
+
+      const tableRows = selectedItems.map((item, idx) => {
+        const calc = calculateRow(item);
+        totalQty += Number(item.qty || 0);
+        totalFreeQty += Number(item.freeQty || 0);
+        totalValue += calc.value;
+        totalDiscAmt += calc.discAmt;
+        totalVat += calc.vatAmt;
+        totalAmount += calc.amount;
+
+        return [
+          idx + 1,
+          item.barcode || '-',
+          item.item_name || '',
+          Number(item.purPrice || 0).toFixed(2),
+          Number(item.mrpPrice || 0).toFixed(2),
+          Number(item.qty || 0),
+          item.discPercent || 0,
+          item.freeQty || 0,
+          calc.value.toFixed(2),
+          calc.discAmt.toFixed(2),
+          calc.vatAmt.toFixed(2),
+          calc.amount.toFixed(2)
+        ];
+      });
+
+      // Add Summary Row
+      tableRows.push([
+        'Total',
+        '',
+        '',
+        '',
+        '',
+        totalQty,
+        '',
+        totalFreeQty,
+        totalValue.toFixed(2),
+        totalDiscAmt.toFixed(2),
+        totalVat.toFixed(2),
+        totalAmount.toFixed(2)
+      ]);
+
+      const startY = (isDuplicate || isSecondCopy) ? 35 : 32;
+
+      autoTable(docInstance, {
+        head: [tableCols],
+        body: tableRows,
+        startY: startY,
+        theme: 'grid',
+        styles: {
+          fontSize: 7.5,
+          cellPadding: 1.8,
+          textColor: [30, 30, 30]
+        },
+        headStyles: {
+          fillColor: [46, 111, 64], // Project Brand Green
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          halign: 'right'
+        },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 10 },
+          1: { halign: 'left', cellWidth: 26 },
+          2: { halign: 'left', cellWidth: 'auto' },
+          3: { halign: 'right', cellWidth: 20 },
+          4: { halign: 'right', cellWidth: 20 },
+          5: { halign: 'right', cellWidth: 16 },
+          6: { halign: 'right', cellWidth: 16 },
+          7: { halign: 'right', cellWidth: 16 },
+          8: { halign: 'right', cellWidth: 22 },
+          9: { halign: 'right', cellWidth: 18 },
+          10: { halign: 'right', cellWidth: 18 },
+          11: { halign: 'right', cellWidth: 24 }
+        },
+        didParseCell: function (data) {
+          if (data.section === 'head') {
+            if (data.column.index === 0) data.cell.styles.halign = 'center';
+            if (data.column.index === 1 || data.column.index === 2) data.cell.styles.halign = 'left';
+          }
+          // Total row bolding
+          if (data.row.index === tableRows.length - 1) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = [240, 245, 240];
+            data.cell.styles.textColor = [10, 60, 20];
+          }
+        },
+        margin: { top: 10, left: 14, right: 14 }
+      });
+
+      const finalY = docInstance.lastAutoTable.finalY || startY + 50;
+
+      // 5. Signatures at bottom: Posted By, Checked By, Authorized Signature
+      const sigY = Math.max(finalY + 26, pageHeight - 20);
+
+      docInstance.setFont("helvetica", "normal");
+      docInstance.setFontSize(8.5);
+      docInstance.setLineWidth(0.4);
+      docInstance.setDrawColor(120, 120, 120);
+      docInstance.setTextColor(40, 40, 40);
+
+      // 1. Posted By
+      docInstance.line(20, sigY, 70, sigY);
+      docInstance.setFont("helvetica", "bold");
+      docInstance.text('Posted By', 45, sigY + 5, { align: 'center' });
+
+      // 2. Checked By
+      docInstance.setFont("helvetica", "bold");
+      docInstance.line(pageWidth / 2 - 25, sigY, pageWidth / 2 + 25, sigY);
+      docInstance.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
+
+      // 3. Authorized Signature
+      docInstance.setFont("helvetica", "bold");
+      docInstance.line(pageWidth - 70, sigY, pageWidth - 20, sigY);
+      docInstance.text('Authorized Signature', pageWidth - 45, sigY + 5, { align: 'center' });
+    };
+
+    renderPageContent(doc, false);
+
+    // If "Print two copy" is checked, add a second page with [DUPLICATE] badge
+    if (printTwoCopy) {
+      doc.addPage('landscape');
+      renderPageContent(doc, true);
+    }
+
+    const cleanFilename = String(displayPoNo).replace(/[^a-zA-Z0-9_-]/g, '_');
+    doc.save(`PurchaseOrder_${cleanFilename}.pdf`);
   };
 
   const filteredProducts = allProducts.filter(p => {
@@ -613,9 +806,9 @@ const PurchaseOrderVendor = () => {
             <input type="checkbox" checked={printTwoCopy} onChange={(e) => setPrintTwoCopy(e.target.checked)} style={{ accentColor: 'var(--accent-primary)' }} />
             Print two copy
           </label>
-          <button className="btn-theme" onClick={() => handleSave('save')} style={{ padding: '10px 20px', backgroundColor: '#00bcd4', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Save</button>
-          <button className="btn-danger" onClick={() => handleSave('hold')} style={{ padding: '10px 20px', backgroundColor: '#0284c7', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Hold</button>
-          <button className="btn-info" onClick={generatePDF} style={{ padding: '10px 20px', backgroundColor: '#f43f5e', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Preview</button>
+          <button className="btn-theme" onClick={() => handleSave('save')} style={{ padding: '10px 22px', backgroundColor: 'var(--accent-primary, #2e6f40)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Save</button>
+          <button className="btn-danger" onClick={() => handleSave('hold')} style={{ padding: '10px 22px', backgroundColor: '#0284c7', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Hold</button>
+          <button className="btn-info" onClick={() => generatePDF()} style={{ padding: '10px 22px', backgroundColor: '#166534', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Preview</button>
         </div>
       </SectionWrapper>
 
