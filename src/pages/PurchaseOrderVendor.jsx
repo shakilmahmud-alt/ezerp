@@ -333,7 +333,13 @@ const PurchaseOrderVendor = () => {
         .single();
 
       if (poError) throw poError;
-      poId = poData.id;
+      poId = poData?.id || poId;
+      if (!poId && Array.isArray(poData) && poData[0]) {
+        poId = poData[0].id;
+      }
+      if (!poId) {
+        throw new Error('Failed to retrieve Purchase Order ID from database');
+      }
 
       const { error: delError } = await supabase
         .from('purchase_order_items')

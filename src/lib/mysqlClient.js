@@ -23,7 +23,10 @@ class QueryBuilder {
   }
 
   select(columns = '*', options = {}) {
-    this.action = 'SELECT';
+    // Preserve action if it's already an INSERT, UPSERT, or UPDATE
+    if (this.action !== 'INSERT' && this.action !== 'UPSERT' && this.action !== 'UPDATE') {
+      this.action = 'SELECT';
+    }
     this.selectCols = columns;
     if (options && options.count === 'exact') {
       this.isCountExact = true;
@@ -228,9 +231,9 @@ class QueryBuilder {
       }
 
       if (this.isSingle) {
-        data = Array.isArray(data) ? (data[0] || null) : data;
+        data = Array.isArray(data) ? (data[0] || null) : (data || null);
       } else if (this.isMaybeSingle) {
-        data = Array.isArray(data) ? (data[0] || null) : data;
+        data = Array.isArray(data) ? (data[0] || null) : (data || null);
       }
 
       return resolve({ data, error: null, count });
