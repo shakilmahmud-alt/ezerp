@@ -7,7 +7,7 @@
 
 define('DB_HOST', 'localhost');
 define('DB_USER', 'holidaym_admin');
-define('DB_PASS', 'mssm039raqeeb');
+define('DB_PASS', 'msm039raqeeb');
 define('DB_NAME', 'holidaym_ezerp');
 define('DB_PORT', '3306');
 
@@ -24,26 +24,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 /**
- * Returns a configured PDO Database instance
+ * Returns a configured PDO Database instance with fallback support
  */
 function getDb() {
     static $pdo = null;
     if ($pdo === null) {
-        try {
-            $dsn = "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";port=" . DB_PORT . ";charset=utf8mb4";
-            $pdo = new PDO($dsn, DB_USER, DB_PASS, [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                PDO::ATTR_EMULATE_PREPARES => false,
-            ]);
-        } catch (PDOException $e) {
-            http_response_code(500);
-            echo json_encode([
-                "status" => "error",
-                "message" => "Database connection failed: " . $e->getMessage()
-            ], JSON_UNESCAPED_UNICODE);
-            exit();
+        $hosts = [DB_HOST, '127.0.0.1'];
+        $lastException = null;
+
+        foreach ($hosts as $host) {
+            try {
+                $dsn = "mysql:host={$host};dbname=" . DB_NAME . ";port=" . DB_PORT . ";charset=utf8mb4";
+                $pdo = new PDO($dsn, DB_USER, DB_PASS, [
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    PDO::ATTR_EMULATE_PREPARES => false,
+                ]);
+                return $pdo;
+            } catch (PDOException $e) {
+                $lastException = $e;
+            }
         }
+
+        http_response_code(500);
+        echo json_encode([
+            "status" => "error",
+            "message" => "Database connection failed: " . ($lastException ? $lastException->getMessage() : "Unknown error"),
+            "hint" => "Please verify in cPanel > MySQL Users that password for user '" . DB_USER . "' matches DB_PASS exactly."
+        ], JSON_UNESCAPED_UNICODE);
+        exit();
     }
     return $pdo;
 }
