@@ -276,51 +276,140 @@ const DamageAndLost = () => {
     setReferenceItems([]);
   };
 
-  const generatePDF = () => {
-    if (selectedItems.length === 0) return;
+  const generatePDF = (isDuplicate = false) => {
+    if (selectedItems.length === 0) {
+      toast.error('Please select products to preview');
+      return;
+    }
     
-    const doc = new jsPDF('landscape');
+    const doc = new jsPDF('landscape', 'mm', 'a4');
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
 
-    doc.setFontSize(16);
-    doc.text("Damage and Lost Report", 14, 15);
-    
-    doc.setFontSize(10);
-    doc.text(`Date: ${formData.date}`, 14, 25);
-    doc.text(`Reference No: ${formData.referenceNo}`, 14, 30);
+    let displayChallanNo = formData.referenceNo ? String(formData.referenceNo) : `#DML-${new Date().getTime()}`;
+    if (!displayChallanNo.startsWith('#')) displayChallanNo = `#${displayChallanNo}`;
 
-    const tableCols = ["Code", "Barcode", "Product Name", "CPU", "Sale Price", "DML Qty", "Unit", "Amount", "Reason"];
-    const tableRows = selectedItems.map(item => [
-      '', // Code
-      item.barcode,
-      item.productName,
-      item.cpu.toFixed(2),
-      item.salePrice.toFixed(2),
-      item.dmlQty,
-      'PCS',
-      item.amount.toFixed(2),
-      item.reason || ''
-    ]);
+    const renderPageContent = (docInstance) => {
+      // 1. Top Middle / Center: Company Name & Address
+      docInstance.setFont("helvetica", "bold");
+      docInstance.setFontSize(16);
+      docInstance.setTextColor(46, 111, 64); // Project theme green #2e6f40
+      docInstance.text('EZ ERP', pageWidth / 2, 13, { align: 'center' });
 
-    tableRows.push([
-      'Total', '', '', '', '', totals.qty, '', totals.value.toFixed(2), ''
-    ]);
+      docInstance.setFont("helvetica", "normal");
+      docInstance.setFontSize(8.5);
+      docInstance.setTextColor(70, 70, 70);
+      docInstance.text('House: 352, Lane: 05, 2nd floor, Baridhara DOHS, Dhaka-1212, Bangladesh', pageWidth / 2, 18, { align: 'center' });
 
-    autoTable(doc, {
-      head: [tableCols],
-      body: tableRows,
-      startY: 35,
-      theme: 'grid',
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [50, 50, 50] }, 
-      didParseCell: function (data) {
-        if (data.row.index === tableRows.length - 1) {
-          data.cell.styles.fontStyle = 'bold';
-          data.cell.styles.fillColor = [240, 240, 240];
-        }
+      // 2. Right Side: CHALLAN Header & Details
+      docInstance.setFont("helvetica", "bold");
+      docInstance.setFontSize(11);
+      docInstance.setTextColor(46, 111, 64);
+      docInstance.text('DAMAGE AND LOST CHALLAN', pageWidth - 14, 13, { align: 'right' });
+
+      docInstance.setFont("helvetica", "normal");
+      docInstance.setFontSize(8.5);
+      docInstance.setTextColor(30, 30, 30);
+      docInstance.text(`Challan No: ${displayChallanNo}`, pageWidth - 14, 18.5, { align: 'right' });
+      docInstance.text(`Date: ${formData.date}`, pageWidth - 14, 23, { align: 'right' });
+
+      if (isDuplicate) {
+        docInstance.setFont("helvetica", "bold");
+        docInstance.setFontSize(9);
+        docInstance.setTextColor(220, 38, 38);
+        docInstance.text('[DUPLICATE]', pageWidth - 14, 27.5, { align: 'right' });
       }
-    });
 
-    doc.save(`Damage_And_Lost_${new Date().getTime()}.pdf`);
+      // 3. Left Side: Reference Info
+      docInstance.setFont("helvetica", "bold");
+      docInstance.setFontSize(8.5);
+      docInstance.setTextColor(30, 30, 30);
+      docInstance.text('Reference No:', 14, 18.5);
+      docInstance.setFont("helvetica", "normal");
+      docInstance.text(`${formData.referenceNo || 'N/A'}`, 42, 18.5);
+
+      // 4. Table Columns: SL, Barcode, Product Name, CPU, Sale Price, DML Qty, Unit, Amount, Reason
+      const tableCols = ["SL", "Barcode", "Product Name", "CPU", "Sale Price", "DML Qty", "Unit", "Amount", "Reason"];
+      const tableRows = selectedItems.map((item, idx) => [
+        idx + 1,
+        item.barcode || '-',
+        item.productName || '',
+        Number(item.cpu || 0).toFixed(2),
+        Number(item.salePrice || 0).toFixed(2),
+        Number(item.dmlQty || 0),
+        'PCS',
+        Number(item.amount || 0).toFixed(2),
+        item.reason || ''
+      ]);
+
+      tableRows.push([
+        'Total', '', '', '', '', totals.qty, '', totals.value.toFixed(2), ''
+      ]);
+
+      const startY = isDuplicate ? 33 : 30;
+
+      autoTable(docInstance, {
+        head: [tableCols],
+        body: tableRows,
+        startY: startY,
+        theme: 'grid',
+        styles: { fontSize: 7.5, cellPadding: 1.8, textColor: [30, 30, 30] },
+        headStyles: { fillColor: [46, 111, 64], fontStyle: 'bold', textColor: [255, 255, 255], halign: 'right' },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 10 },
+          1: { halign: 'left', cellWidth: 26 },
+          2: { halign: 'left', cellWidth: 'auto' },
+          3: { halign: 'right', cellWidth: 22 },
+          4: { halign: 'right', cellWidth: 22 },
+          5: { halign: 'right', cellWidth: 18 },
+          6: { halign: 'center', cellWidth: 16 },
+          7: { halign: 'right', cellWidth: 26 },
+          8: { halign: 'left', cellWidth: 35 }
+        },
+        didParseCell: function (data) {
+          if (data.section === 'head') {
+            if (data.column.index === 0 || data.column.index === 6) data.cell.styles.halign = 'center';
+            if (data.column.index === 1 || data.column.index === 2 || data.column.index === 8) data.cell.styles.halign = 'left';
+          }
+          if (data.row.index === tableRows.length - 1) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = [240, 245, 240];
+            data.cell.styles.textColor = [10, 60, 20];
+          }
+        },
+        margin: { top: 10, left: 14, right: 14 }
+      });
+
+      const finalY = docInstance.lastAutoTable.finalY || startY + 50;
+
+      // 5. Signatures at bottom
+      const sigY = Math.max(finalY + 26, pageHeight - 20);
+
+      docInstance.setFont("helvetica", "normal");
+      docInstance.setFontSize(8.5);
+      docInstance.setLineWidth(0.4);
+      docInstance.setDrawColor(120, 120, 120);
+      docInstance.setTextColor(40, 40, 40);
+
+      // Posted By
+      docInstance.line(20, sigY, 70, sigY);
+      docInstance.setFont("helvetica", "bold");
+      docInstance.text('Posted By', 45, sigY + 5, { align: 'center' });
+
+      // Checked By
+      docInstance.setFont("helvetica", "bold");
+      docInstance.line(pageWidth / 2 - 25, sigY, pageWidth / 2 + 25, sigY);
+      docInstance.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
+
+      // Authorized Signature
+      docInstance.setFont("helvetica", "bold");
+      docInstance.line(pageWidth - 70, sigY, pageWidth - 20, sigY);
+      docInstance.text('Authorized Signature', pageWidth - 45, sigY + 5, { align: 'center' });
+    };
+
+    renderPageContent(doc);
+    const cleanFilename = String(displayChallanNo).replace(/[^a-zA-Z0-9_-]/g, '_');
+    doc.save(`Damage_And_Lost_${cleanFilename}.pdf`);
   };
 
   return (

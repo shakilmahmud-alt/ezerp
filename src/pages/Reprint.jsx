@@ -342,29 +342,84 @@ const Reprint = () => {
 
       } else if (selectedType === 'Purchase Receive Challan') {
         const { data: pr } = await supabase.from('purchase_receives').select('*, vendors(name), purchase_orders(po_number)').eq('last_challan_no', selectedDocument).single();
-        const { data: prItems } = await supabase.from('purchase_receive_items').select('*, products(item_name, barcode)').eq('purchase_receive_id', pr?.id);
+        const { data: prItems } = await supabase.from('purchase_receive_items').select('*, products(item_name, barcode, sale_vat_percent)').eq('purchase_receive_id', pr?.id);
+
+        let docNumber = pr?.last_challan_no || selectedDocument;
+        if (!docNumber.startsWith('#')) docNumber = `#${docNumber}`;
 
         headerInfo = {
-          title: selectedType.toUpperCase(),
-          docNo: pr?.last_challan_no,
+          title: 'PURCHASE RECEIVE CHALLAN',
+          docNo: docNumber,
           date: pr?.purchase_date,
-          orderNo: pr?.purchase_orders?.po_number || 'DIRECT',
-          deliveryTo: pr?.delivery_to || selectedStore,
-          vendorName: pr?.vendors?.name || '',
-          remarks: pr?.reference_no || ''
+          orderNo: pr?.purchase_orders?.po_number || '',
+          deliveryTo: pr?.delivery_to || selectedStore || 'Central Store',
+          vendorName: pr?.vendors?.name || 'N/A',
+          remarks: pr?.reference_no || 'N/A',
+          isDuplicate: true
         };
 
-        items = (prItems || []).map((i, idx) => ([
-          idx + 1,
-          i.products?.barcode || '',
-          i.products?.item_name || '',
-          Number(i.rcv_qty || 0).toFixed(2) + ' PCS',
-          Number(i.free_qty || 0).toFixed(2) + ' PCS',
-          Number(i.pur_price || 0).toFixed(2),
-          Number(i.sale_price || 0).toFixed(2),
-          Number(i.disc_percent || 0).toFixed(2) + '%',
-          Number(i.line_amount || 0).toFixed(2)
-        ]));
+        let totalPoQty = 0;
+        let totalRcvQty = 0;
+        let totalFreeQty = 0;
+        let totalValue = 0;
+        let totalDiscAmt = 0;
+        let totalVat = 0;
+        let totalAmount = 0;
+
+        items = (prItems || []).map((i, idx) => {
+          const poQty = Number(i.po_qty || 0);
+          const rcvQty = Number(i.rcv_qty || 0);
+          const purPrice = Number(i.pur_price || 0);
+          const salePrice = Number(i.sale_price || 0);
+          const disc = Number(i.disc_percent || 0);
+          const freeQty = Number(i.free_qty || 0);
+          const val = rcvQty * purPrice;
+          const discAmt = (val * disc) / 100;
+          const vatRate = Number(i.products?.sale_vat_percent || 0);
+          const vatAmt = ((val - discAmt) * vatRate) / 100;
+          const lineAmt = Number(i.line_amount) || (val - discAmt + vatAmt);
+
+          totalPoQty += poQty;
+          totalRcvQty += rcvQty;
+          totalFreeQty += freeQty;
+          totalValue += val;
+          totalDiscAmt += discAmt;
+          totalVat += vatAmt;
+          totalAmount += lineAmt;
+
+          return [
+            idx + 1,
+            i.products?.barcode || '-',
+            i.products?.item_name || '',
+            poQty,
+            rcvQty,
+            purPrice.toFixed(2),
+            salePrice.toFixed(2),
+            disc,
+            freeQty,
+            val.toFixed(2),
+            discAmt.toFixed(2),
+            vatAmt.toFixed(2),
+            lineAmt.toFixed(2)
+          ];
+        });
+
+        // Add Summary Row
+        items.push([
+          'Total',
+          '',
+          '',
+          totalPoQty,
+          totalRcvQty,
+          '',
+          '',
+          '',
+          totalFreeQty,
+          totalValue.toFixed(2),
+          totalDiscAmt.toFixed(2),
+          totalVat.toFixed(2),
+          totalAmount.toFixed(2)
+        ]);
 
       } else if (selectedType === 'Purchase Return Challan') {
         const { data: prt } = await supabase.from('purchase_returns').select('*, vendors(name)').eq('challan_no', selectedDocument).single();
@@ -477,7 +532,15 @@ const Reprint = () => {
       }
 
       // Generate PDF
-      const isLandscape = (selectedType === 'Purchase Order');
+      const isLandscape = (
+        selectedType === 'Purchase Order' ||
+        selectedType === 'Purchase Receive Challan' ||
+        selectedType === 'Purchase Return Challan' ||
+        selectedType === 'Store Delivery Challan' ||
+        selectedType === 'Store Delivery Receive Challan' ||
+        selectedType === 'Store Delivery Challan Summary' ||
+        selectedType === 'Receive from Shop Challan'
+      );
       const doc = new jsPDF(isLandscape ? 'landscape' : 'portrait', 'mm', 'a4');
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
@@ -503,7 +566,7 @@ const Reprint = () => {
       doc.setFontSize(8.5);
       doc.setTextColor(30, 30, 30);
       doc.text(`Challan No: ${headerInfo.docNo || ''}`, pageWidth - 14, 18.5, { align: 'right' });
-      if (headerInfo.date) doc.text(`Purchase Date: ${headerInfo.date}`, pageWidth - 14, 23, { align: 'right' });
+      if (headerInfo.date) doc.text(`Date: ${headerInfo.date}`, pageWidth - 14, 23, { align: 'right' });
       if (headerInfo.deliveryTo) doc.text(`Delivery To: ${headerInfo.deliveryTo}`, pageWidth - 14, 27.5, { align: 'right' });
       
       // Duplicate badge right below Delivery To
@@ -534,6 +597,10 @@ const Reprint = () => {
 
       if (selectedType === 'Purchase Order') {
         tableHead = [['SL', 'Barcode', 'Item Name', 'Pur. Price', 'MRP', 'Qty', 'Disc(%)', 'Free Qty', 'Value', 'Dis.Amt', 'VAT', 'Amount']];
+      } else if (selectedType === 'Purchase Receive Challan') {
+        tableHead = [['SL', 'Barcode', 'Item Name', 'PO Qty', 'Rcv Qty', 'Pur. Price', 'MRP', 'Disc(%)', 'Free Qty', 'Value', 'Dis.Amt', 'VAT', 'Amount']];
+      } else if (selectedType === 'Purchase Return Challan') {
+        tableHead = [['SL', 'Barcode', 'Item Name', 'Return Qty', 'Cost Price', 'Sale Price', 'Disc(%)', 'VAT', 'Amount']];
       } else if (selectedType === 'Store Delivery Receive Challan' || selectedType === 'Store Delivery Challan' || selectedType === 'Store Delivery Challan Summary') {
         tableHead = [['SL', 'Barcode', 'Item Name', 'Del Qty', 'C. Stock', 'CPU', 'Sale Price', 'Cost Value', 'Sale Value']];
       } else if (selectedType === 'DML Challan') {
@@ -549,17 +616,18 @@ const Reprint = () => {
         headStyles: { fillColor: [46, 111, 64], fontStyle: 'bold', textColor: [255, 255, 255], halign: 'right' },
         columnStyles: {
           0: { halign: 'center', cellWidth: 10 },
-          1: { halign: 'left', cellWidth: isLandscape ? 26 : 22 },
+          1: { halign: 'left', cellWidth: isLandscape ? 24 : 22 },
           2: { halign: 'left', cellWidth: 'auto' },
-          3: { halign: 'right', cellWidth: isLandscape ? 20 : 18 },
-          4: { halign: 'right', cellWidth: isLandscape ? 20 : 18 },
-          5: { halign: 'right', cellWidth: isLandscape ? 16 : 14 },
-          6: { halign: 'right', cellWidth: isLandscape ? 16 : 14 },
-          7: { halign: 'right', cellWidth: isLandscape ? 16 : 14 },
-          8: { halign: 'right', cellWidth: isLandscape ? 22 : 18 },
-          9: { halign: 'right', cellWidth: isLandscape ? 18 : 16 },
-          10: { halign: 'right', cellWidth: isLandscape ? 18 : 16 },
-          11: { halign: 'right', cellWidth: isLandscape ? 24 : 18 }
+          3: { halign: 'right', cellWidth: isLandscape ? 16 : 18 },
+          4: { halign: 'right', cellWidth: isLandscape ? 16 : 18 },
+          5: { halign: 'right', cellWidth: isLandscape ? 18 : 14 },
+          6: { halign: 'right', cellWidth: isLandscape ? 18 : 14 },
+          7: { halign: 'right', cellWidth: isLandscape ? 14 : 14 },
+          8: { halign: 'right', cellWidth: isLandscape ? 14 : 14 },
+          9: { halign: 'right', cellWidth: isLandscape ? 20 : 18 },
+          10: { halign: 'right', cellWidth: isLandscape ? 16 : 16 },
+          11: { halign: 'right', cellWidth: isLandscape ? 16 : 16 },
+          12: { halign: 'right', cellWidth: isLandscape ? 22 : 18 }
         },
         didParseCell: function (data) {
           if (data.section === 'head') {

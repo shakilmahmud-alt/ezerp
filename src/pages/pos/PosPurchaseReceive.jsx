@@ -174,22 +174,37 @@ const PosPurchaseReceive = () => {
         .select('*, products(*)')
         .eq('purchase_order_id', poId);
 
-      if (poItems) {
-        const mapped = poItems.map(item => ({
-          id: item.product_id,
-          item_name: item.products?.item_name || item.product_name,
-          barcode: item.products?.barcode || item.barcode,
-          sale_vat_percent: item.products?.sale_vat_percent || 0,
-          wh_stock: item.products?.wh_stock || 0,
-          str_stock: item.products?.str_stock || 0,
-          poQty: item.quantity,
-          rcvQty: item.quantity,
-          purPrice: item.pur_price || item.unit_price,
-          salePrice: item.mrp || item.products?.mrp || 0,
-          discPercent: item.disc_percent || 0,
-          freeQty: item.free_qty || 0,
-          uom: 'Pcs'
-        }));
+      if (poItems && poItems.length > 0) {
+        let prodMap = {};
+        const missingIds = poItems.filter(item => !item.products?.item_name && item.product_id).map(item => item.product_id);
+        if (missingIds.length > 0) {
+          const { data: fetchedProds } = await supabase
+            .from('products')
+            .select('*')
+            .in('id', missingIds);
+          if (fetchedProds) {
+            fetchedProds.forEach(p => { prodMap[p.id] = p; });
+          }
+        }
+
+        const mapped = poItems.map(item => {
+          const prod = item.products || prodMap[item.product_id] || {};
+          return {
+            id: item.product_id,
+            item_name: prod.item_name || item.product_name || '',
+            barcode: prod.barcode || item.barcode || '',
+            sale_vat_percent: prod.sale_vat_percent || 0,
+            wh_stock: prod.wh_stock || 0,
+            str_stock: prod.str_stock || 0,
+            poQty: item.qty || item.quantity || 0,
+            rcvQty: item.qty || item.quantity || 0,
+            purPrice: item.pur_price || item.unit_price || 0,
+            salePrice: prod.mrp || item.mrp_price || item.mrp || 0,
+            discPercent: item.disc_percent || 0,
+            freeQty: item.free_qty || 0,
+            uom: 'Pcs'
+          };
+        });
         setSelectedItems(mapped);
       }
     } catch (err) {
@@ -401,45 +416,242 @@ const PosPurchaseReceive = () => {
   };
 
   // PDF Challan Generation
-  const generatePDF = (challanNo, refNo) => {
-    const doc = new jsPDF();
-    const vendorName = vendors.find(v => v.id === headerData.vendorId)?.name || 'Vendor';
-
-    doc.setFontSize(16);
-    doc.text('PURCHASE RECEIVE CHALLAN', 105, 15, { align: 'center' });
+  const generatePDF = (challanNo = null, refNo = null, isDuplicate = false) => {
+    if (selectedItems.length === 0) {
+      toast.error('Please select products/PO to preview');
+      return;
+    }
     
-    doc.setFontSize(10);
-    doc.text(`Store: ${storeName}`, 14, 25);
-    doc.text(`Vendor: ${vendorName}`, 14, 30);
-    doc.text(`Date: ${headerData.purchaseDate}`, 14, 35);
+    const doc = new jsPDF('landscape', 'mm', 'a4');
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const vendorName = vendors.find(v => String(v.id) === String(headerData.vendorId))?.name || 'N/A';
 
-    doc.text(`Challan No: ${challanNo || headerData.lastChallanNo}`, 140, 25);
-    doc.text(`Ref No: ${refNo || headerData.referenceNo}`, 140, 30);
-    doc.text(`Delivery To: ${storeName}`, 140, 35);
+    let displayChallanNo = '';
+    if (typeof challanNo === 'string' && challanNo.trim()) {
+      displayChallanNo = challanNo.trim();
+    } else if (headerData.lastChallanNo) {
+      displayChallanNo = headerData.lastChallanNo;
+    } else {
+      const dateObj = new Date();
+      const yyyy = dateObj.getFullYear();
+      const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const dd = String(dateObj.getDate()).padStart(2, '0');
+      displayChallanNo = `#PR${yyyy}${mm}${dd}001 (PREVIEW)`;
+    }
 
-    const tableCols = ['Item Name', 'Barcode', 'Rcv Qty', 'Pur Price', 'Discount %', 'VAT %', 'Amount'];
-    const tableRows = selectedItems.map(item => [
-      item.item_name,
-      item.barcode,
-      item.rcvQty,
-      item.purPrice,
-      item.discPercent,
-      item.sale_vat_percent || 0,
-      calculateRow(item).amount.toFixed(2)
-    ]);
+    if (!displayChallanNo.startsWith('#') && !displayChallanNo.includes('(PREVIEW)')) {
+      displayChallanNo = `#${displayChallanNo}`;
+    }
 
-    tableRows.push([
-      'NET TOTAL', '', '', '', '', '', totals.netAmount.toFixed(2)
-    ]);
+    const displayRefNo = (typeof refNo === 'string' && refNo.trim()) ? refNo.trim() : (headerData.referenceNo || 'N/A');
+    const selectedPO = vendorPOs.find(p => String(p.id) === String(headerData.purchaseOrderId));
+    const poNumber = selectedPO?.po_number || 'N/A';
 
-    autoTable(doc, {
-      head: [tableCols],
-      body: tableRows,
-      startY: 45,
-      theme: 'grid'
-    });
+    const renderPageContent = (docInstance, isSecondCopy = false) => {
+      // 1. Top Middle / Center: Company Name & Address
+      docInstance.setFont("helvetica", "bold");
+      docInstance.setFontSize(16);
+      docInstance.setTextColor(46, 111, 64); // Project theme green #2e6f40
+      docInstance.text('EZ ERP', pageWidth / 2, 13, { align: 'center' });
 
-    doc.save(`PurchaseReceive_${challanNo || 'Draft'}.pdf`);
+      docInstance.setFont("helvetica", "normal");
+      docInstance.setFontSize(8.5);
+      docInstance.setTextColor(70, 70, 70);
+      docInstance.text('House: 352, Lane: 05, 2nd floor, Baridhara DOHS, Dhaka-1212, Bangladesh', pageWidth / 2, 18, { align: 'center' });
+
+      // 2. Right Side: CHALLAN Header & Details
+      docInstance.setFont("helvetica", "bold");
+      docInstance.setFontSize(11);
+      docInstance.setTextColor(46, 111, 64);
+      docInstance.text('PURCHASE RECEIVE CHALLAN', pageWidth - 14, 13, { align: 'right' });
+
+      docInstance.setFont("helvetica", "normal");
+      docInstance.setFontSize(8.5);
+      docInstance.setTextColor(30, 30, 30);
+      docInstance.text(`Challan No: ${displayChallanNo}`, pageWidth - 14, 18.5, { align: 'right' });
+      docInstance.text(`Receive Date: ${headerData.purchaseDate}`, pageWidth - 14, 23, { align: 'right' });
+      docInstance.text(`Delivery To: ${headerData.deliveryTo || storeName || 'Central Store'}`, pageWidth - 14, 27.5, { align: 'right' });
+
+      if (isDuplicate || isSecondCopy) {
+        docInstance.setFont("helvetica", "bold");
+        docInstance.setFontSize(9);
+        docInstance.setTextColor(220, 38, 38);
+        docInstance.text('[DUPLICATE]', pageWidth - 14, 32, { align: 'right' });
+      }
+
+      // 3. Left Side: Vendor & Reference Info
+      docInstance.setFont("helvetica", "bold");
+      docInstance.setFontSize(8.5);
+      docInstance.setTextColor(30, 30, 30);
+      docInstance.text('Vendor Name:', 14, 18.5);
+      docInstance.setFont("helvetica", "normal");
+      docInstance.text(`${vendorName}`, 42, 18.5);
+
+      docInstance.setFont("helvetica", "bold");
+      docInstance.text('Reference No:', 14, 23);
+      docInstance.setFont("helvetica", "normal");
+      docInstance.text(`${displayRefNo}`, 42, 23);
+
+      if (poNumber && poNumber !== 'N/A') {
+        docInstance.setFont("helvetica", "bold");
+        docInstance.text('PO Number:', 14, 27.5);
+        docInstance.setFont("helvetica", "normal");
+        docInstance.text(`${poNumber}`, 42, 27.5);
+      }
+
+      // 4. Table Columns: SL, Barcode, Item Name, PO Qty, Rcv Qty, Pur. Price, MRP, Disc(%), Free Qty, Value, Dis.Amt, VAT, Amount
+      const tableCols = [
+        "SL",
+        "Barcode",
+        "Item Name",
+        "PO Qty",
+        "Rcv Qty",
+        "Pur. Price",
+        "MRP",
+        "Disc(%)",
+        "Free Qty",
+        "Value",
+        "Dis.Amt",
+        "VAT",
+        "Amount"
+      ];
+
+      let totalPoQty = 0;
+      let totalRcvQty = 0;
+      let totalFreeQty = 0;
+      let totalValue = 0;
+      let totalDiscAmt = 0;
+      let totalVat = 0;
+      let totalAmount = 0;
+
+      const tableRows = selectedItems.map((item, idx) => {
+        const calc = calculateRow(item);
+        totalPoQty += Number(item.poQty || 0);
+        totalRcvQty += Number(item.rcvQty || 0);
+        totalFreeQty += Number(item.freeQty || 0);
+        totalValue += calc.value;
+        totalDiscAmt += calc.discAmt;
+        totalVat += calc.vatAmt;
+        totalAmount += calc.amount;
+
+        return [
+          idx + 1,
+          item.barcode || '-',
+          item.item_name || '',
+          Number(item.poQty || 0),
+          Number(item.rcvQty || 0),
+          Number(item.purPrice || 0).toFixed(2),
+          Number(item.salePrice || 0).toFixed(2),
+          item.discPercent || 0,
+          item.freeQty || 0,
+          calc.value.toFixed(2),
+          calc.discAmt.toFixed(2),
+          calc.vatAmt.toFixed(2),
+          calc.amount.toFixed(2)
+        ];
+      });
+
+      // Add Summary Row
+      tableRows.push([
+        'Total',
+        '',
+        '',
+        totalPoQty,
+        totalRcvQty,
+        '',
+        '',
+        '',
+        totalFreeQty,
+        totalValue.toFixed(2),
+        totalDiscAmt.toFixed(2),
+        totalVat.toFixed(2),
+        totalAmount.toFixed(2)
+      ]);
+
+      const startY = (isDuplicate || isSecondCopy) ? 35 : 32;
+
+      autoTable(docInstance, {
+        head: [tableCols],
+        body: tableRows,
+        startY: startY,
+        theme: 'grid',
+        styles: {
+          fontSize: 7.5,
+          cellPadding: 1.8,
+          textColor: [30, 30, 30]
+        },
+        headStyles: {
+          fillColor: [46, 111, 64], // Theme Brand Green
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          halign: 'right'
+        },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 10 },
+          1: { halign: 'left', cellWidth: 26 },
+          2: { halign: 'left', cellWidth: 'auto' },
+          3: { halign: 'right', cellWidth: 16 },
+          4: { halign: 'right', cellWidth: 16 },
+          5: { halign: 'right', cellWidth: 20 },
+          6: { halign: 'right', cellWidth: 20 },
+          7: { halign: 'right', cellWidth: 16 },
+          8: { halign: 'right', cellWidth: 16 },
+          9: { halign: 'right', cellWidth: 22 },
+          10: { halign: 'right', cellWidth: 18 },
+          11: { halign: 'right', cellWidth: 18 },
+          12: { halign: 'right', cellWidth: 24 }
+        },
+        didParseCell: function (data) {
+          if (data.section === 'head') {
+            if (data.column.index === 0) data.cell.styles.halign = 'center';
+            if (data.column.index === 1 || data.column.index === 2) data.cell.styles.halign = 'left';
+          }
+          if (data.row.index === tableRows.length - 1) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = [240, 245, 240];
+            data.cell.styles.textColor = [10, 60, 20];
+          }
+        },
+        margin: { top: 10, left: 14, right: 14 }
+      });
+
+      const finalY = docInstance.lastAutoTable.finalY || startY + 50;
+
+      // 5. Signatures at bottom
+      const sigY = Math.max(finalY + 26, pageHeight - 20);
+
+      docInstance.setFont("helvetica", "normal");
+      docInstance.setFontSize(8.5);
+      docInstance.setLineWidth(0.4);
+      docInstance.setDrawColor(120, 120, 120);
+      docInstance.setTextColor(40, 40, 40);
+
+      // Posted By
+      docInstance.line(20, sigY, 70, sigY);
+      docInstance.setFont("helvetica", "bold");
+      docInstance.text('Posted By', 45, sigY + 5, { align: 'center' });
+
+      // Checked By
+      docInstance.setFont("helvetica", "bold");
+      docInstance.line(pageWidth / 2 - 25, sigY, pageWidth / 2 + 25, sigY);
+      docInstance.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
+
+      // Authorized Signature
+      docInstance.setFont("helvetica", "bold");
+      docInstance.line(pageWidth - 70, sigY, pageWidth - 20, sigY);
+      docInstance.text('Authorized Signature', pageWidth - 45, sigY + 5, { align: 'center' });
+    };
+
+    renderPageContent(doc, false);
+
+    if (printTwoCopy) {
+      doc.addPage('landscape');
+      renderPageContent(doc, true);
+    }
+
+    const cleanFilename = String(displayChallanNo).replace(/[^a-zA-Z0-9_-]/g, '_');
+    doc.save(`PurchaseReceive_${cleanFilename}.pdf`);
   };
 
   return (

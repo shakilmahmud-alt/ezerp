@@ -186,24 +186,79 @@ try {
         // Foreign Key Relation Resolution (Auto Nested Objects)
         // ----------------------------------------------------
         if (count($rows) > 0) {
-            // 1. If table is 'employees' and select requested 'stores' or 'stores(name)'
-            if ($table === 'employees' && str_contains($select, 'stores')) {
-                $storeIds = array_unique(array_filter(array_column($rows, 'store_id')));
-                $storesMap = [];
-                if (count($storeIds) > 0) {
-                    $stPh = implode(',', array_fill(0, count($storeIds), '?'));
-                    $stStmt = $pdo->prepare("SELECT `id`, `name` FROM `stores` WHERE `id` IN ({$stPh})");
-                    $stStmt->execute(array_values($storeIds));
-                    foreach ($stStmt->fetchAll() as $st) {
-                        $storesMap[$st['id']] = $st;
+            // 1. Resolve 'products' / 'product' from product_id
+            if (str_contains($select, 'products') || str_contains($select, 'product')) {
+                $prodIds = array_unique(array_filter(array_column($rows, 'product_id')));
+                if (count($prodIds) > 0) {
+                    $pPh = implode(',', array_fill(0, count($prodIds), '?'));
+                    $pStmt = $pdo->prepare("SELECT `id`, `code`, `barcode`, `item_name`, `user_define_barcode`, `purchase_price`, `mrp`, `sale_vat_percent`, `wh_stock`, `str_stock`, `product_description` FROM `products` WHERE `id` IN ({$pPh})");
+                    $pStmt->execute(array_values($prodIds));
+                    $prodMap = [];
+                    foreach ($pStmt->fetchAll() as $p) {
+                        $prodMap[$p['id']] = $p;
                     }
-                }
-                foreach ($rows as &$r) {
-                    $r['stores'] = isset($r['store_id']) && isset($storesMap[$r['store_id']]) ? $storesMap[$r['store_id']] : null;
+                    foreach ($rows as &$r) {
+                        $r['products'] = isset($r['product_id']) && isset($prodMap[$r['product_id']]) ? $prodMap[$r['product_id']] : null;
+                        $r['product'] = $r['products'];
+                    }
                 }
             }
 
-            // 2. If table is 'products' and select requested category, brand, vendor, or store_stocks
+            // 2. Resolve 'vendors' / 'vendor' from vendor_id
+            if (str_contains($select, 'vendor') || str_contains($select, 'vendors')) {
+                $vendorIds = array_unique(array_filter(array_column($rows, 'vendor_id')));
+                if (count($vendorIds) > 0) {
+                    $vPh = implode(',', array_fill(0, count($vendorIds), '?'));
+                    $vStmt = $pdo->prepare("SELECT `id`, `name`, `code`, `contact_person`, `phone`, `email`, `address` FROM `vendors` WHERE `id` IN ({$vPh})");
+                    $vStmt->execute(array_values($vendorIds));
+                    $vendorMap = [];
+                    foreach ($vStmt->fetchAll() as $v) {
+                        $vendorMap[$v['id']] = $v;
+                    }
+                    foreach ($rows as &$r) {
+                        $r['vendors'] = isset($r['vendor_id']) && isset($vendorMap[$r['vendor_id']]) ? $vendorMap[$r['vendor_id']] : null;
+                        $r['vendor'] = $r['vendors'];
+                    }
+                }
+            }
+
+            // 3. Resolve 'purchase_orders' / 'purchase_order' from purchase_order_id
+            if (str_contains($select, 'purchase_orders') || str_contains($select, 'purchase_order')) {
+                $poIds = array_unique(array_filter(array_column($rows, 'purchase_order_id')));
+                if (count($poIds) > 0) {
+                    $poPh = implode(',', array_fill(0, count($poIds), '?'));
+                    $poStmt = $pdo->prepare("SELECT `id`, `po_number`, `order_date`, `delivery_to`, `vendor_id`, `reference_no` FROM `purchase_orders` WHERE `id` IN ({$poPh})");
+                    $poStmt->execute(array_values($poIds));
+                    $poMap = [];
+                    foreach ($poStmt->fetchAll() as $po) {
+                        $poMap[$po['id']] = $po;
+                    }
+                    foreach ($rows as &$r) {
+                        $r['purchase_orders'] = isset($r['purchase_order_id']) && isset($poMap[$r['purchase_order_id']]) ? $poMap[$r['purchase_order_id']] : null;
+                        $r['purchase_order'] = $r['purchase_orders'];
+                    }
+                }
+            }
+
+            // 4. Resolve 'stores' / 'store' from store_id
+            if (str_contains($select, 'stores') || str_contains($select, 'store')) {
+                $storeIds = array_unique(array_filter(array_column($rows, 'store_id')));
+                if (count($storeIds) > 0) {
+                    $stPh = implode(',', array_fill(0, count($storeIds), '?'));
+                    $stStmt = $pdo->prepare("SELECT `id`, `name`, `code`, `address` FROM `stores` WHERE `id` IN ({$stPh})");
+                    $stStmt->execute(array_values($storeIds));
+                    $storesMap = [];
+                    foreach ($stStmt->fetchAll() as $st) {
+                        $storesMap[$st['id']] = $st;
+                    }
+                    foreach ($rows as &$r) {
+                        $r['stores'] = isset($r['store_id']) && isset($storesMap[$r['store_id']]) ? $storesMap[$r['store_id']] : null;
+                        $r['store'] = $r['stores'];
+                    }
+                }
+            }
+
+            // 5. If table is 'products' and select requested category, brand, or store_stocks
             if ($table === 'products') {
                 $catIds = array_unique(array_filter(array_column($rows, 'category_id')));
                 if (count($catIds) > 0 && str_contains($select, 'category')) {
@@ -235,7 +290,7 @@ try {
                 }
             }
 
-            // 3. If table is 'sale_items' and select requested 'sale'
+            // 6. If table is 'sale_items' and select requested 'sale'
             if ($table === 'sale_items' && str_contains($select, 'sale')) {
                 $saleIds = array_unique(array_filter(array_column($rows, 'sale_id')));
                 if (count($saleIds) > 0) {
