@@ -6,6 +6,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAuth } from '../../context/AuthContext';
 import CustomSelect from '../../components/CustomSelect';
+import LoadingOverlay from '../../components/LoadingOverlay';
 
 const SectionWrapper = ({ title, children, rightContent }) => (
   <div style={{ border: '1px solid var(--border-color, #e2e8f0)', borderRadius: '8px', padding: '20px', backgroundColor: '#ffffff', marginBottom: '20px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)' }}>
@@ -656,6 +657,7 @@ const PosPurchaseReceive = () => {
 
   return (
     <div className="animate-fade-in" style={{ padding: '20px', backgroundColor: 'var(--bg-color, #f8fafc)', minHeight: '100vh', fontSize: '13px' }}>
+      <LoadingOverlay isLoading={isLoading} message="Saving Purchase Receive... Please wait" />
       
       <SectionWrapper title="Purchase Receive">
         

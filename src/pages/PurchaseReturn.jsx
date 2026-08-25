@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import CustomSelect from '../components/CustomSelect';
+import LoadingOverlay from '../components/LoadingOverlay';
 
 const PurchaseReturn = () => {
   const [vendors, setVendors] = useState([]);
@@ -428,6 +429,7 @@ const PurchaseReturn = () => {
 
   return (
     <div className="animate-fade-in" style={{ padding: '20px', backgroundColor: 'var(--bg-color)', minHeight: '100vh' }}>
+      <LoadingOverlay isLoading={isLoading} message="Saving Purchase Return... Please wait" />
       <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '20px', color: 'var(--text-primary)', borderBottom: '2px solid var(--border-color)', paddingBottom: '10px' }}>
         Purchase Return
       </h2>

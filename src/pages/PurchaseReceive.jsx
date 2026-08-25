@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import CustomSelect from '../components/CustomSelect';
+import LoadingOverlay from '../components/LoadingOverlay';
 
 const SectionWrapper = ({ title, children, rightContent }) => (
   <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '20px', backgroundColor: 'var(--card-bg)', marginBottom: '20px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)' }}>
@@ -765,6 +766,7 @@ const PurchaseReceive = () => {
 
   return (
     <div className="animate-fade-in" style={{ padding: '20px', backgroundColor: 'var(--bg-color)', minHeight: '100vh' }}>
+      <LoadingOverlay isLoading={isLoading} message="Saving Purchase Receive... Please wait" />
       
       <SectionWrapper title="Purchase Receive">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '20px', marginBottom: '20px' }}>

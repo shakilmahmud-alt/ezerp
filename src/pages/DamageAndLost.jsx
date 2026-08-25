@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabaseClient';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import LoadingOverlay from '../components/LoadingOverlay';
 
 const DamageAndLost = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -414,6 +415,7 @@ const DamageAndLost = () => {
 
   return (
     <div className="animate-fade-in" style={{ padding: '20px', backgroundColor: 'var(--bg-color)', minHeight: '100vh' }}>
+      <LoadingOverlay isLoading={isLoading} message="Saving Damage & Lost... Please wait" />
       <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '20px', color: 'var(--text-primary)', borderBottom: '2px solid var(--border-color)', paddingBottom: '10px' }}>
         Damage and Lost
       </h2>

@@ -5,6 +5,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import CustomSelect from '../components/CustomSelect';
+import LoadingOverlay from '../components/LoadingOverlay';
 
 const StoreDelivery = () => {
   const [view, setView] = useState('list');
@@ -491,6 +492,7 @@ const StoreDelivery = () => {
   if (view === 'list') {
     return (
       <div className="animate-fade-in" style={{ padding: '20px', backgroundColor: 'var(--bg-color)', minHeight: '100vh' }}>
+        <LoadingOverlay isLoading={isLoading} message="Processing Store Delivery... Please wait" />
         
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
@@ -610,6 +612,7 @@ const StoreDelivery = () => {
 
   return (
     <div className="animate-fade-in" style={{ padding: '20px', backgroundColor: 'var(--bg-color)', minHeight: '100vh' }}>
+      <LoadingOverlay isLoading={isLoading} message="Saving Store Delivery... Please wait" />
       
       <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
         Store Delivery
