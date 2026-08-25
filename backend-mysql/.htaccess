@@ -1,0 +1,20 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /ezerp/
+
+    # Handle CORS Headers
+    Header always set Access-Control-Allow-Origin "*"
+    Header always set Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, apikey, prefer"
+
+    # Route options preflight
+    RewriteCond %{REQUEST_METHOD} OPTIONS
+    RewriteRule ^(.*)$ api.php [L]
+
+    # Clean URL routing if requested (e.g. /ezerp/api/products -> /ezerp/api.php?table=products)
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^api/([a-zA-Z0-9_]+)$ api.php?table=$1 [QSA,L]
+</IfModule>
+
+Options -Indexes
