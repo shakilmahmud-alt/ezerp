@@ -362,7 +362,7 @@ const PosPurchaseReceive = () => {
               .single();
 
             if (sStock) {
-              const newStoreQty = (sStock.stock_qty || 0) + rcvQty;
+              const newStoreQty = (Number(sStock.stock_qty) || 0) + rcvQty;
               await supabase
                 .from('store_stocks')
                 .update({ stock_qty: newStoreQty })

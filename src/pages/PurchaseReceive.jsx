@@ -438,24 +438,23 @@ const PurchaseReceive = () => {
 
       // Update Stocks and PO status if Saved
       if (status === 'Saved') {
-        let allReceived = true;
+        const isCentralStore = !headerData.deliveryTo || headerData.deliveryTo === 'Central Store' || headerData.deliveryTo.toLowerCase().includes('central');
         const targetStore = stores.find(s => s.name === headerData.deliveryTo);
 
         for (const item of selectedItems) {
           const rcvQty = Number(item.rcvQty || 0);
           if (rcvQty > 0) {
-            if (headerData.deliveryTo === 'Central Store') {
+            if (isCentralStore) {
               const { data: prod } = await supabase
                 .from('products')
                 .select('wh_stock')
                 .eq('id', item.id)
                 .single();
-              if (prod) {
-                await supabase
-                  .from('products')
-                  .update({ wh_stock: (prod.wh_stock || 0) + rcvQty })
-                  .eq('id', item.id);
-              }
+              const currentWh = prod ? (Number(prod.wh_stock) || 0) : 0;
+              await supabase
+                .from('products')
+                .update({ wh_stock: currentWh + rcvQty })
+                .eq('id', item.id);
             } else if (targetStore) {
               const { data: sStock } = await supabase
                 .from('store_stocks')
@@ -465,9 +464,10 @@ const PurchaseReceive = () => {
                 .single();
 
               if (sStock) {
+                const currentStoreQty = Number(sStock.stock_qty) || 0;
                 await supabase
                   .from('store_stocks')
-                  .update({ stock_qty: (sStock.stock_qty || 0) + rcvQty })
+                  .update({ stock_qty: currentStoreQty + rcvQty })
                   .eq('store_id', targetStore.id)
                   .eq('product_id', item.id);
               } else {
@@ -479,12 +479,9 @@ const PurchaseReceive = () => {
               }
             }
           }
-          if (Number(item.poQty) - rcvQty > 0) {
-            allReceived = false;
-          }
         }
 
-        if (headerData.purchaseOrderId && allReceived) {
+        if (headerData.purchaseOrderId) {
           await supabase
             .from('purchase_orders')
             .update({ status: 'Received' })
