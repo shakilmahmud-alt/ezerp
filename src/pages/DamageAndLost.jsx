@@ -4,8 +4,10 @@ import { supabase } from '../lib/supabaseClient';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import LoadingOverlay from '../components/LoadingOverlay';
+import { useAuth } from '../context/AuthContext';
 
 const DamageAndLost = () => {
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [referenceItems, setReferenceItems] = useState([]);
   
@@ -277,7 +279,10 @@ const DamageAndLost = () => {
     setReferenceItems([]);
   };
 
-  const generatePDF = (isDuplicate = false) => {
+  const generatePDF = (isDuplicate = false, isPreview = false) => {
+    const duplicate = isDuplicate === true;
+    const preview = isPreview === true;
+
     if (selectedItems.length === 0) {
       toast.error('Please select products to preview');
       return;
@@ -314,11 +319,16 @@ const DamageAndLost = () => {
       docInstance.text(`Challan No: ${displayChallanNo}`, pageWidth - 14, 18.5, { align: 'right' });
       docInstance.text(`Date: ${formData.date}`, pageWidth - 14, 23, { align: 'right' });
 
-      if (isDuplicate) {
+      if (duplicate) {
         docInstance.setFont("helvetica", "bold");
         docInstance.setFontSize(9);
         docInstance.setTextColor(220, 38, 38);
         docInstance.text('[DUPLICATE]', pageWidth - 14, 27.5, { align: 'right' });
+      } else if (preview) {
+        docInstance.setFont("helvetica", "bold");
+        docInstance.setFontSize(9);
+        docInstance.setTextColor(2, 132, 199);
+        docInstance.text('[PREVIEW]', pageWidth - 14, 27.5, { align: 'right' });
       }
 
       // 3. Left Side: Reference Info
@@ -347,7 +357,7 @@ const DamageAndLost = () => {
         'Total', '', '', '', '', totals.qty, '', totals.value.toFixed(2), ''
       ]);
 
-      const startY = isDuplicate ? 33 : 30;
+      const startY = (duplicate || preview) ? 33 : 30;
 
       autoTable(docInstance, {
         head: [tableCols],
@@ -392,9 +402,18 @@ const DamageAndLost = () => {
       docInstance.setDrawColor(120, 120, 120);
       docInstance.setTextColor(40, 40, 40);
 
+      const currentUserName = user?.name || user?.username || (localStorage.getItem('erp_user') ? JSON.parse(localStorage.getItem('erp_user'))?.name || JSON.parse(localStorage.getItem('erp_user'))?.username : '') || 'Admin';
+      const displayName = (currentUserName === 'msmraqeeb@gmail.com' || currentUserName === 'admin@email.com') ? 'Admin' : currentUserName;
+
       // Posted By
       docInstance.line(20, sigY, 70, sigY);
+      docInstance.setFont("helvetica", "normal");
+      docInstance.setFontSize(8.5);
+      docInstance.setTextColor(2, 132, 199);
+      docInstance.text(displayName, 45, sigY - 2, { align: 'center' });
+
       docInstance.setFont("helvetica", "bold");
+      docInstance.setTextColor(40, 40, 40);
       docInstance.text('Posted By', 45, sigY + 5, { align: 'center' });
 
       // Checked By
@@ -576,10 +595,9 @@ const DamageAndLost = () => {
 
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '40px' }}>
             <button  
-              onClick={generatePDF} 
+              onClick={() => generatePDF(false, true)} 
               disabled={selectedItems.length === 0} 
-              style={{ padding: '8px 20px', backgroundColor: selectedItems.length > 0 ? '#e0e0e0' : '#f5f5f5', color: selectedItems.length > 0 ? '#333' : '#aaa', border: '1px solid #ddd', borderRadius: '4px', cursor: selectedItems.length > 0 ? 'pointer' : 'not-allowed', fontWeight: 'bold' }}
-            >
+              style={{ padding: '8px 20px', backgroundColor: selectedItems.length > 0 ? '#e0e0e0' : '#f5f5f5', color: selectedItems.length > 0 ? '#333' : '#aaa', border: '1px solid #ddd', borderRadius: '4px', cursor: selectedItems.length > 0 ? 'pointer' : 'not-allowed', fontWeight: 'bold' }}>
               Preview
             </button>
             <button  

@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import CustomSelect from '../components/CustomSelect';
+import { useAuth } from '../context/AuthContext';
 
 const SectionWrapper = ({ title, children, rightContent }) => (
   <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '20px', backgroundColor: 'var(--card-bg)', marginBottom: '20px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)' }}>
@@ -33,10 +34,11 @@ const REPRINT_TYPES = [
 ];
 
 const Reprint = () => {
-  const [fromDate, setFromDate] = useState(new Date().toISOString().split('T')[0]);
+  const { user } = useAuth();
+  const [fromDate, setFromDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
   const [toDate, setToDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedType, setSelectedType] = useState('');
-  const [selectedStore, setSelectedStore] = useState('Central Store');
+  const [selectedStore, setSelectedStore] = useState('');
   
   const [documentList, setDocumentList] = useState([]);
   const [selectedDocument, setSelectedDocument] = useState('');
@@ -75,12 +77,16 @@ const Reprint = () => {
             .gte('order_date', fromDate)
             .lte('order_date', toDate);
             
-          if (selectedStore && selectedStore !== '-- All --') {
-            query = query.eq('delivery_to', selectedStore);
+          if (selectedStore && selectedStore !== '-- All --' && selectedStore !== '') {
+            if (selectedStore === 'Central Store') {
+              query = query.or(`delivery_to.eq.Central Store,delivery_to.is.null,delivery_to.eq.`);
+            } else {
+              query = query.eq('delivery_to', selectedStore);
+            }
           }
             
           const { data, error } = await query;
-          if (!error && data) docs = data.map(d => d.po_number).filter(Boolean);
+          if (!error && data) docs = [...new Set(data.map(d => d.po_number).filter(Boolean))];
         } 
         else if (selectedType === 'DML Challan') {
           const { data, error } = await supabase
@@ -98,7 +104,7 @@ const Reprint = () => {
             .gte('requisition_date', fromDate)
             .lte('requisition_date', toDate);
             
-          if (selectedStore && selectedStore !== '-- All --') {
+          if (selectedStore && selectedStore !== '-- All --' && selectedStore !== '') {
             const s = stores.find(s => s.name === selectedStore);
             if (s) {
               query = query.eq('shop_id', s.id);
@@ -108,22 +114,29 @@ const Reprint = () => {
           }
             
           const { data, error } = await query;
-          if (!error && data) docs = data.map(d => d.requisition_no).filter(Boolean);
+          if (!error && data) docs = [...new Set(data.map(d => d.requisition_no).filter(Boolean))];
         }
         else if (selectedType === 'Purchase Receive Challan') {
           let query = supabase
             .from('purchase_receives')
-            .select('last_challan_no')
+            .select('last_challan_no, reference_no, delivery_to')
             .gte('purchase_date', fromDate)
             .lte('purchase_date', toDate)
             .eq('status', 'Saved');
             
-          if (selectedStore && selectedStore !== '-- All --') {
-            query = query.eq('delivery_to', selectedStore);
+          if (selectedStore && selectedStore !== '-- All --' && selectedStore !== '') {
+            if (selectedStore === 'Central Store') {
+              query = query.or(`delivery_to.eq.Central Store,delivery_to.is.null,delivery_to.eq.`);
+            } else {
+              query = query.eq('delivery_to', selectedStore);
+            }
           }
             
           const { data, error } = await query;
-          if (!error && data) docs = data.map(d => d.last_challan_no).filter(Boolean);
+          if (!error && data) {
+            const arr = data.map(d => d.last_challan_no || d.reference_no).filter(Boolean);
+            docs = [...new Set(arr)];
+          }
         }
         else if (selectedType === 'Store Delivery Challan' || selectedType === 'Store Delivery Challan Summary') {
           let query = supabase
@@ -341,7 +354,11 @@ const Reprint = () => {
         ]));
 
       } else if (selectedType === 'Purchase Receive Challan') {
-        const { data: pr } = await supabase.from('purchase_receives').select('*, vendors(name), purchase_orders(po_number)').eq('last_challan_no', selectedDocument).single();
+        const { data: pr } = await supabase
+          .from('purchase_receives')
+          .select('*, vendors(name), purchase_orders(po_number)')
+          .or(`last_challan_no.eq.${selectedDocument},reference_no.eq.${selectedDocument}`)
+          .single();
         const { data: prItems } = await supabase.from('purchase_receive_items').select('*, products(item_name, barcode, sale_vat_percent)').eq('purchase_receive_id', pr?.id);
 
         let docNumber = pr?.last_challan_no || selectedDocument;
@@ -650,12 +667,18 @@ const Reprint = () => {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8.5);
       doc.setLineWidth(0.4);
-      doc.setDrawColor(120, 120, 120);
-      doc.setTextColor(40, 40, 40);
-      
+      const currentUserName = user?.name || user?.username || (localStorage.getItem('erp_user') ? JSON.parse(localStorage.getItem('erp_user'))?.name || JSON.parse(localStorage.getItem('erp_user'))?.username : '') || 'Admin';
+      const displayName = (currentUserName === 'msmraqeeb@gmail.com' || currentUserName === 'admin@email.com') ? 'Admin' : currentUserName;
+
       // Posted By
       doc.line(20, sigY, 70, sigY);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(2, 132, 199);
+      doc.text(displayName, 45, sigY - 2, { align: 'center' });
+
       doc.setFont("helvetica", "bold");
+      doc.setTextColor(40, 40, 40);
       doc.text('Posted By', 45, sigY + 5, { align: 'center' });
 
       // Checked By

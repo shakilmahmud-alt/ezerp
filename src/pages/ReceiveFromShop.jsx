@@ -121,7 +121,9 @@ const ReceiveFromShop = () => {
     }
   };
 
-  const generatePDF = () => {
+  const generatePDF = (isDuplicate = false, isPreview = false) => {
+    const duplicate = isDuplicate === true;
+    const preview = isPreview === true;
     if (!selectedChallan || challanItems.length === 0) return;
 
     const doc = new jsPDF();
@@ -129,7 +131,7 @@ const ReceiveFromShop = () => {
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(16);
-    doc.text('EG ERP', pageWidth / 2, 15, { align: 'center' });
+    doc.text('EZ ERP', pageWidth / 2, 15, { align: 'center' });
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
@@ -143,6 +145,21 @@ const ReceiveFromShop = () => {
     doc.text(`DATE: ${selectedChallan.challan_date}`, pageWidth - 14, 25, { align: 'right' });
     doc.text(`RECEIVED FROM: ${selectedChallan.shops?.name || 'Unknown'}`, pageWidth - 14, 30, { align: 'right' });
 
+    if (duplicate) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(220, 38, 38);
+      doc.text('[DUPLICATE]', pageWidth - 14, 35, { align: 'right' });
+    } else if (preview) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(2, 132, 199);
+      doc.text('[PREVIEW]', pageWidth - 14, 35, { align: 'right' });
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 30, 30);
     doc.text('RECEIVE TO: Central Store', 14, 45);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
@@ -275,7 +292,7 @@ const ReceiveFromShop = () => {
             {/* Actions */}
             <div style={{ marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button
-                onClick={generatePDF}
+                onClick={() => generatePDF(false, false)}
                 style={{ padding: '8px 18px', background: '#555', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
               >
                 Print / PDF

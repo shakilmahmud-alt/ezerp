@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { Eye, Save, X, Printer } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -7,7 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import CustomSelect from '../../components/CustomSelect';
 
 const PosStockReceive = () => {
-  const { posTerminal } = useAuth();
+  const { user, posTerminal } = useAuth();
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   
   const [receiveChallan, setReceiveChallan] = useState('');
@@ -165,136 +166,159 @@ const PosStockReceive = () => {
     }
   };
 
-  const generatePDF = () => {
-    if (items.length === 0) return;
+  const generatePDF = (preview = false) => {
+    if (items.length === 0) {
+      toast.error('No items to generate PDF');
+      return;
+    }
     
-    const doc = new jsPDF();
+    const doc = new jsPDF('landscape', 'mm', 'a4');
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
     
-    // Header
+    // 1. Top Middle Header
     doc.setFont("helvetica", "bold");
     doc.setFontSize(16);
-    doc.text('EG ERP', pageWidth / 2, 15, { align: 'center' });
+    doc.setTextColor(46, 111, 64);
+    doc.text('EZ ERP', pageWidth / 2, 13, { align: 'center' });
     
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.text('House:352,Lane:05,2nd floor,Baridhara DOHS,', pageWidth / 2, 20, { align: 'center' });
-    doc.text('Dhaka , Dhaka-1212 Bangladesh', pageWidth / 2, 24, { align: 'center' });
+    doc.setFontSize(8.5);
+    doc.setTextColor(70, 70, 70);
+    doc.text('House: 352, Lane: 05, 2nd floor, Baridhara DOHS, Dhaka-1212, Bangladesh', pageWidth / 2, 18, { align: 'center' });
     
-    // Right Side Info
+    // 2. Right Side Info
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.text('STORE RECEIVE CHALLAN', pageWidth - 14, 15, { align: 'right' });
+    doc.setFontSize(11);
+    doc.setTextColor(46, 111, 64);
+    doc.text('STORE RECEIVE CHALLAN', pageWidth - 14, 13, { align: 'right' });
+    
     const selectedChallanObj = deliveries.find(c => c.id === selectedChallan);
     const refText = selectedChallanObj ? (selectedChallanObj.challan_no || selectedChallanObj.requisition_no) : 'N/A';
     
-    doc.text(`CHALLAN NO # ${receiveChallan}`, pageWidth - 14, 20, { align: 'right' });
-    doc.text(`REF CHALLAN # ${refText}`, pageWidth - 14, 25, { align: 'right' });
-    doc.text(`RECEIVE DATE: ${date}`, pageWidth - 14, 30, { align: 'right' });
-    doc.text(`RECEIVE FROM: Central Store`, pageWidth - 14, 35, { align: 'right' });
-    
-    // Left Side Info
-    doc.text(`STORE NAME: ${posTerminal?.store_name || 'N/A'}`, 14, 45);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 30, 30);
+    doc.text(`Challan No: #${receiveChallan}`, pageWidth - 14, 18.5, { align: 'right' });
+    doc.text(`Ref Challan: #${refText}`, pageWidth - 14, 23, { align: 'right' });
+    doc.text(`Receive Date: ${date}`, pageWidth - 14, 27.5, { align: 'right' });
+    doc.text(`Receive From: Central Store`, pageWidth - 14, 32, { align: 'right' });
     
-    const printDate = new Date().toLocaleString();
-    doc.text(`PRINT DATE: ${printDate}`, pageWidth - 14, 50, { align: 'right' });
+    // 3. Left Side Info
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 30, 30);
+    doc.text('Store Name:', 14, 18.5);
+    doc.setFont("helvetica", "normal");
+    doc.text(`${posTerminal?.store_name || 'N/A'}`, 42, 18.5);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text('Print Date:', 14, 23);
+    doc.setFont("helvetica", "normal");
+    doc.text(`${new Date().toLocaleString()}`, 42, 23);
+    
+    let totalChallanQty = 0;
+    let totalRcvQty = 0;
+    let totalRemainQty = 0;
+    let totalSaleVal = 0;
+    
+    const tableCols = ["SL", "Barcode", "Item Name", "UOM", "MRP", "Challan Qty", "Rcv Qty", "Remain Qty", "Total Value"];
     
     const tableData = items.map((i, index) => {
+      const chQty = Number(i.challanQty) || 0;
       const rcvQty = Number(i.rcvQty) || 0;
+      const remQty = Number(i.remainQty) || 0;
       const mrp = Number(i.mrp) || 0;
       const saleValue = rcvQty * mrp;
+      
+      totalChallanQty += chQty;
+      totalRcvQty += rcvQty;
+      totalRemainQty += remQty;
+      totalSaleVal += saleValue;
+      
       return [
         index + 1,
-        i.barcode,
-        i.name,
-        `${rcvQty.toFixed(2)}`,
-        i.uom,
+        i.barcode || '-',
+        i.name || '',
+        i.uom || 'Pcs',
         mrp.toFixed(2),
+        chQty,
+        rcvQty,
+        remQty,
         saleValue.toFixed(2)
       ];
     });
     
+    tableData.push(['Total', '', '', '', '', totalChallanQty, totalRcvQty, totalRemainQty, totalSaleVal.toFixed(2)]);
+    
     autoTable(doc, {
-      startY: 55,
-      head: [['S/L', 'BARCODE', 'DISPLAY_NAME', 'RCV QTY', 'UOM', 'MRP', 'SALE VALUE']],
+      startY: 36,
+      head: [tableCols],
       body: tableData,
-      theme: 'plain',
-      headStyles: {
-        fontStyle: 'bold',
-        lineWidth: { top: 0.5, bottom: 0.5 },
-        lineColor: [0, 0, 0],
-        fontSize: 8,
-        halign: 'right'
-      },
-      bodyStyles: {
-        fontSize: 8,
-        halign: 'right'
-      },
+      theme: 'grid',
+      styles: { fontSize: 7.5, cellPadding: 1.8, textColor: [30, 30, 30] },
+      headStyles: { fillColor: [46, 111, 64], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'right' },
       columnStyles: {
-        0: { halign: 'center' },
-        1: { halign: 'left' },
-        2: { halign: 'left' },
-        4: { halign: 'center' }
+        0: { halign: 'center', cellWidth: 10 },
+        1: { halign: 'left', cellWidth: 32 },
+        2: { halign: 'left', cellWidth: 'auto' },
+        3: { halign: 'center', cellWidth: 16 },
+        4: { halign: 'right', cellWidth: 24 },
+        5: { halign: 'right', cellWidth: 24 },
+        6: { halign: 'right', cellWidth: 24 },
+        7: { halign: 'right', cellWidth: 24 },
+        8: { halign: 'right', cellWidth: 28 }
       },
       didParseCell: function (data) {
         if (data.section === 'head') {
           if (data.column.index === 0) data.cell.styles.halign = 'center';
           if (data.column.index === 1 || data.column.index === 2) data.cell.styles.halign = 'left';
-          if (data.column.index === 4) data.cell.styles.halign = 'center';
+          if (data.column.index === 3) data.cell.styles.halign = 'center';
+        }
+        if (data.row.index === tableData.length - 1) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [240, 245, 240];
         }
       },
       margin: { top: 10, left: 14, right: 14 }
     });
     
-    const finalY = doc.lastAutoTable.finalY || 55;
+    const finalY = doc.lastAutoTable.finalY || 80;
+    const sigY = Math.max(finalY + 26, pageHeight - 20);
     
-    // Totals
-    const totalRcvQty = items.reduce((sum, i) => sum + (Number(i.rcvQty) || 0), 0);
-    const totalSaleValue = items.reduce((sum, i) => sum + ((Number(i.rcvQty) || 0) * (Number(i.mrp) || 0)), 0);
-    
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    // Draw line above totals
-    doc.line(pageWidth / 2, finalY + 2, pageWidth - 14, finalY + 2);
-    doc.text('SUB TOTAL:', pageWidth / 2, finalY + 7, { align: 'right' });
-    doc.text(`${totalRcvQty.toFixed(2)}`, pageWidth / 2 + 20, finalY + 7, { align: 'right' });
-    doc.text(`${totalSaleValue.toFixed(2)}`, pageWidth - 14, finalY + 7, { align: 'right' });
-    
-    doc.line(pageWidth / 2, finalY + 12, pageWidth - 14, finalY + 12);
-    doc.text('NET AMOUNT:', pageWidth / 2, finalY + 17, { align: 'right' });
-    doc.text(`${totalSaleValue.toFixed(2)}`, pageWidth - 14, finalY + 17, { align: 'right' });
-    
-    // Signatures
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const sigY = pageHeight - 30;
+    const currentUserName = user?.name || user?.username || (localStorage.getItem('erp_user') ? JSON.parse(localStorage.getItem('erp_user'))?.name || JSON.parse(localStorage.getItem('erp_user'))?.username : '') || 'Admin';
+    const displayName = (currentUserName === 'msmraqeeb@gmail.com' || currentUserName === 'admin@email.com') ? 'Admin' : currentUserName;
     
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setLineWidth(0.5);
+    doc.setFontSize(8.5);
+    doc.setLineWidth(0.4);
+    doc.setDrawColor(120, 120, 120);
+    doc.setTextColor(40, 40, 40);
     
     // Posted By
     doc.line(20, sigY, 70, sigY);
-    doc.text('Admin', 45, sigY - 2, { align: 'center' });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(2, 132, 199);
+    doc.text(displayName, 45, sigY - 2, { align: 'center' });
+    
     doc.setFont("helvetica", "bold");
+    doc.setTextColor(40, 40, 40);
     doc.text('Posted By', 45, sigY + 5, { align: 'center' });
     
     // Checked By
-    doc.setFont("helvetica", "normal");
-    doc.line(pageWidth / 2 - 25, sigY, pageWidth / 2 + 25, sigY);
     doc.setFont("helvetica", "bold");
+    doc.line(pageWidth / 2 - 25, sigY, pageWidth / 2 + 25, sigY);
     doc.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
     
-    // Authorized Signatory
-    doc.setFont("helvetica", "normal");
-    doc.line(pageWidth - 70, sigY, pageWidth - 20, sigY);
+    // Authorized Signature
     doc.setFont("helvetica", "bold");
-    doc.text('Authorized Signatory', pageWidth - 45, sigY + 5, { align: 'center' });
+    doc.line(pageWidth - 70, sigY, pageWidth - 20, sigY);
+    doc.text('Authorized Signature', pageWidth - 45, sigY + 5, { align: 'center' });
     
-    const blob = doc.output('blob');
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
+    const cleanFilename = String(receiveChallan).replace(/[^a-zA-Z0-9_-]/g, '_');
+    doc.save(`StoreReceive_${cleanFilename}.pdf`);
+    toast.success('Store Receive PDF downloaded');
   };
 
   const handleSave = async () => {
@@ -589,21 +613,52 @@ const PosStockReceive = () => {
             </table>
           </div>
           
-          <div style={{ borderTop: '2px solid #ccc', padding: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ borderTop: '2px solid #ccc', padding: '12px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc' }}>
             
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button style={{ padding: '6px 12px', border: '1px solid #ccc', backgroundColor: '#e9ecef', borderRadius: '3px', cursor: 'pointer', fontWeight: 'bold' }}>MRP Difference</button>
-              <button style={{ padding: '6px 12px', border: '1px solid #ccc', backgroundColor: '#e9ecef', borderRadius: '3px', cursor: 'pointer', fontWeight: 'bold' }}>Preview</button>
-              <button onClick={handleSave} disabled={isLoading} style={{ padding: '6px 12px', border: '1px solid #ccc', backgroundColor: '#e9ecef', borderRadius: '3px', cursor: 'pointer', fontWeight: 'bold' }}>{isLoading ? 'Saving...' : 'Save'}</button>
-              <button onClick={() => window.history.back()} style={{ padding: '6px 12px', border: '1px solid #ccc', backgroundColor: '#e9ecef', borderRadius: '3px', cursor: 'pointer', fontWeight: 'bold' }}>Close</button>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <button 
+                type="button" 
+                className="btn-secondary" 
+                style={{ padding: '8px 18px', fontSize: '13px', fontWeight: 'bold' }}
+              >
+                MRP Difference
+              </button>
+              <button 
+                type="button" 
+                className="btn-info" 
+                onClick={() => generatePDF(true)} 
+                style={{ padding: '8px 22px', fontSize: '13px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Eye size={15} />
+                Preview
+              </button>
+              <button 
+                type="button" 
+                className="btn-theme" 
+                onClick={handleSave} 
+                disabled={isLoading} 
+                style={{ padding: '8px 26px', fontSize: '13px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Save size={15} />
+                {isLoading ? 'Saving...' : 'Save'}
+              </button>
+              <button 
+                type="button" 
+                className="btn-danger" 
+                onClick={() => window.history.back()} 
+                style={{ padding: '8px 22px', fontSize: '13px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <X size={15} />
+                Close
+              </button>
             </div>
             
-            <div style={{ color: 'red', fontWeight: 'bold', display: 'flex', gap: '40px' }}>
+            <div style={{ color: 'red', fontWeight: 'bold', display: 'flex', gap: '40px', fontSize: '13px' }}>
               <div>
                 <div>TOTAL QTY: {totalQty}</div>
                 <div>TOTAL VALUE: {totalValue.toFixed(2)}</div>
               </div>
-              <div>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
                 TOTAL LINE: {items.length}
               </div>
             </div>

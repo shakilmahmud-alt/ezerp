@@ -6,6 +6,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import CustomSelect from '../components/CustomSelect';
 import LoadingOverlay from '../components/LoadingOverlay';
+import { useAuth } from '../context/AuthContext';
 
 const SectionWrapper = ({ title, children, rightContent }) => (
   <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '20px', backgroundColor: 'var(--card-bg)', marginBottom: '20px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)' }}>
@@ -22,6 +23,7 @@ const SectionWrapper = ({ title, children, rightContent }) => (
 );
 
 const PurchaseReceive = () => {
+  const { user } = useAuth();
   const [vendors, setVendors] = useState([]);
   const [stores, setStores] = useState([]);
   const [vendorPOs, setVendorPOs] = useState([]);
@@ -523,7 +525,10 @@ const PurchaseReceive = () => {
     });
   };
 
-  const generatePDF = (challanNo = null, refNo = null, isDuplicate = false) => {
+  const generatePDF = (challanNo = null, refNo = null, isDuplicate = false, isPreview = false) => {
+    const duplicate = isDuplicate === true;
+    const preview = isPreview === true;
+
     if (selectedItems.length === 0) {
       toast.error('Please select products/PO to preview');
       return;
@@ -544,10 +549,10 @@ const PurchaseReceive = () => {
       const yyyy = dateObj.getFullYear();
       const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
       const dd = String(dateObj.getDate()).padStart(2, '0');
-      displayChallanNo = `#PR${yyyy}${mm}${dd}001 (PREVIEW)`;
+      displayChallanNo = `#PR${yyyy}${mm}${dd}001`;
     }
 
-    if (!displayChallanNo.startsWith('#') && !displayChallanNo.includes('(PREVIEW)')) {
+    if (!displayChallanNo.startsWith('#')) {
       displayChallanNo = `#${displayChallanNo}`;
     }
 
@@ -580,11 +585,16 @@ const PurchaseReceive = () => {
       docInstance.text(`Receive Date: ${headerData.purchaseDate}`, pageWidth - 14, 23, { align: 'right' });
       docInstance.text(`Delivery To: ${headerData.deliveryTo || 'Central Store'}`, pageWidth - 14, 27.5, { align: 'right' });
 
-      if (isDuplicate || isSecondCopy) {
+      if (duplicate || isSecondCopy) {
         docInstance.setFont("helvetica", "bold");
         docInstance.setFontSize(9);
         docInstance.setTextColor(220, 38, 38);
         docInstance.text('[DUPLICATE]', pageWidth - 14, 32, { align: 'right' });
+      } else if (preview) {
+        docInstance.setFont("helvetica", "bold");
+        docInstance.setFontSize(9);
+        docInstance.setTextColor(2, 132, 199);
+        docInstance.text('[PREVIEW]', pageWidth - 14, 32, { align: 'right' });
       }
 
       // 3. Left Side: Vendor & Reference Info
@@ -734,9 +744,18 @@ const PurchaseReceive = () => {
       docInstance.setDrawColor(120, 120, 120);
       docInstance.setTextColor(40, 40, 40);
 
+      const currentUserName = user?.name || user?.username || (localStorage.getItem('erp_user') ? JSON.parse(localStorage.getItem('erp_user'))?.name || JSON.parse(localStorage.getItem('erp_user'))?.username : '') || 'Admin';
+      const displayName = (currentUserName === 'msmraqeeb@gmail.com' || currentUserName === 'admin@email.com') ? 'Admin' : currentUserName;
+
       // Posted By
       docInstance.line(20, sigY, 70, sigY);
+      docInstance.setFont("helvetica", "normal");
+      docInstance.setFontSize(8.5);
+      docInstance.setTextColor(2, 132, 199);
+      docInstance.text(displayName, 45, sigY - 2, { align: 'center' });
+
       docInstance.setFont("helvetica", "bold");
+      docInstance.setTextColor(40, 40, 40);
       docInstance.text('Posted By', 45, sigY + 5, { align: 'center' });
 
       // Checked By
@@ -932,7 +951,7 @@ const PurchaseReceive = () => {
             </label>
             <button className="btn-theme" onClick={() => handleSave('save')} style={{ padding: '8px 18px', backgroundColor: 'var(--accent-primary, #2e6f40)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Save</button>
             <button className="btn-danger" onClick={() => handleSave('hold')} style={{ padding: '8px 18px', backgroundColor: '#0284c7', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Hold</button>
-            <button className="btn-info" onClick={() => generatePDF()} style={{ padding: '8px 18px', backgroundColor: '#166534', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Preview</button>
+            <button className="btn-info" onClick={() => generatePDF(null, null, false, true)} style={{ padding: '8px 18px', backgroundColor: '#166534', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Preview</button>
             <button className="btn-secondary" onClick={handleClear} style={{ padding: '8px 18px', backgroundColor: '#dc2626', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Clear Temp</button>
           </div>
         </div>

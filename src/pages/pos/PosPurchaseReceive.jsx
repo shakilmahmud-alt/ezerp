@@ -417,7 +417,10 @@ const PosPurchaseReceive = () => {
   };
 
   // PDF Challan Generation
-  const generatePDF = (challanNo = null, refNo = null, isDuplicate = false) => {
+  const generatePDF = (challanNo = null, refNo = null, isDuplicate = false, isPreview = false) => {
+    const duplicate = isDuplicate === true;
+    const preview = isPreview === true;
+
     if (selectedItems.length === 0) {
       toast.error('Please select products/PO to preview');
       return;
@@ -438,10 +441,10 @@ const PosPurchaseReceive = () => {
       const yyyy = dateObj.getFullYear();
       const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
       const dd = String(dateObj.getDate()).padStart(2, '0');
-      displayChallanNo = `#PR${yyyy}${mm}${dd}001 (PREVIEW)`;
+      displayChallanNo = `#PR${yyyy}${mm}${dd}001`;
     }
 
-    if (!displayChallanNo.startsWith('#') && !displayChallanNo.includes('(PREVIEW)')) {
+    if (!displayChallanNo.startsWith('#')) {
       displayChallanNo = `#${displayChallanNo}`;
     }
 
@@ -474,11 +477,16 @@ const PosPurchaseReceive = () => {
       docInstance.text(`Receive Date: ${headerData.purchaseDate}`, pageWidth - 14, 23, { align: 'right' });
       docInstance.text(`Delivery To: ${headerData.deliveryTo || storeName || 'Central Store'}`, pageWidth - 14, 27.5, { align: 'right' });
 
-      if (isDuplicate || isSecondCopy) {
+      if (duplicate || isSecondCopy) {
         docInstance.setFont("helvetica", "bold");
         docInstance.setFontSize(9);
         docInstance.setTextColor(220, 38, 38);
         docInstance.text('[DUPLICATE]', pageWidth - 14, 32, { align: 'right' });
+      } else if (preview) {
+        docInstance.setFont("helvetica", "bold");
+        docInstance.setFontSize(9);
+        docInstance.setTextColor(2, 132, 199);
+        docInstance.text('[PREVIEW]', pageWidth - 14, 32, { align: 'right' });
       }
 
       // 3. Left Side: Vendor & Reference Info
@@ -628,9 +636,18 @@ const PosPurchaseReceive = () => {
       docInstance.setDrawColor(120, 120, 120);
       docInstance.setTextColor(40, 40, 40);
 
+      const currentUserName = user?.name || user?.username || (localStorage.getItem('erp_user') ? JSON.parse(localStorage.getItem('erp_user'))?.name || JSON.parse(localStorage.getItem('erp_user'))?.username : '') || 'Admin';
+      const displayName = (currentUserName === 'msmraqeeb@gmail.com' || currentUserName === 'admin@email.com') ? 'Admin' : currentUserName;
+
       // Posted By
       docInstance.line(20, sigY, 70, sigY);
+      docInstance.setFont("helvetica", "normal");
+      docInstance.setFontSize(8.5);
+      docInstance.setTextColor(2, 132, 199);
+      docInstance.text(displayName, 45, sigY - 2, { align: 'center' });
+
       docInstance.setFont("helvetica", "bold");
+      docInstance.setTextColor(40, 40, 40);
       docInstance.text('Posted By', 45, sigY + 5, { align: 'center' });
 
       // Checked By
@@ -856,7 +873,7 @@ const PosPurchaseReceive = () => {
           <button className="btn-danger" onClick={() => handleSave('hold')} disabled={isLoading} style={{ padding: '8px 24px', fontSize: '13px', fontWeight: 'bold' }}>
             Hold
           </button>
-          <button className="btn-info" onClick={() => generatePDF(headerData.lastChallanNo, headerData.referenceNo)} style={{ padding: '8px 24px', fontSize: '13px', fontWeight: 'bold' }}>
+          <button className="btn-info" onClick={() => generatePDF(headerData.lastChallanNo, headerData.referenceNo, false, true)} style={{ padding: '8px 24px', fontSize: '13px', fontWeight: 'bold' }}>
             Preview
           </button>
           <button className="btn-secondary" onClick={handleClear} style={{ padding: '8px 24px', fontSize: '13px', fontWeight: 'bold' }}>

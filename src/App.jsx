@@ -66,6 +66,11 @@ import PosStockReports from './pages/pos/reports/PosStockReports';
 import PosReprintLog from './pages/pos/reports/PosReprintLog';
 import PosDiscountCircularReport from './pages/pos/reports/PosDiscountCircularReport';
 
+import MisLayout from './components/mis/MisLayout';
+import MisHome from './pages/mis/MisHome';
+import MisReportPlaceholder from './pages/mis/MisReportPlaceholder';
+import MultipleReportsSale from './pages/mis/reports/MultipleReportsSale';
+
 function App() {
   return (
     <AuthProvider>
@@ -108,6 +113,32 @@ function App() {
             <Route path="reports/stock-journal" element={<PosStockReports initialTab="journal" />} />
             <Route path="reports/reprint-log" element={<PosReprintLog />} />
             <Route path="reports/discount-circular" element={<PosDiscountCircularReport />} />
+          </Route>
+
+          {/* MIS Module Routes */}
+          <Route path="/mis" element={<ProtectedRoute><MisLayout /></ProtectedRoute>}>
+            <Route index element={<MisHome />} />
+            <Route path="sales-reports" element={<MultipleReportsSale />} />
+            <Route path="sales-reports/multiple-reports-sale" element={<MultipleReportsSale />} />
+            <Route path="sales-reports/*" element={<MisReportPlaceholder />} />
+            <Route path="stock-reports" element={<MisReportPlaceholder title="Stock Reports" />} />
+            <Route path="stock-reports/*" element={<MisReportPlaceholder />} />
+            <Route path="purchase-order-reports" element={<MisReportPlaceholder title="Purchase Order Reports" />} />
+            <Route path="purchase-order-reports/*" element={<MisReportPlaceholder />} />
+            <Route path="purchase-reports" element={<MisReportPlaceholder title="Purchase Reports" />} />
+            <Route path="purchase-reports/*" element={<MisReportPlaceholder />} />
+            <Route path="requisition-reports" element={<MisReportPlaceholder title="Requisition Reports" />} />
+            <Route path="requisition-reports/*" element={<MisReportPlaceholder />} />
+            <Route path="delivery-reports" element={<MisReportPlaceholder title="Delivery Reports" />} />
+            <Route path="delivery-reports/*" element={<MisReportPlaceholder />} />
+            <Route path="purchase-return-reports" element={<MisReportPlaceholder title="Purchase Return Reports" />} />
+            <Route path="purchase-return-reports/*" element={<MisReportPlaceholder />} />
+            <Route path="damage-lost-reports" element={<MisReportPlaceholder title="Damage and Lost Reports" />} />
+            <Route path="damage-lost-reports/*" element={<MisReportPlaceholder />} />
+            <Route path="promotional-reports" element={<MisReportPlaceholder title="Promotional Reports" />} />
+            <Route path="promotional-reports/*" element={<MisReportPlaceholder />} />
+            <Route path="crm-reports" element={<MisReportPlaceholder title="CRM Reports" />} />
+            <Route path="crm-reports/*" element={<MisReportPlaceholder />} />
           </Route>
           
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
