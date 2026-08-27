@@ -225,6 +225,33 @@ const MisLayout = () => {
     ? 'Administrator'
     : (user?.designation || user?.role || 'StoreManager');
 
+  const getPageTitle = () => {
+    if (location.pathname === '/mis' || location.pathname === '/mis/') return 'Home Page';
+    
+    // Check all subItems first
+    for (const item of navItems) {
+      if (item.subItems) {
+        const foundSub = item.subItems.find(sub => location.pathname === sub.path || (sub.path !== '/mis' && location.pathname.startsWith(sub.path)));
+        if (foundSub) {
+          if (foundSub.name === 'Multiple Reports Sale' || foundSub.name === 'Multiple Report on Sales') {
+            return 'Multiple Report on Sales';
+          }
+          return foundSub.name;
+        }
+      }
+    }
+    
+    // Check top-level nav items
+    const foundParent = navItems.find(item => item.path !== '/mis' && location.pathname.startsWith(item.path));
+    if (foundParent) {
+      if (foundParent.name === 'Sales Reports') return 'Multiple Report on Sales';
+      return foundParent.name;
+    }
+
+    const lastPart = location.pathname.split('/').filter(Boolean).pop()?.replace(/-/g, ' ') || 'MIS Report';
+    return lastPart.charAt(0).toUpperCase() + lastPart.slice(1);
+  };
+
   return (
     <div className={`app-container ${isSidebarOpen ? '' : 'sidebar-closed'}`} style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#ffffff', overflow: 'hidden' }}>
       
@@ -444,12 +471,12 @@ const MisLayout = () => {
             display: 'flex',
             alignItems: 'center',
             padding: '0 24px',
-            fontSize: '0.9rem',
+            fontSize: '0.92rem',
             fontWeight: 600,
             color: '#1e293b',
             flexShrink: 0
           }}>
-            {location.pathname === '/mis' ? 'Home Page' : navItems.find(m => location.pathname.startsWith(m.path))?.name || 'MIS Report'}
+            {getPageTitle()}
           </div>
 
           {/* Page Content View */}

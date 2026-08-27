@@ -316,6 +316,9 @@ const PosDashboard = () => {
         if (match) {
           return Math.max(0, Number(match.stock_qty || 0));
         }
+      } else {
+        const total = prod.store_stocks.reduce((sum, s) => sum + Number(s.stock_qty || 0), 0);
+        if (total > 0) return total;
       }
     }
 
@@ -324,9 +327,12 @@ const PosDashboard = () => {
       return Math.max(0, Number(prod.branch_stock));
     }
 
-    // 3. Fallback to product stock_qty only if no store_stocks exist
-    if (!prod.store_stocks || prod.store_stocks.length === 0) {
-      if (prod.stock_qty !== undefined && prod.stock_qty !== null) return Math.max(0, Number(prod.stock_qty));
+    // 3. Fallback to str_stock or stock_qty if present
+    if (prod.str_stock !== undefined && prod.str_stock !== null && Number(prod.str_stock) > 0) {
+      return Number(prod.str_stock);
+    }
+    if (prod.stock_qty !== undefined && prod.stock_qty !== null && Number(prod.stock_qty) > 0) {
+      return Number(prod.stock_qty);
     }
 
     return 0;
@@ -341,37 +347,36 @@ const PosDashboard = () => {
     }
 
     try {
+      const cleanVal = val.trim();
       let { data, error } = await supabase
         .from('products')
         .select(`
           *,
           store_stocks(store_id, stock_qty)
         `)
-        .eq('barcode', val.trim())
+        .or(`barcode.ilike.%${cleanVal}%,user_define_barcode.ilike.%${cleanVal}%,code.ilike.%${cleanVal}%`)
         .limit(1);
 
+      // In-memory fallback
       if (!data || data.length === 0) {
-        const { data: userBarcodeData } = await supabase
+        const { data: allProds } = await supabase
           .from('products')
           .select(`
             *,
             store_stocks(store_id, stock_qty)
           `)
-          .eq('user_barcode', val.trim())
-          .limit(1);
-        if (userBarcodeData && userBarcodeData.length > 0) data = userBarcodeData;
-      }
-
-      if (!data || data.length === 0) {
-        const { data: itemCodeData } = await supabase
-          .from('products')
-          .select(`
-            *,
-            store_stocks(store_id, stock_qty)
-          `)
-          .eq('item_code', val.trim())
-          .limit(1);
-        if (itemCodeData && itemCodeData.length > 0) data = itemCodeData;
+          .limit(300);
+        
+        if (allProds && allProds.length > 0) {
+          const lowerVal = cleanVal.toLowerCase();
+          const match = allProds.find(p => 
+            (p.barcode && String(p.barcode).toLowerCase() === lowerVal) ||
+            (p.user_define_barcode && String(p.user_define_barcode).toLowerCase() === lowerVal) ||
+            (p.code && String(p.code).toLowerCase() === lowerVal) ||
+            (p.item_name && p.item_name.toLowerCase().includes(lowerVal))
+          );
+          if (match) data = [match];
+        }
       }
 
       if (data && data.length > 0) {
@@ -1270,19 +1275,53 @@ const PosDashboard = () => {
             store_stocks(store_id, stock_qty)
           `)
           .order('item_name')
-          .limit(150);
+          .limit(300);
 
-        if (searchName.trim()) query = query.ilike('item_name', `%${searchName.trim()}%`);
-        if (searchBarcode.trim()) query = query.or(`barcode.ilike.%${searchBarcode.trim()}%,code.ilike.%${searchBarcode.trim()}%`);
+        const hasName = Boolean(searchName.trim());
+        const hasBarcode = Boolean(searchBarcode.trim());
 
-        const { data } = await query;
-        let res = data || [];
-        if (!searchShowZero) {
-          res = res.filter(p => {
-            const sStock = getEffectiveStockQty(p, posTerminal?.store_id);
-            return sStock > 0;
-          });
+        if (hasName) {
+          query = query.ilike('item_name', `%${searchName.trim()}%`);
         }
+        if (hasBarcode) {
+          const bc = searchBarcode.trim();
+          query = query.or(`barcode.ilike.%${bc}%,user_define_barcode.ilike.%${bc}%,code.ilike.%${bc}%`);
+        }
+
+        let { data, error } = await query;
+        
+        // Comprehensive fallback: If remote query returned 0, fetch all products and filter in memory
+        if (!data || data.length === 0) {
+          const { data: allData } = await supabase
+            .from('products')
+            .select(`
+              *,
+              category:category_id (name),
+              subcategory:subcategory_id (name),
+              vendor:vendor_id (name),
+              store_stocks(store_id, stock_qty)
+            `)
+            .order('item_name')
+            .limit(300);
+          
+          if (allData && allData.length > 0) {
+            const bc = searchBarcode.trim().toLowerCase();
+            const nm = searchName.trim().toLowerCase();
+            
+            data = allData.filter(p => {
+              const matchName = !nm || (p.item_name && p.item_name.toLowerCase().includes(nm));
+              const matchBarcode = !bc || 
+                (p.barcode && String(p.barcode).toLowerCase().includes(bc)) ||
+                (p.user_define_barcode && String(p.user_define_barcode).toLowerCase().includes(bc)) ||
+                (p.code && String(p.code).toLowerCase().includes(bc)) ||
+                (p.item_name && p.item_name.toLowerCase().includes(bc));
+              
+              return matchName && matchBarcode;
+            });
+          }
+        }
+
+        let res = data || [];
         setSearchResults(res);
       } catch (err) {
         console.error("Search error:", err);
@@ -1291,7 +1330,7 @@ const PosDashboard = () => {
       }
     };
 
-    const delayTimer = setTimeout(fetchSearch, 300);
+    const delayTimer = setTimeout(fetchSearch, 150);
     return () => clearTimeout(delayTimer);
   }, [searchName, searchBarcode, searchShowZero, showSearchModal]);
 
