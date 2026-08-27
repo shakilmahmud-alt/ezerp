@@ -632,7 +632,7 @@ const PosLayout = () => {
         color: '#ffffff'
       }}>
         <div>
-          Developed by: <a href="https://shakilmahmud.vercel.app/" target="_blank" rel="noopener noreferrer" style={{ color: '#ffffff', textDecoration: 'none' }}>Shakil Mahmud</a> | Version 1.0.0.0
+          Developed by: <a href="https://shakilmahmud.vercel.app/" target="_blank" rel="noopener noreferrer" style={{ color: '#ffffff', textDecoration: 'none' }}>Shakil Mahmud</a> | Version 1.3.0.0
         </div>
         <div>
           Terminal: {posTerminal.counter_id} | Store: {posTerminal.store_name}

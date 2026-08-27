@@ -70,6 +70,7 @@ import MisLayout from './components/mis/MisLayout';
 import MisHome from './pages/mis/MisHome';
 import MisReportPlaceholder from './pages/mis/MisReportPlaceholder';
 import MultipleReportsSale from './pages/mis/reports/MultipleReportsSale';
+import ItemwiseSaleReport from './pages/mis/reports/ItemwiseSaleReport';
 
 function App() {
   return (
@@ -120,6 +121,7 @@ function App() {
             <Route index element={<MisHome />} />
             <Route path="sales-reports" element={<MultipleReportsSale />} />
             <Route path="sales-reports/multiple-reports-sale" element={<MultipleReportsSale />} />
+            <Route path="sales-reports/itemwise-sale-report" element={<ItemwiseSaleReport />} />
             <Route path="sales-reports/*" element={<MisReportPlaceholder />} />
             <Route path="stock-reports" element={<MisReportPlaceholder title="Stock Reports" />} />
             <Route path="stock-reports/*" element={<MisReportPlaceholder />} />

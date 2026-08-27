@@ -167,7 +167,7 @@ const HomeSelector = () => {
       </div>
       
       <div style={{ marginTop: '50px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-        Developed by: <a href="https://shakilmahmud.vercel.app/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-primary)', textDecoration: 'none' }}>Shakil Mahmud</a> | Version 1.0.0.0
+        Developed by: <a href="https://shakilmahmud.vercel.app/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-primary)', textDecoration: 'none' }}>Shakil Mahmud</a> | Version 1.3.0.0
       </div>
     </div>
   );
