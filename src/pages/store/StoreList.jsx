@@ -229,7 +229,14 @@ const StoreList = () => {
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr><td colSpan="8" style={{ textAlign: 'center', padding: '20px' }}>Loading...</td></tr>
+                    <tr>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '36px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                          <img src="https://ik.imagekit.io/eg7u6xcn0u/Shopping-Cart.gif" alt="Loading..." style={{ width: '120px', height: '120px', objectFit: 'contain' }} />
+                          <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--accent-primary, #2e6f40)' }}>Loading stores...</span>
+                        </div>
+                      </td>
+                    </tr>
                   ) : stores.length === 0 ? (
                     <tr><td colSpan="8" style={{ textAlign: 'center', padding: '20px' }}>No stores found</td></tr>
                   ) : (

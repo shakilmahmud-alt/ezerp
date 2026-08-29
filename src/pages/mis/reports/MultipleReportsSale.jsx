@@ -642,6 +642,9 @@ const MultipleReportsSale = () => {
     doc.setFontSize(11);
     doc.text(selectedReportType.toUpperCase(), pageWidth - 14, 14, { align: 'right' });
 
+    const loggedInUser = user || JSON.parse(localStorage.getItem('erp_user') || '{}');
+    const preparedByName = loggedInUser?.full_name || loggedInUser?.name || loggedInUser?.username || 'Super Admin';
+
     // 2. Meta parameters
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
@@ -654,7 +657,7 @@ const MultipleReportsSale = () => {
     doc.text(`Date Range: ${fromDate} to ${toDate}`, 14, 30);
     doc.text(`Store Scope: ${storeType} (${storeLabel})`, 14, 35);
     doc.text(`Generated On: ${new Date().toLocaleString()}`, pageWidth - 14, 30, { align: 'right' });
-    doc.text(`Printed By: ${user?.name || user?.username || 'Admin'}`, pageWidth - 14, 35, { align: 'right' });
+    doc.text(`Printed By: ${preparedByName}`, pageWidth - 14, 35, { align: 'right' });
 
     // 3. Prepare table columns and rows based on report type
     let head = [];
@@ -732,34 +735,67 @@ const MultipleReportsSale = () => {
         c.netAmount.toFixed(2),
         `${c.contributionPct}%`
       ]);
+    } else if (reportData.type === 'Brand wise Summary') {
+      head = [['SL', 'Brand Name', 'Total Sold Qty', 'Gross Amount (৳)', 'Discount (৳)', 'Net Sales (৳)', 'Contribution (%)']];
+      body = (filteredRows || []).map((b, idx) => [
+        idx + 1,
+        b.brand,
+        b.totalQty,
+        b.grossAmount.toFixed(2),
+        b.discount.toFixed(2),
+        b.netAmount.toFixed(2),
+        `${b.contributionPct}%`
+      ]);
+    } else if (reportData.type === 'Category wise Summary') {
+      head = [['SL', 'Category Name', 'Total Sold Qty', 'Gross Amount (Tk)', 'Discount (Tk)', 'Net Sales (Tk)', 'Contribution (%)']];
+      body = (filteredRows || []).map((c, idx) => [
+        idx + 1,
+        c.category,
+        c.totalQty,
+        c.grossAmount.toFixed(2),
+        c.discount.toFixed(2),
+        c.netAmount.toFixed(2),
+        `${c.contributionPct}%`
+      ]);
+    } else if (reportData.type === 'Store wise Summary') {
+      head = [['SL', 'Store / Branch Name', 'Invoices', 'Items Sold', 'Gross Sales (Tk)', 'Discounts (Tk)', 'Net Revenue (Tk)']];
+      body = (filteredRows || []).map((s, idx) => [
+        idx + 1,
+        s.store_name,
+        s.invoiceCount,
+        s.totalQty,
+        s.grossAmount.toFixed(2),
+        s.discount.toFixed(2),
+        s.netAmount.toFixed(2)
+      ]);
     } else if (reportData.type === 'Invoice wise Exchange Report') {
-      head = [['SL', 'Invoice No', 'Date', 'Store', 'Customer', 'Original Bill (৳)', 'Exchange Adj (৳)', 'Net Paid (৳)', 'Payment']];
+      head = [['SL', 'Exchange No', 'Original Inv', 'Store', 'Barcode', 'Product', 'Exchange Qty', 'Exchange Value (Tk)', 'Date']];
       body = (filteredRows || []).map((e, idx) => [
         idx + 1,
-        e.invoice_no,
-        e.formatted_date,
+        e.exchange_no,
+        e.original_invoice_no,
         e.store_name,
-        e.customer_name || 'Walk-in',
-        e.original_bill.toFixed(2),
+        e.barcode,
+        e.product_name,
+        e.qty,
         e.exchange_amount.toFixed(2),
-        e.net_paid.toFixed(2),
-        e.payment_type || 'Exchange'
+        e.date
       ]);
     } else if (reportData.type === 'Invoice wise Return Report') {
-      head = [['SL', 'Return Invoice No', 'Original Invoice', 'Date', 'Store', 'Customer', 'Return Qty', 'Return Amount (৳)', 'Refund Method']];
+      head = [['SL', 'Return No', 'Original Inv', 'Store', 'Barcode', 'Product', 'Return Qty', 'Refund Amount (Tk)', 'Date']];
       body = (filteredRows || []).map((r, idx) => [
         idx + 1,
-        r.return_invoice_no,
+        r.return_no,
         r.original_invoice_no,
-        r.formatted_date,
         r.store_name,
-        r.customer_name,
-        r.total_qty,
+        r.barcode,
+        r.product_name,
+        r.qty,
         r.return_amount.toFixed(2),
-        r.payment_type
+        r.date
       ]);
     } else if (reportData.type === 'Single Invoice Details') {
-      head = [['SL', 'Barcode', 'Product Name', 'Qty', 'Unit Price (৳)', 'Discount (৳)', 'Total Amount (৳)']];
+      head = [['SL', 'Barcode', 'Product Name', 'Qty', 'Unit Price (Tk)', 'Discount (Tk)', 'Total Amount (Tk)']];
       body = (reportData.items || []).map((it, idx) => [
         idx + 1,
         it.barcode || it.user_barcode || 'N/A',
@@ -776,24 +812,43 @@ const MultipleReportsSale = () => {
       body,
       startY: 40,
       theme: 'grid',
-      styles: { fontSize: 8, cellPadding: 2.2, textColor: [30, 30, 30] },
+      styles: { fontSize: 8, cellPadding: 2.5 },
       headStyles: { fillColor: [46, 111, 64], textColor: [255, 255, 255], fontStyle: 'bold' },
       margin: { top: 10, left: 14, right: 14 }
     });
 
     const finalY = doc.lastAutoTable.finalY || 100;
-    const sigY = Math.max(finalY + 25, pageHeight - 20);
+    const sigY = Math.max(finalY + 22, pageHeight - 24);
 
     // Signatures
-    doc.setDrawColor(150, 150, 150);
-    doc.line(20, sigY, 70, sigY);
-    doc.text('Prepared By', 45, sigY + 5, { align: 'center' });
+    doc.setDrawColor(160, 174, 192);
 
-    doc.line(pageWidth / 2 - 25, sigY, pageWidth / 2 + 25, sigY);
+    // Prepared By: User Name ABOVE line, Label BELOW line
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text(preparedByName, 47.5, sigY - 2.5, { align: 'center' });
+
+    doc.line(20, sigY, 75, sigY);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Prepared By', 47.5, sigY + 5, { align: 'center' });
+
+    // Checked By
+    doc.line(pageWidth / 2 - 27.5, sigY, pageWidth / 2 + 27.5, sigY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
     doc.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
 
-    doc.line(pageWidth - 70, sigY, pageWidth - 20, sigY);
-    doc.text('Authorized Signature', pageWidth - 45, sigY + 5, { align: 'center' });
+    // Authorized Signature
+    doc.line(pageWidth - 75, sigY, pageWidth - 20, sigY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Authorized Signature', pageWidth - 47.5, sigY + 5, { align: 'center' });
 
     const cleanName = selectedReportType.replace(/[^a-zA-Z0-9_-]/g, '_');
     doc.save(`MIS_SaleReport_${cleanName}_${fromDate}_${toDate}.pdf`);

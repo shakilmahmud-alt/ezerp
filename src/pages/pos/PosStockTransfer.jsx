@@ -657,7 +657,14 @@ const PosStockTransfer = () => {
               </thead>
               <tbody>
                 {isLoading ? (
-                  <tr><td colSpan="10" style={{ padding: '20px', textAlign: 'center' }}>Loading...</td></tr>
+                  <tr>
+                    <td colSpan="10" style={{ padding: '36px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                        <img src="https://ik.imagekit.io/eg7u6xcn0u/Shopping-Cart.gif" alt="Loading..." style={{ width: '120px', height: '120px', objectFit: 'contain' }} />
+                        <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--accent-primary, #2e6f40)' }}>Loading items...</span>
+                      </div>
+                    </td>
+                  </tr>
                 ) : items.length === 0 ? (
                   <tr><td colSpan="10" style={{ padding: '20px', textAlign: 'center', color: '#999' }}>{isChallanwise ? 'No reference challan selected' : 'Scan barcode to add products'}</td></tr>
                 ) : (

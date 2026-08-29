@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { User, ShoppingCart, Package, Truck, Settings } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabaseClient';
+import PageLoader from '../PageLoader';
 
 const PosLayout = () => {
   const { user, posTerminal, logout, loading } = useAuth();
@@ -46,7 +47,7 @@ const PosLayout = () => {
   }, []);
 
   if (loading) {
-    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading POS...</div>;
+    return <PageLoader fullScreen text="Loading POS Terminal..." size={100} />;
   }
 
   // Protect POS routes
@@ -632,7 +633,7 @@ const PosLayout = () => {
         color: '#ffffff'
       }}>
         <div>
-          Developed by: <a href="https://shakilmahmud.vercel.app/" target="_blank" rel="noopener noreferrer" style={{ color: '#ffffff', textDecoration: 'none' }}>Shakil Mahmud</a> | Version 1.3.0.0
+          Developed by: MSM-WEB | Version 1.3.0.0
         </div>
         <div>
           Terminal: {posTerminal.counter_id} | Store: {posTerminal.store_name}

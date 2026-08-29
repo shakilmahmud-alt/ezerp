@@ -76,7 +76,7 @@ const ItemwiseSaleReport = () => {
         supabase.from('categories').select('id, name').order('name'),
         supabase.from('subcategories').select('id, name, category_id, category_name').order('name'),
         supabase.from('sub_subcategories').select('id, name, subcategory_id, category_name, subcategory_name').order('name'),
-        supabase.from('payment_methods').select('id, name').order('name'),
+        supabase.from('payment_methods').select('*').order('name'),
         supabase.from('products').select(`
           id, sl, code, barcode, user_define_barcode, item_name, 
           category_id, subcategory_id, sub_subcategory_id, brand_id, vendor_id, 
@@ -90,7 +90,17 @@ const ItemwiseSaleReport = () => {
       const ctList = catsRes.data || [];
       const sctList = subCatsRes.data || [];
       const ssctList = subSubCatsRes.data || [];
-      const pmList = payMethodsRes.data || [];
+
+      // Extract unique payment methods created in Invoice Payment Type Setup
+      const pmList = [];
+      const seenPaymentNames = new Set();
+      (payMethodsRes.data || []).forEach(pm => {
+        if (pm.name && !seenPaymentNames.has(pm.name.trim().toLowerCase())) {
+          seenPaymentNames.add(pm.name.trim().toLowerCase());
+          pmList.push(pm);
+        }
+      });
+
       const prList = prodsRes.data || [];
 
       setStores(stList);
@@ -757,21 +767,43 @@ const ItemwiseSaleReport = () => {
     try {
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
 
-      // Brand Header Banner
-      doc.setFillColor(46, 111, 64); // #2e6f40
+      const loggedInUser = user || JSON.parse(localStorage.getItem('erp_user') || '{}');
+      const preparedByName = loggedInUser?.full_name || loggedInUser?.name || loggedInUser?.username || 'Super Admin';
+
+      // 1. Header with Brand Green theme (Matching Image 2)
+      doc.setFillColor(46, 111, 64);
       doc.rect(0, 0, pageWidth, 22, 'F');
-      
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(16);
-      doc.setFont('helvetica', 'bold');
-      doc.text('EURO GROUP ERP - ITEMWISE SALES REPORT', 14, 12);
-      
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      doc.text(`Report: ${reportType} | Date Range: ${fromDate} to ${toDate} | Store: ${storeType === 'Store' ? (stores.find(s => s.id === selectedStore)?.name || 'Store') : 'ALL STORES'}`, 14, 18);
 
-      // Table Setup
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(255, 255, 255);
+      doc.text("EZ ERP MANAGEMENT INFORMATION SYSTEM (MIS)", 14, 11);
+
+      doc.setFontSize(9.5);
+      doc.setFont("helvetica", "normal");
+      doc.text("CENTRAL INVENTORY & POS SALES ANALYTICS", 14, 17);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text(`ITEMWISE SALES - ${reportType.toUpperCase()}`, pageWidth - 14, 14, { align: 'right' });
+
+      // 2. Meta parameters on white background
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(50, 50, 50);
+
+      const storeLabel = storeType === 'Store' && selectedStore 
+        ? (stores.find(s => s.id === selectedStore)?.name || 'Selected Store')
+        : 'All (All Stores)';
+
+      doc.text(`Date Range: ${fromDate} to ${toDate}`, 14, 30);
+      doc.text(`Store Scope: ${storeType === 'Store' ? 'Store' : 'All'} (${storeLabel})`, 14, 35);
+      doc.text(`Generated On: ${new Date().toLocaleString()}`, pageWidth - 14, 30, { align: 'right' });
+      doc.text(`Printed By: ${preparedByName}`, pageWidth - 14, 35, { align: 'right' });
+
+      // 3. Table Setup
       let headers = [];
       let bodyData = [];
 
@@ -876,27 +908,47 @@ const ItemwiseSaleReport = () => {
       autoTable(doc, {
         head: headers,
         body: bodyData,
-        startY: 26,
+        startY: 40,
         styles: { fontSize: 8, cellPadding: 2 },
-        headStyles: { fillColor: [46, 111, 64], textColor: 255, fontStyle: 'bold' },
+        headStyles: { fillColor: [46, 111, 64], textColor: [255, 255, 255], fontStyle: 'bold' },
         alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { top: 10, left: 14, right: 14 },
         theme: 'grid'
       });
 
       // Signature Block at footer
-      const finalY = doc.lastAutoTable.finalY || 160;
-      if (finalY < 180) {
-        doc.setFontSize(8);
-        doc.setTextColor(100, 100, 100);
-        doc.text('-----------------------------------', 20, 195);
-        doc.text('Prepared By', 20, 199);
+      const finalY = doc.lastAutoTable.finalY || 100;
+      const sigY = Math.max(finalY + 22, pageHeight - 24);
 
-        doc.text('-----------------------------------', 120, 195);
-        doc.text('Verified By', 120, 199);
+      // Signatures
+      doc.setDrawColor(160, 174, 192);
 
-        doc.text('-----------------------------------', 220, 195);
-        doc.text('Authorized Signature', 220, 199);
-      }
+      // Prepared By: User Name ABOVE line, Label BELOW line
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.setTextColor(30, 41, 59);
+      doc.text(preparedByName, 47.5, sigY - 2.5, { align: 'center' });
+
+      doc.line(20, sigY, 75, sigY);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Prepared By', 47.5, sigY + 5, { align: 'center' });
+
+      // Checked By
+      doc.line(pageWidth / 2 - 27.5, sigY, pageWidth / 2 + 27.5, sigY);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
+
+      // Authorized Signature
+      doc.line(pageWidth - 75, sigY, pageWidth - 20, sigY);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Authorized Signature', pageWidth - 47.5, sigY + 5, { align: 'center' });
 
       doc.save(`Sales_Report_${reportType}_${fromDate}_to_${toDate}.pdf`);
       toast.success('PDF downloaded successfully');
@@ -1022,13 +1074,8 @@ const ItemwiseSaleReport = () => {
                 }}
               >
                 <option value="ALL">ALL</option>
-                <option value="Cash">Cash</option>
-                <option value="Card">Card</option>
-                <option value="bKash">bKash</option>
-                <option value="NAGAD">NAGAD</option>
-                <option value="AMEX">AMEX</option>
                 {paymentMethods.map(pm => (
-                  <option key={pm.id} value={pm.name}>{pm.name}</option>
+                  <option key={pm.id || pm.name} value={pm.name}>{pm.name}</option>
                 ))}
               </select>
             </div>

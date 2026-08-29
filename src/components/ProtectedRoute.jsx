@@ -2,14 +2,17 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
+import PageLoader from './PageLoader';
+
 export default function ProtectedRoute({ children, moduleName }) {
   const { user, loading, hasViewPermission } = useAuth();
 
-  if (loading) {
-    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading...</div>;
+  // Only show initial app boot loading if user is not yet loaded into state
+  if (loading && !user) {
+    return <PageLoader fullScreen text="Loading EG ERP..." size={140} />;
   }
 
-  if (!user) {
+  if (!user && !loading) {
     return <Navigate to="/login" replace />;
   }
 

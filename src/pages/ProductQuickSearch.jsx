@@ -412,8 +412,11 @@ const ProductQuickSearch = () => {
             <tbody>
               {isLoading && products.length === 0 ? (
                 <tr>
-                  <td colSpan="21" style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                    Loading...
+                  <td colSpan="21" style={{ padding: '36px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                      <img src="https://ik.imagekit.io/eg7u6xcn0u/Shopping-Cart.gif" alt="Loading..." style={{ width: '120px', height: '120px', objectFit: 'contain' }} />
+                      <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--accent-primary, #2e6f40)' }}>Searching products...</span>
+                    </div>
                   </td>
                 </tr>
               ) : products.length > 0 ? (

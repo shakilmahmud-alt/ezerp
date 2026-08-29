@@ -34,18 +34,15 @@ const LoadingOverlay = ({ isLoading, message = 'Processing & Saving... Please wa
           minWidth: '260px'
         }}
       >
-        <div style={{ position: 'relative', width: '56px', height: '56px' }}>
-          <Loader2 
-            style={{ 
-              width: '56px', 
-              height: '56px', 
-              color: 'var(--accent-primary, #2e6f40)',
-              animation: 'spin 1s linear infinite'
-            }} 
+        <div style={{ position: 'relative', width: '84px', height: '84px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <img 
+            src="https://ik.imagekit.io/eg7u6xcn0u/Shopping-Cart.gif" 
+            alt="Loading..." 
+            style={{ width: '84px', height: '84px', objectFit: 'contain' }} 
           />
         </div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontWeight: '600', fontSize: '15px', color: 'var(--text-primary, #1e293b)' }}>
+          <div style={{ fontWeight: '700', fontSize: '15px', color: 'var(--accent-primary, #2e6f40)' }}>
             {message}
           </div>
           <div style={{ fontSize: '12px', color: 'var(--text-secondary, #64748b)', marginTop: '4px' }}>
