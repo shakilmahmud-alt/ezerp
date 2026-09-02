@@ -73,6 +73,9 @@ import MultipleReportsSale from './pages/mis/reports/MultipleReportsSale';
 import ItemwiseSaleReport from './pages/mis/reports/ItemwiseSaleReport';
 import ShopwiseSalesAnalysisReport from './pages/mis/reports/ShopwiseSalesAnalysisReport';
 import PromotionWiseSalesReport from './pages/mis/reports/PromotionWiseSalesReport';
+import ItemwiseProfitReport from './pages/mis/reports/ItemwiseProfitReport';
+import UserWiseInvoiceSummaryReport from './pages/mis/reports/UserWiseInvoiceSummaryReport';
+import SlowFastNonMovingReport from './pages/mis/reports/SlowFastNonMovingReport';
 
 function App() {
   return (
@@ -126,6 +129,10 @@ function App() {
             <Route path="sales-reports/itemwise-sale-report" element={<ItemwiseSaleReport />} />
             <Route path="sales-reports/shopwise-sales-analysis-report" element={<ShopwiseSalesAnalysisReport />} />
             <Route path="sales-reports/promotion-wise-sale-report" element={<PromotionWiseSalesReport />} />
+            <Route path="sales-reports/itemwise-profit-report" element={<ItemwiseProfitReport />} />
+            <Route path="sales-reports/user-wise-invoice-summary-report" element={<UserWiseInvoiceSummaryReport />} />
+            <Route path="sales-reports/user-terminal-wise-sales-report" element={<UserWiseInvoiceSummaryReport />} />
+            <Route path="sales-reports/slow-fast-non-moving" element={<SlowFastNonMovingReport />} />
             <Route path="sales-reports/*" element={<MisReportPlaceholder />} />
             <Route path="stock-reports" element={<MisReportPlaceholder title="Stock Reports" />} />
             <Route path="stock-reports/*" element={<MisReportPlaceholder />} />
