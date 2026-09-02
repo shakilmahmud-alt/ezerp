@@ -33,6 +33,52 @@ const REPRINT_TYPES = [
   'Store Requisition'
 ];
 
+// Helper to enrich items with product names and barcodes (compatible with REST API without nested joins)
+const enrichItemsWithProducts = async (rawItems) => {
+  if (!rawItems || rawItems.length === 0) return [];
+  const productIds = [...new Set(rawItems.map(i => i.product_id).filter(Boolean))];
+  if (productIds.length === 0) return rawItems;
+
+  try {
+    const { data: prods } = await supabase
+      .from('products')
+      .select('id, item_name, barcode, user_define_barcode, code, sale_vat_percent, mrp, purchase_price')
+      .in('id', productIds);
+
+    const map = {};
+    if (prods) {
+      prods.forEach(p => { map[p.id] = p; });
+    }
+
+    return rawItems.map(item => {
+      const p = map[item.product_id];
+      return {
+        ...item,
+        products: p ? {
+          item_name: p.item_name,
+          barcode: p.barcode || p.user_define_barcode || p.code || '-',
+          sale_vat_percent: p.sale_vat_percent,
+          mrp: p.mrp
+        } : (item.products || null)
+      };
+    });
+  } catch (err) {
+    console.error("Error enriching items with products:", err);
+    return rawItems;
+  }
+};
+
+// Helper to resolve vendor name
+const getVendorName = async (vendorId) => {
+  if (!vendorId) return 'N/A';
+  try {
+    const { data } = await supabase.from('vendors').select('name').eq('id', vendorId).single();
+    return data?.name || 'N/A';
+  } catch {
+    return 'N/A';
+  }
+};
+
 const Reprint = () => {
   const { user } = useAuth();
   const [fromDate, setFromDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
@@ -73,20 +119,25 @@ const Reprint = () => {
         if (selectedType === 'Purchase Order') {
           let query = supabase
             .from('purchase_orders')
-            .select('po_number')
+            .select('po_number, delivery_to')
             .gte('order_date', fromDate)
             .lte('order_date', toDate);
             
-          if (selectedStore && selectedStore !== '-- All --' && selectedStore !== '') {
-            if (selectedStore === 'Central Store') {
-              query = query.or(`delivery_to.eq.Central Store,delivery_to.is.null,delivery_to.eq.`);
-            } else {
-              query = query.eq('delivery_to', selectedStore);
-            }
-          }
-            
           const { data, error } = await query;
-          if (!error && data) docs = [...new Set(data.map(d => d.po_number).filter(Boolean))];
+          if (!error && data) {
+            let filtered = data;
+            if (selectedStore && selectedStore !== '-- All --' && selectedStore !== '') {
+              const target = selectedStore.trim().toLowerCase();
+              filtered = data.filter(d => {
+                const del = (d.delivery_to || '').trim().toLowerCase();
+                if (target === 'central store') {
+                  return del === 'central store' || !del;
+                }
+                return del === target || del.includes(target);
+              });
+            }
+            docs = [...new Set(filtered.map(d => d.po_number).filter(Boolean))];
+          }
         } 
         else if (selectedType === 'DML Challan') {
           const { data, error } = await supabase
@@ -124,17 +175,20 @@ const Reprint = () => {
             .lte('purchase_date', toDate)
             .eq('status', 'Saved');
             
-          if (selectedStore && selectedStore !== '-- All --' && selectedStore !== '') {
-            if (selectedStore === 'Central Store') {
-              query = query.or(`delivery_to.eq.Central Store,delivery_to.is.null,delivery_to.eq.`);
-            } else {
-              query = query.eq('delivery_to', selectedStore);
-            }
-          }
-            
           const { data, error } = await query;
           if (!error && data) {
-            const arr = data.map(d => d.last_challan_no || d.reference_no).filter(Boolean);
+            let filtered = data;
+            if (selectedStore && selectedStore !== '-- All --' && selectedStore !== '') {
+              const target = selectedStore.trim().toLowerCase();
+              filtered = data.filter(d => {
+                const del = (d.delivery_to || '').trim().toLowerCase();
+                if (target === 'central store') {
+                  return del === 'central store' || !del;
+                }
+                return del === target || del.includes(target);
+              });
+            }
+            const arr = filtered.map(d => d.last_challan_no || d.reference_no).filter(Boolean);
             docs = [...new Set(arr)];
           }
         }
@@ -226,11 +280,17 @@ const Reprint = () => {
 
     try {
       if (selectedType === 'Purchase Order') {
-        const { data: po } = await supabase.from('purchase_orders').select('*, vendors(name)').eq('po_number', selectedDocument).single();
-        const { data: poItems } = await supabase.from('purchase_order_items').select('*, products(item_name, barcode, sale_vat_percent)').eq('purchase_order_id', po?.id);
+        const { data: po } = await supabase.from('purchase_orders').select('*').eq('po_number', selectedDocument).single();
+        const { data: poItemsRaw } = await supabase.from('purchase_order_items').select('*').eq('purchase_order_id', po?.id);
+        const poItems = await enrichItemsWithProducts(poItemsRaw || []);
         
+        const vendorName = await getVendorName(po?.vendor_id);
+
         let docNumber = po?.po_number || selectedDocument;
         if (!docNumber.startsWith('#')) docNumber = `#${docNumber}`;
+
+        let refNo = (po?.reference_no || po?.ref_no || '').trim();
+        if (!refNo) refNo = 'N/A';
 
         headerInfo = {
           title: 'PURCHASE ORDER CHALLAN',
@@ -238,8 +298,8 @@ const Reprint = () => {
           date: po?.order_date,
           orderNo: '',
           deliveryTo: po?.delivery_to || 'Central Store',
-          vendorName: po?.vendors?.name || 'N/A',
-          remarks: po?.reference_no || 'N/A',
+          vendorName: vendorName,
+          remarks: refNo,
           isDuplicate: true
         };
         
@@ -253,7 +313,7 @@ const Reprint = () => {
         items = (poItems || []).map((i, idx) => {
           const qty = Number(i.qty || 0);
           const purPrice = Number(i.pur_price || 0);
-          const mrp = Number(i.mrp_price || 0);
+          const mrp = Number(i.mrp_price || i.products?.mrp || 0);
           const disc = Number(i.disc_percent || 0);
           const freeQty = Number(i.free_qty || 0);
           const val = qty * purPrice;
@@ -271,8 +331,8 @@ const Reprint = () => {
 
           return [
             idx + 1,
-            i.products?.barcode || '-',
-            i.products?.item_name || '',
+            i.products?.barcode || i.barcode || '-',
+            i.products?.item_name || i.item_name || '',
             purPrice.toFixed(2),
             mrp.toFixed(2),
             qty,
@@ -303,7 +363,8 @@ const Reprint = () => {
 
       } else if (selectedType === 'DML Challan') {
         const { data: dml } = await supabase.from('damage_and_lost').select('*').eq('id', selectedDocument).single();
-        const { data: dmlItems } = await supabase.from('damage_and_lost_items').select('*, products(item_name, barcode)').eq('damage_and_lost_id', dml?.id);
+        const { data: dmlItemsRaw } = await supabase.from('damage_and_lost_items').select('*').eq('damage_and_lost_id', dml?.id);
+        const dmlItems = await enrichItemsWithProducts(dmlItemsRaw || []);
 
         headerInfo = {
           title: selectedType.toUpperCase(),
@@ -318,7 +379,7 @@ const Reprint = () => {
         items = (dmlItems || []).map((i, idx) => ([
           idx + 1,
           i.products?.barcode || i.barcode || '',
-          i.products?.item_name || '',
+          i.products?.item_name || i.item_name || '',
           Number(i.dml_qty || 0).toFixed(2) + ' PCS',
           '0.00',
           Number(i.cpu || 0).toFixed(2),
@@ -328,50 +389,67 @@ const Reprint = () => {
         ]));
 
       } else if (selectedType === 'Store Requisition(Ecom)' || selectedType === 'Store Requisition') {
-        const { data: req } = await supabase.from('requisitions').select('*, stores(name)').eq('requisition_no', selectedDocument).single();
-        const { data: reqItems } = await supabase.from('requisition_items').select('*, products(item_name, barcode, mrp)').eq('requisition_id', req?.id);
+        const { data: req } = await supabase.from('requisitions').select('*').eq('requisition_no', selectedDocument).single();
+        const { data: reqItemsRaw } = await supabase.from('requisition_items').select('*').eq('requisition_id', req?.id);
+        const reqItems = await enrichItemsWithProducts(reqItemsRaw || []);
+        const storeName = stores.find(s => s.id === req?.shop_id)?.name || '';
 
         headerInfo = {
           title: selectedType.toUpperCase(),
           docNo: req?.requisition_no,
           date: req?.requisition_date,
           orderNo: '',
-          deliveryTo: req?.stores?.name || '',
+          deliveryTo: storeName,
           vendorName: '',
           remarks: ''
         };
 
         items = (reqItems || []).map((i, idx) => ([
           idx + 1,
-          i.products?.barcode || '',
-          i.products?.item_name || '',
+          i.products?.barcode || i.barcode || '',
+          i.products?.item_name || i.item_name || '',
           Number(i.req_qty || 0).toFixed(2) + ' PCS',
           '0.00',
           '0.00',
-          Number(i.products?.mrp || 0).toFixed(2),
+          Number(i.products?.mrp || i.mrp || 0).toFixed(2),
           '0.00',
           '0.00' // amount 0 for requisition
         ]));
 
       } else if (selectedType === 'Purchase Receive Challan') {
-        const { data: pr } = await supabase
-          .from('purchase_receives')
-          .select('*, vendors(name), purchase_orders(po_number)')
-          .or(`last_challan_no.eq.${selectedDocument},reference_no.eq.${selectedDocument}`)
-          .single();
-        const { data: prItems } = await supabase.from('purchase_receive_items').select('*, products(item_name, barcode, sale_vat_percent)').eq('purchase_receive_id', pr?.id);
+        let pr = null;
+        const { data: prByLast } = await supabase.from('purchase_receives').select('*').eq('last_challan_no', selectedDocument).limit(1);
+        if (prByLast && prByLast.length > 0) {
+          pr = prByLast[0];
+        } else {
+          const { data: prByRef } = await supabase.from('purchase_receives').select('*').eq('reference_no', selectedDocument).limit(1);
+          if (prByRef && prByRef.length > 0) pr = prByRef[0];
+        }
+
+        const { data: prItemsRaw } = await supabase.from('purchase_receive_items').select('*').eq('purchase_receive_id', pr?.id);
+        const prItems = await enrichItemsWithProducts(prItemsRaw || []);
+
+        const vendorName = await getVendorName(pr?.vendor_id);
+        let poNumber = '';
+        if (pr?.purchase_order_id) {
+          const { data: poData } = await supabase.from('purchase_orders').select('po_number').eq('id', pr.purchase_order_id).single();
+          if (poData?.po_number) poNumber = poData.po_number;
+        }
 
         let docNumber = pr?.last_challan_no || selectedDocument;
         if (!docNumber.startsWith('#')) docNumber = `#${docNumber}`;
+
+        let refNo = (pr?.reference_no || '').trim();
+        if (!refNo) refNo = 'N/A';
 
         headerInfo = {
           title: 'PURCHASE RECEIVE CHALLAN',
           docNo: docNumber,
           date: pr?.purchase_date,
-          orderNo: pr?.purchase_orders?.po_number || '',
+          orderNo: poNumber,
           deliveryTo: pr?.delivery_to || selectedStore || 'Central Store',
-          vendorName: pr?.vendors?.name || 'N/A',
-          remarks: pr?.reference_no || 'N/A',
+          vendorName: vendorName,
+          remarks: refNo,
           isDuplicate: true
         };
 
@@ -387,7 +465,7 @@ const Reprint = () => {
           const poQty = Number(i.po_qty || 0);
           const rcvQty = Number(i.rcv_qty || 0);
           const purPrice = Number(i.pur_price || 0);
-          const salePrice = Number(i.sale_price || 0);
+          const salePrice = Number(i.sale_price || i.products?.mrp || 0);
           const disc = Number(i.disc_percent || 0);
           const freeQty = Number(i.free_qty || 0);
           const val = rcvQty * purPrice;
@@ -406,8 +484,8 @@ const Reprint = () => {
 
           return [
             idx + 1,
-            i.products?.barcode || '-',
-            i.products?.item_name || '',
+            i.products?.barcode || i.barcode || '-',
+            i.products?.item_name || i.item_name || '',
             poQty,
             rcvQty,
             purPrice.toFixed(2),
@@ -439,8 +517,10 @@ const Reprint = () => {
         ]);
 
       } else if (selectedType === 'Purchase Return Challan') {
-        const { data: prt } = await supabase.from('purchase_returns').select('*, vendors(name)').eq('challan_no', selectedDocument).single();
-        const { data: prtItems } = await supabase.from('purchase_return_items').select('*, products(item_name, barcode)').eq('purchase_return_id', prt?.id);
+        const { data: prt } = await supabase.from('purchase_returns').select('*').eq('challan_no', selectedDocument).single();
+        const { data: prtItemsRaw } = await supabase.from('purchase_return_items').select('*').eq('purchase_return_id', prt?.id);
+        const prtItems = await enrichItemsWithProducts(prtItemsRaw || []);
+        const vendorName = await getVendorName(prt?.vendor_id);
 
         headerInfo = {
           title: selectedType.toUpperCase(),
@@ -448,14 +528,14 @@ const Reprint = () => {
           date: prt?.return_date,
           orderNo: '',
           deliveryTo: '',
-          vendorName: prt?.vendors?.name || '',
+          vendorName: vendorName,
           remarks: prt?.reference_no || ''
         };
 
         items = (prtItems || []).map((i, idx) => ([
           idx + 1,
-          i.products?.barcode || '',
-          i.products?.item_name || '',
+          i.products?.barcode || i.barcode || '',
+          i.products?.item_name || i.item_name || '',
           Number(i.return_qty || 0).toFixed(2) + ' PCS',
           '0.00',
           Number(i.cost_price || 0).toFixed(2),
@@ -465,20 +545,24 @@ const Reprint = () => {
         ]));
 
       } else if (selectedType === 'Store Delivery Challan' || selectedType === 'Store Delivery Challan Summary') {
-        const { data: req } = await supabase.from('requisitions')
-          .select('*, stores(name)')
-          .or(`challan_no.eq.${selectedDocument},requisition_no.eq.${selectedDocument}`)
-          .not('status', 'eq', 'Receive Challan')
-          .not('requisition_no', 'like', 'SDR%')
-          .single();
-        const { data: reqItems } = await supabase.from('requisition_items').select('*, products(item_name, barcode, mrp)').eq('requisition_id', req?.id);
+        let req = null;
+        const { data: r1 } = await supabase.from('requisitions').select('*').eq('challan_no', selectedDocument).limit(1);
+        if (r1 && r1.length > 0) {
+          req = r1[0];
+        } else {
+          const { data: r2 } = await supabase.from('requisitions').select('*').eq('requisition_no', selectedDocument).limit(1);
+          if (r2 && r2.length > 0) req = r2[0];
+        }
+        const { data: reqItemsRaw } = await supabase.from('requisition_items').select('*').eq('requisition_id', req?.id);
+        const reqItems = await enrichItemsWithProducts(reqItemsRaw || []);
+        const storeName = stores.find(s => s.id === req?.shop_id)?.name || '';
 
         headerInfo = {
           title: selectedType.toUpperCase(),
           docNo: req?.challan_no || req?.requisition_no,
           date: req?.requisition_date,
           orderNo: '',
-          deliveryTo: req?.stores?.name || '',
+          deliveryTo: storeName,
           vendorName: '',
           remarks: ''
         };
@@ -501,19 +585,24 @@ const Reprint = () => {
         });
 
       } else if (selectedType === 'Store Delivery Receive Challan') {
-        const { data: req } = await supabase.from('requisitions')
-          .select('*, stores(name)')
-          .or(`challan_no.eq.${selectedDocument},requisition_no.eq.${selectedDocument}`)
-          .eq('status', 'Receive Challan')
-          .single();
-        const { data: reqItems } = await supabase.from('requisition_items').select('*, products(item_name, barcode, mrp)').eq('requisition_id', req?.id);
+        let req = null;
+        const { data: r1 } = await supabase.from('requisitions').select('*').eq('requisition_no', selectedDocument).limit(1);
+        if (r1 && r1.length > 0) {
+          req = r1[0];
+        } else {
+          const { data: r2 } = await supabase.from('requisitions').select('*').eq('challan_no', selectedDocument).limit(1);
+          if (r2 && r2.length > 0) req = r2[0];
+        }
+        const { data: reqItemsRaw } = await supabase.from('requisition_items').select('*').eq('requisition_id', req?.id);
+        const reqItems = await enrichItemsWithProducts(reqItemsRaw || []);
+        const storeName = stores.find(s => s.id === req?.shop_id)?.name || '';
 
         headerInfo = {
           title: selectedType.toUpperCase(),
-          docNo: req?.requisition_no || '', // the SDR number
+          docNo: req?.requisition_no || '',
           date: req?.requisition_date,
-          orderNo: req?.challan_no || '', // the DLV number
-          deliveryTo: req?.stores?.name || '',
+          orderNo: req?.challan_no || '',
+          deliveryTo: storeName,
           vendorName: '',
           remarks: ''
         };

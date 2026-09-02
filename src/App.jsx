@@ -72,6 +72,7 @@ import MisReportPlaceholder from './pages/mis/MisReportPlaceholder';
 import MultipleReportsSale from './pages/mis/reports/MultipleReportsSale';
 import ItemwiseSaleReport from './pages/mis/reports/ItemwiseSaleReport';
 import ShopwiseSalesAnalysisReport from './pages/mis/reports/ShopwiseSalesAnalysisReport';
+import PromotionWiseSalesReport from './pages/mis/reports/PromotionWiseSalesReport';
 
 function App() {
   return (
@@ -124,6 +125,7 @@ function App() {
             <Route path="sales-reports/multiple-reports-sale" element={<MultipleReportsSale />} />
             <Route path="sales-reports/itemwise-sale-report" element={<ItemwiseSaleReport />} />
             <Route path="sales-reports/shopwise-sales-analysis-report" element={<ShopwiseSalesAnalysisReport />} />
+            <Route path="sales-reports/promotion-wise-sale-report" element={<PromotionWiseSalesReport />} />
             <Route path="sales-reports/*" element={<MisReportPlaceholder />} />
             <Route path="stock-reports" element={<MisReportPlaceholder title="Stock Reports" />} />
             <Route path="stock-reports/*" element={<MisReportPlaceholder />} />
@@ -139,7 +141,8 @@ function App() {
             <Route path="purchase-return-reports/*" element={<MisReportPlaceholder />} />
             <Route path="damage-lost-reports" element={<MisReportPlaceholder title="Damage and Lost Reports" />} />
             <Route path="damage-lost-reports/*" element={<MisReportPlaceholder />} />
-            <Route path="promotional-reports" element={<MisReportPlaceholder title="Promotional Reports" />} />
+            <Route path="promotional-reports" element={<PromotionWiseSalesReport />} />
+            <Route path="promotional-reports/promotion-wise-sales" element={<PromotionWiseSalesReport />} />
             <Route path="promotional-reports/*" element={<MisReportPlaceholder />} />
             <Route path="crm-reports" element={<MisReportPlaceholder title="CRM Reports" />} />
             <Route path="crm-reports/*" element={<MisReportPlaceholder />} />

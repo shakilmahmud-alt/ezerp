@@ -724,6 +724,29 @@ INSERT INTO `promotions` (`id`, `circular_code`, `circular_name`, `promotion_typ
 ('b38a81c9-feb5-431e-a979-ac3a62ca3346', 'PR20260628546', 'First Order', 'Coupon', '2026-06-28T00:00:00+00:00', '2026-07-31T00:00:00+00:00', 0, 'Central Store, Shop', '2026-06-28T09:17:33.465598+00:00', NULL, NULL, '49321', 'Percent', 5, 0, 1, 1500);
 
 -- --------------------------------------------------------
+-- Table structure for table `promotion_items`
+-- --------------------------------------------------------
+DROP TABLE IF EXISTS `promotion_items`;
+CREATE TABLE `promotion_items` (
+  `id` VARCHAR(64) NOT NULL PRIMARY KEY,
+  `promotion_id` VARCHAR(64) NOT NULL,
+  `brand` VARCHAR(255),
+  `category` VARCHAR(255),
+  `sub_category` VARCHAR(255),
+  `sub_subcategory` VARCHAR(255),
+  `vendor` VARCHAR(255),
+  `item` VARCHAR(255),
+  `barcode` VARCHAR(255),
+  `user_barcode` VARCHAR(255),
+  `description` TEXT,
+  `discount_percent` DECIMAL(15,2) DEFAULT 0.00,
+  `discount_amount` DECIMAL(15,2) DEFAULT 0.00,
+  `vendor_contribution_percent` DECIMAL(15,2) DEFAULT 0.00,
+  `vendor_contribution_amount` DECIMAL(15,2) DEFAULT 0.00,
+  `created_at` VARCHAR(64)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
 -- Table structure for table `purchase_order_items`
 -- --------------------------------------------------------
 DROP TABLE IF EXISTS `purchase_order_items`;

@@ -47,6 +47,11 @@ const PosDashboard = () => {
   const [showConfirmSaveModal, setShowConfirmSaveModal] = useState(false);
   const [showExchangeModal, setShowExchangeModal] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
+  const [showPromoDetailsModal, setShowPromoDetailsModal] = useState(false);
+
+  // Active Promotions for POS Auto-Discount
+  const [activePromotions, setActivePromotions] = useState([]);
+  const [activePromoItemsMap, setActivePromoItemsMap] = useState({});
 
   const [newQtyInput, setNewQtyInput] = useState(1);
   const [reprintInvoiceInput, setReprintInvoiceInput] = useState('');
@@ -111,6 +116,7 @@ const PosDashboard = () => {
     fetchExecutives();
     fetchCustomers();
     fetchPaymentMethods();
+    fetchActivePromotions();
     generateNextInvoiceNo();
     generateNextReturnInvoiceNo();
 
@@ -197,12 +203,86 @@ const PosDashboard = () => {
           name: data.name || posTerminal.store_name || 'STORE BRANCH',
           address: data.address || 'Shop No: 026-031, Level-1, Dhaka, Bangladesh'
         });
+        fetchActivePromotions(data.name || posTerminal.store_name);
       }
     } catch (err) {
       setStoreDetails({
         name: posTerminal.store_name || 'KIDS PARADISE',
         address: 'Dhaka, Bangladesh'
       });
+      fetchActivePromotions(posTerminal.store_name);
+    }
+  };
+
+  // Fetch Active Promotions for this Store
+  const fetchActivePromotions = async (overrideStoreName) => {
+    try {
+      const { data: promoData, error: promoErr } = await supabase
+        .from('promotions')
+        .select('*');
+
+      if (promoErr || !promoData || promoData.length === 0) {
+        setActivePromotions([]);
+        setActivePromoItemsMap({});
+        return;
+      }
+
+      const now = new Date();
+      const currentStoreName = (overrideStoreName || storeDetails.name || posTerminal?.store_name || '').toLowerCase();
+
+      const validPromos = promoData.filter(p => {
+        if (!p.valid_from || !p.valid_to) return false;
+        const vFrom = new Date(p.valid_from);
+        const vTo = new Date(p.valid_to);
+        vTo.setHours(23, 59, 59, 999);
+        if (now < vFrom || now > vTo) return false;
+
+        if (p.stores) {
+          const sList = p.stores.split(',').map(s => s.trim().toLowerCase());
+          if (
+            sList.length > 0 &&
+            !sList.includes('central store') &&
+            !sList.includes('all') &&
+            !sList.some(s => currentStoreName && (currentStoreName.includes(s) || s.includes(currentStoreName)))
+          ) {
+            return false;
+          }
+        }
+        return true;
+      });
+
+      if (validPromos.length === 0) {
+        setActivePromotions([]);
+        setActivePromoItemsMap({});
+        return;
+      }
+
+      const validPromoIds = validPromos.map(p => p.id);
+      const { data: itemsData } = await supabase
+        .from('promotion_items')
+        .select('*');
+
+      const itemsForValid = (itemsData || []).filter(item => validPromoIds.includes(item.promotion_id));
+
+      const map = {};
+      itemsForValid.forEach(item => {
+        const promo = validPromos.find(p => p.id === item.promotion_id);
+        const promoEntry = {
+          ...item,
+          promotion_name: promo?.circular_name || 'Promotion',
+          circular_code: promo?.circular_code || '',
+          promotion_type: promo?.promotion_type || 'Circular Discount'
+        };
+
+        if (item.barcode) map[String(item.barcode).trim().toLowerCase()] = promoEntry;
+        if (item.user_barcode) map[String(item.user_barcode).trim().toLowerCase()] = promoEntry;
+        if (item.code) map[String(item.code).trim().toLowerCase()] = promoEntry;
+      });
+
+      setActivePromotions(validPromos);
+      setActivePromoItemsMap(map);
+    } catch (err) {
+      console.error("Error loading active promotions for POS:", err);
     }
   };
 
@@ -422,7 +502,7 @@ const PosDashboard = () => {
     }
   };
 
-  // Add Item to Cart (Enforces Strict Stock > 0 Validation)
+  // Add Item to Cart (Enforces Strict Stock > 0 Validation & Active Promotion Auto-Discount)
   const addItemToCart = (product, qtyToAdd = 1) => {
     const stockQty = getEffectiveStockQty(product, posTerminal?.store_id);
 
@@ -443,28 +523,63 @@ const PosDashboard = () => {
     const price = Number(product.mrp || product.purchase_price || 0);
     const vatPct = Number(product.sale_vat_percent || 0);
 
+    // Check if product is covered by an active promotion
+    const pBc = String(product.barcode || '').trim().toLowerCase();
+    const pUbc = String(product.user_barcode || product.user_define_barcode || '').trim().toLowerCase();
+    const pCode = String(product.code || '').trim().toLowerCase();
+
+    const promoMatch = (pBc && activePromoItemsMap[pBc]) || 
+                       (pUbc && activePromoItemsMap[pUbc]) || 
+                       (pCode && activePromoItemsMap[pCode]) || 
+                       null;
+
+    let discPct = 0;
+    let discAmt = 0;
+    let isPromoted = false;
+    let promoName = '';
+    let promoId = null;
+
+    if (promoMatch) {
+      isPromoted = true;
+      promoName = promoMatch.promotion_name || 'Active Promotion';
+      promoId = promoMatch.promotion_id;
+      discPct = Number(promoMatch.discount_percent) || 0;
+      if (discPct > 0) {
+        discAmt = (price * discPct) / 100;
+      } else if (Number(promoMatch.discount_amount) > 0) {
+        discAmt = Number(promoMatch.discount_amount);
+        discPct = price > 0 ? (discAmt / price) * 100 : 0;
+      }
+      toast.success(`🏷️ Promotion applied: "${promoName}" (${discPct}% off)`, { duration: 3500 });
+    }
+
     if (existingIndex > -1) {
       const updatedCart = [...cart];
       const newQty = updatedCart[existingIndex].qty + qtyToAdd;
       const vatAmt = (price * newQty * vatPct) / 100;
-      const totalVal = (price * newQty) + vatAmt;
+      const itemDiscAmt = isPromoted 
+        ? ((price * newQty * discPct) / 100) 
+        : (updatedCart[existingIndex].discount_amount || 0);
+      const totalVal = (price * newQty) + vatAmt - itemDiscAmt;
 
       updatedCart[existingIndex] = {
         ...updatedCart[existingIndex],
         qty: newQty,
         vat_amount: vatAmt,
+        discount_amount: itemDiscAmt,
         total_value: totalVal
       };
       setCart(updatedCart);
       setSelectedRowIndex(existingIndex);
     } else {
       const vatAmt = (price * qtyToAdd * vatPct) / 100;
-      const totalVal = (price * qtyToAdd) + vatAmt;
+      const itemDiscAmt = (price * qtyToAdd * discPct) / 100;
+      const totalVal = (price * qtyToAdd) + vatAmt - itemDiscAmt;
 
       const newItem = {
         product_id: product.id,
         barcode: product.barcode || product.code,
-        user_barcode: product.user_barcode || product.barcode,
+        user_barcode: product.user_barcode || product.user_define_barcode || product.barcode,
         product_name: product.item_name,
         price: price,
         qty: qtyToAdd,
@@ -472,12 +587,15 @@ const PosDashboard = () => {
         sd_amount: 0,
         vat_percent: vatPct,
         vat_amount: vatAmt,
-        discount_percent: 0,
-        discount_amount: 0,
+        discount_percent: discPct,
+        discount_amount: itemDiscAmt,
         total_value: totalVal,
         sBarcode: product.barcode || product.code,
         sales_executive_id: selectedExecutiveId,
-        sales_executive_name: execName
+        sales_executive_name: execName,
+        is_promoted: isPromoted,
+        promotion_name: promoName,
+        promotion_id: promoId
       };
       setCart([...cart, newItem]);
       setSelectedRowIndex(cart.length);
@@ -622,9 +740,14 @@ const PosDashboard = () => {
   const totalSdCalculated = cart.reduce((sum, item) => sum + (Number(item.sd_amount) || 0), 0);
   const itemDiscountsCalculated = cart.reduce((sum, item) => sum + (Number(item.discount_amount) || 0), 0);
   
+  // Non-promoted items gross total for overall discount calculation (NO DOUBLE-DISCOUNTING PROMOTED ITEMS)
+  const nonPromotedGrossTotal = cart
+    .filter(item => !item.is_promoted)
+    .reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.qty) || 0)), 0);
+
   const computedDiscountAmt = overallDiscountAmount > 0 
     ? Number(overallDiscountAmount) 
-    : (grossTotalCalculated * Number(overallDiscountPercent)) / 100;
+    : (nonPromotedGrossTotal * Number(overallDiscountPercent)) / 100;
 
   const totalDiscountCalculated = itemDiscountsCalculated + computedDiscountAmt;
   const subTotalCalculated = (grossTotalCalculated + totalVatCalculated + totalSdCalculated) - totalDiscountCalculated - Number(returnAmount) - Number(redeemPoints);
@@ -1574,14 +1697,39 @@ const PosDashboard = () => {
                       }}
                     >
                       <td style={{ padding: '6px', borderRight: '1px solid #eee' }}>{item.barcode}</td>
-                      <td style={{ padding: '6px', borderRight: '1px solid #eee', fontWeight: 'bold' }}>{item.product_name}</td>
+                      <td style={{ padding: '6px', borderRight: '1px solid #eee', fontWeight: 'bold' }}>
+                        {item.product_name}
+                        {item.is_promoted && (
+                          <span 
+                            style={{ 
+                              marginLeft: '6px', 
+                              backgroundColor: '#dcfce7', 
+                              color: '#166534', 
+                              border: '1px solid #86efac',
+                              padding: '1px 5px', 
+                              borderRadius: '3px', 
+                              fontSize: '9px', 
+                              fontWeight: 'bold',
+                              display: 'inline-flex',
+                              alignItems: 'center'
+                            }}
+                            title={`Promotion: ${item.promotion_name || 'Active Circular Discount'}`}
+                          >
+                            🏷️ PROMO (-{item.discount_percent}%)
+                          </span>
+                        )}
+                      </td>
                       <td style={{ padding: '6px', textAlign: 'right', borderRight: '1px solid #eee' }}>{item.price.toFixed(2)}</td>
                       <td style={{ padding: '6px', textAlign: 'right', borderRight: '1px solid #eee', fontWeight: 'bold' }}>{item.qty}</td>
                       <td style={{ padding: '6px', textAlign: 'right', borderRight: '1px solid #eee' }}>{item.sd_amount.toFixed(2)}</td>
                       <td style={{ padding: '6px', textAlign: 'right', borderRight: '1px solid #eee' }}>{item.vat_percent}</td>
                       <td style={{ padding: '6px', textAlign: 'right', borderRight: '1px solid #eee' }}>{item.vat_amount.toFixed(2)}</td>
-                      <td style={{ padding: '6px', textAlign: 'right', borderRight: '1px solid #eee' }}>{item.discount_percent}</td>
-                      <td style={{ padding: '6px', textAlign: 'right', borderRight: '1px solid #eee' }}>{item.discount_amount.toFixed(2)}</td>
+                      <td style={{ padding: '6px', textAlign: 'right', borderRight: '1px solid #eee', fontWeight: item.is_promoted ? 'bold' : 'normal', color: item.is_promoted ? '#166534' : 'inherit' }}>
+                        {item.discount_percent}
+                      </td>
+                      <td style={{ padding: '6px', textAlign: 'right', borderRight: '1px solid #eee', fontWeight: item.is_promoted ? 'bold' : 'normal', color: item.is_promoted ? '#166534' : 'inherit' }}>
+                        {item.discount_amount.toFixed(2)}
+                      </td>
                       <td style={{ padding: '6px', textAlign: 'right', borderRight: '1px solid #eee', fontWeight: 'bold', color: '#2e6f40' }}>{item.total_value.toFixed(2)}</td>
                       <td style={{ padding: '6px', borderRight: '1px solid #eee' }}>{item.sBarcode}</td>
                       <td style={{ padding: '6px' }}>{item.sales_executive_name}</td>
@@ -1648,7 +1796,7 @@ const PosDashboard = () => {
 
             <button 
               className="btn-danger"
-              onClick={() => toast('Promotion Details active', { icon: '🏷️' })} 
+              onClick={() => setShowPromoDetailsModal(true)} 
               style={{ padding: '8px 2px', fontSize: '10px', borderRadius: '4px' }}
             >
               Promotion Details
@@ -2815,6 +2963,111 @@ const PosDashboard = () => {
               <button onClick={() => setShowQtyModal(false)} style={{ padding: '6px 15px', backgroundColor: '#e0e0e0', border: 'none', cursor: 'pointer', borderRadius: '3px' }}>Cancel</button>
               <button onClick={handleSaveQuantity} style={{ padding: '6px 15px', backgroundColor: 'var(--accent-primary, #2e6f40)', color: '#fff', border: 'none', cursor: 'pointer', borderRadius: '3px' }}>Update</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP MODAL: PROMOTION DETAILS POPUP */}
+      {showPromoDetailsModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3000, padding: '20px' }}>
+          <div style={{ backgroundColor: '#fff', width: '800px', maxWidth: '95vw', maxHeight: '85vh', borderRadius: '8px', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 25px rgba(0,0,0,0.3)', border: '1px solid #ccc', overflow: 'hidden' }}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 18px', borderBottom: '1px solid #eee', backgroundColor: 'var(--accent-primary, #2e6f40)', color: '#fff' }}>
+              <div style={{ fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                🏷️ Active Store Promotions ({activePromotions.length})
+              </div>
+              <button 
+                onClick={() => setShowPromoDetailsModal(false)}
+                style={{ background: 'none', border: 'none', color: '#fff', fontSize: '18px', cursor: 'pointer', lineHeight: 1 }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
+              {activePromotions.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>
+                  No active promotions currently running for this store ({storeDetails.name}).
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                  {activePromotions.map(promo => {
+                    const promoItems = Object.values(activePromoItemsMap).filter(item => item.promotion_id === promo.id);
+                    const uniqueItems = [];
+                    const seen = new Set();
+                    promoItems.forEach(i => {
+                      const key = i.barcode || i.user_barcode || i.code;
+                      if (!seen.has(key)) {
+                        seen.add(key);
+                        uniqueItems.push(i);
+                      }
+                    });
+
+                    return (
+                      <div key={promo.id} style={{ border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
+                        <div style={{ backgroundColor: '#f1f5f9', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0' }}>
+                          <div>
+                            <span style={{ fontWeight: 'bold', color: 'var(--accent-primary, #2e6f40)', fontSize: '13px' }}>
+                              {promo.circular_name}
+                            </span>
+                            <span style={{ marginLeft: '8px', fontSize: '11px', color: '#64748b' }}>
+                              ({promo.circular_code})
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '10px', color: '#475569' }}>
+                            Valid: {new Date(promo.valid_from).toLocaleDateString()} - {new Date(promo.valid_to).toLocaleDateString()}
+                          </div>
+                        </div>
+
+                        <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
+                            <thead>
+                              <tr style={{ backgroundColor: '#fafafa', borderBottom: '1px solid #eee', color: '#64748b' }}>
+                                <th style={{ padding: '6px 10px' }}>Barcode</th>
+                                <th style={{ padding: '6px 10px' }}>Item Name</th>
+                                <th style={{ padding: '6px 10px' }}>Brand / Category</th>
+                                <th style={{ padding: '6px 10px', textAlign: 'right' }}>Discount</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {uniqueItems.length === 0 ? (
+                                <tr>
+                                  <td colSpan="4" style={{ padding: '12px', textAlign: 'center', color: '#999' }}>
+                                    Applies store-wide or by circular policy
+                                  </td>
+                                </tr>
+                              ) : (
+                                uniqueItems.map((itm, idx) => (
+                                  <tr key={idx} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                                    <td style={{ padding: '6px 10px' }}>{itm.barcode || itm.user_barcode || '-'}</td>
+                                    <td style={{ padding: '6px 10px', fontWeight: 600 }}>{itm.description || itm.item || '-'}</td>
+                                    <td style={{ padding: '6px 10px' }}>{itm.brand || ''} {itm.category ? `(${itm.category})` : ''}</td>
+                                    <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 'bold', color: '#166534' }}>
+                                      {Number(itm.discount_percent) > 0 ? `${itm.discount_percent}%` : `৳${itm.discount_amount}`}
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div style={{ padding: '10px 15px', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'flex-end', backgroundColor: '#f8fafc' }}>
+              <button 
+                onClick={() => setShowPromoDetailsModal(false)}
+                className="btn-theme"
+                style={{ padding: '6px 18px', fontSize: '12px', borderRadius: '4px' }}
+              >
+                Close
+              </button>
+            </div>
+
           </div>
         </div>
       )}

@@ -202,6 +202,7 @@ const MisLayout = () => {
       path: '/mis/promotional-reports', 
       icon: <Gift size={18} />,
       subItems: [
+        { name: 'Promotion wise Sales Report', path: '/mis/promotional-reports/promotion-wise-sales' },
         { name: 'Active Promo Report', path: '/mis/promotional-reports/active' },
         { name: 'Discount Circular Report', path: '/mis/promotional-reports/discount' },
       ]
