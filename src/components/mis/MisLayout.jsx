@@ -139,8 +139,10 @@ const MisLayout = () => {
       icon: <Layers size={18} />,
       subItems: [
         { name: 'Current Stock Report', path: '/mis/stock-reports/current' },
-        { name: 'Product Stock Journal', path: '/mis/stock-reports/journal' },
-        { name: 'Warehouse Stock Report', path: '/mis/stock-reports/warehouse' },
+        { name: 'Itemwise Stock Report', path: '/mis/stock-reports/itemwise-stock-report' },
+        { name: 'Shopwise Stock Analysis Report', path: '/mis/stock-reports/shopwise-stock-analysis-report' },
+        { name: 'Reorder Label Report', path: '/mis/stock-reports/reorder-label-report' },
+        { name: 'Category /Subcategory /Itemwise Stock Report', path: '/mis/stock-reports/category-subcategory-itemwise-stock-report' },
       ]
     },
     { 

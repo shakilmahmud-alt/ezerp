@@ -701,9 +701,7 @@ const SlowFastNonMovingReport = () => {
                 }}
               >
                 <option value="ALL">ALL</option>
-                <option value="Retail">Retail</option>
-                <option value="Wholesale">Wholesale</option>
-                <option value="Outlet">Outlet</option>
+                <option value="Store">Store</option>
               </select>
             </div>
 
