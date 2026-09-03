@@ -78,6 +78,8 @@ import UserWiseInvoiceSummaryReport from './pages/mis/reports/UserWiseInvoiceSum
 import SlowFastNonMovingReport from './pages/mis/reports/SlowFastNonMovingReport';
 import CurrentStockReport from './pages/mis/reports/CurrentStockReport';
 import ItemwiseStockReport from './pages/mis/reports/ItemwiseStockReport';
+import ShopwiseStockAnalysisReport from './pages/mis/reports/ShopwiseStockAnalysisReport';
+import CategorySubcategoryItemwiseStockReport from './pages/mis/reports/CategorySubcategoryItemwiseStockReport';
 
 function App() {
   return (
@@ -140,6 +142,8 @@ function App() {
             <Route path="stock-reports/current" element={<CurrentStockReport />} />
             <Route path="stock-reports/current-stock-report" element={<CurrentStockReport />} />
             <Route path="stock-reports/itemwise-stock-report" element={<ItemwiseStockReport />} />
+            <Route path="stock-reports/shopwise-stock-analysis-report" element={<ShopwiseStockAnalysisReport />} />
+            <Route path="stock-reports/category-subcategory-itemwise-stock-report" element={<CategorySubcategoryItemwiseStockReport />} />
             <Route path="stock-reports/*" element={<MisReportPlaceholder />} />
             <Route path="purchase-order-reports" element={<MisReportPlaceholder title="Purchase Order Reports" />} />
             <Route path="purchase-order-reports/*" element={<MisReportPlaceholder />} />

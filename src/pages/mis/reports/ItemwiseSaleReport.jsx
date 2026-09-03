@@ -111,6 +111,30 @@ const ItemwiseSaleReport = () => {
       setSubSubcategories(ssctList);
       setPaymentMethods(pmList);
       setProductsList(prList);
+
+      // Auto-load initial sales report so page is not empty on initial mount
+      executeReportQuery({
+        fDate: fromDate,
+        tDate: toDate,
+        sType: storeType,
+        sStore: selectedStore,
+        pMethod: paymentMethod,
+        sVendor: selectedVendor,
+        sBrand: selectedBrand,
+        sCategory: selectedCategory,
+        sSubCategory: selectedSubCategory,
+        sSubSubcategory: selectedSubSubcategory,
+        sOrigin: countryOfOrigin,
+        iName: itemNameInput,
+        bCode: barcodeInput,
+        rType: reportType,
+        masterStores: stList,
+        masterVendors: vdList,
+        masterBrands: brList,
+        masterCategories: ctList,
+        masterSubcategories: sctList,
+        masterProducts: prList
+      });
     } catch (err) {
       console.error('Error fetching master data:', err);
     }
@@ -179,12 +203,47 @@ const ItemwiseSaleReport = () => {
         masterCategories, masterSubcategories, masterProducts
       } = params;
 
-      const prodMap = new Map((masterProducts || productsList).map(p => [p.id, p]));
-      const catMap = new Map((masterCategories || categories).map(c => [c.id, c.name]));
-      const subCatMap = new Map((masterSubcategories || subcategories).map(s => [s.id, s.name]));
-      const brandMap = new Map((masterBrands || brands).map(b => [b.id, b.name]));
-      const vendorMap = new Map((masterVendors || vendors).map(v => [v.id, v.name]));
-      const storeMap = new Map((masterStores || stores).map(st => [st.id, st.name]));
+      // 0. Ensure master products cache is populated
+      let pList = (masterProducts && masterProducts.length > 0) ? masterProducts : productsList;
+      if (!pList || pList.length === 0) {
+        const pRes = await supabase.from('products').select(`
+          id, sl, code, barcode, user_define_barcode, item_name, 
+          category_id, subcategory_id, sub_subcategory_id, brand_id, vendor_id, 
+          country_of_origin, purchase_price, mrp, sale_vat_percent
+        `).order('item_name');
+        pList = pRes.data || [];
+      }
+
+      const prodMap = new Map();
+      pList.forEach(p => {
+        if (p.id) prodMap.set(p.id, p);
+        if (p.barcode) prodMap.set(String(p.barcode).trim(), p);
+        if (p.user_define_barcode) prodMap.set(String(p.user_define_barcode).trim(), p);
+        if (p.code) prodMap.set(String(p.code).trim(), p);
+      });
+
+      const catMap = new Map((masterCategories || categories || []).map(c => [c.id, c.name]));
+      const subCatMap = new Map((masterSubcategories || subcategories || []).map(s => [s.id, s.name]));
+      const brandMap = new Map((masterBrands || brands || []).map(b => [b.id, b.name]));
+      const vendorMap = new Map((masterVendors || vendors || []).map(v => [v.id, v.name]));
+      const storeMap = new Map((masterStores || stores || []).map(st => [st.id, st.name]));
+
+      // Safe date formatting helpers
+      const getFormattedDate = (raw) => {
+        if (!raw) return new Date().toISOString().split('T')[0];
+        const d = new Date(raw);
+        return isNaN(d.getTime()) ? String(raw).slice(0, 10) : d.toISOString().split('T')[0];
+      };
+
+      const getDisplayDateTime = (raw) => {
+        if (!raw) return { date: '-', time: '-' };
+        const d = new Date(raw);
+        if (isNaN(d.getTime())) return { date: String(raw).slice(0, 10), time: '-' };
+        return {
+          date: d.toLocaleDateString(),
+          time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+      };
 
       // 1. Report Type: RETURN
       if (rType === 'Return') {
@@ -214,14 +273,15 @@ const ItemwiseSaleReport = () => {
         let rows = [];
         (retSales || []).forEach(r => {
           const items = retItemsMap.get(r.id) || [];
+          const dt = getDisplayDateTime(r.created_at);
           if (items.length > 0) {
             items.forEach(it => {
-              const p = prodMap.get(it.product_id);
+              const p = prodMap.get(it.product_id) || prodMap.get(String(it.barcode).trim());
               rows.push({
                 sl: rows.length + 1,
                 return_invoice_no: r.return_invoice_no || `RET-${r.id}`,
                 original_invoice_no: r.original_invoice_no || '-',
-                date: new Date(r.created_at).toLocaleDateString(),
+                date: dt.date,
                 store_name: storeMap.get(r.store_id) || 'Central Store',
                 barcode: it.barcode || p?.barcode || p?.user_define_barcode || '-',
                 item_name: it.product_name || p?.item_name || 'Item Return',
@@ -238,7 +298,7 @@ const ItemwiseSaleReport = () => {
               sl: rows.length + 1,
               return_invoice_no: r.return_invoice_no || `RET-${r.id}`,
               original_invoice_no: r.original_invoice_no || '-',
-              date: new Date(r.created_at).toLocaleDateString(),
+              date: dt.date,
               store_name: storeMap.get(r.store_id) || 'Central Store',
               barcode: '-',
               item_name: 'General Sales Return',
@@ -305,14 +365,14 @@ const ItemwiseSaleReport = () => {
         if (sType === 'Store' && sStore && String(s.store_id) !== String(sStore)) {
           return false;
         }
-        const sDateStr = (s.created_at || s.sale_date || '').slice(0, 10);
+        const sDateStr = getFormattedDate(s.created_at || s.sale_date);
         if (fDate && sDateStr && sDateStr < fDate) return false;
         if (tDate && sDateStr && sDateStr > tDate) return false;
         return true;
       });
 
-      // If strict date filter resulted in 0 rows, use all sales so POS data is never empty!
-      if (filteredSales.length === 0 && allSalesList.length > 0) {
+      // Fallback: If 0 sales match strict date, but allSalesList exists and user is just viewing default, fallback
+      if (filteredSales.length === 0 && allSalesList.length > 0 && !sStore && sType === 'ALL') {
         filteredSales = allSalesList;
       }
 
@@ -327,18 +387,15 @@ const ItemwiseSaleReport = () => {
         }
 
         const saleStoreName = storeMap.get(sale.store_id) || 'Central Store';
-        const saleDateFormatted = new Date(sale.created_at || sale.sale_date).toISOString().split('T')[0];
+        const saleDateFormatted = getFormattedDate(sale.created_at || sale.sale_date);
 
         const items = itemsBySaleId.get(sale.id) || itemsBySaleId.get(sale.invoice_no) || [];
         
         if (items.length > 0) {
           items.forEach(item => {
-            const prod = prodMap.get(item.product_id) || (masterProducts || productsList).find(p => 
-              String(p.barcode) === String(item.barcode) || 
-              String(p.user_define_barcode) === String(item.barcode) ||
-              String(p.code) === String(item.barcode) ||
-              String(p.user_define_barcode) === String(item.user_barcode)
-            );
+            const prod = prodMap.get(item.product_id) || 
+                         (item.barcode && prodMap.get(String(item.barcode).trim())) || 
+                         (item.user_barcode && prodMap.get(String(item.user_barcode).trim()));
 
             allLineItems.push({
               sale_id: sale.id,
@@ -410,19 +467,28 @@ const ItemwiseSaleReport = () => {
           if (!item.payment_method?.toLowerCase().includes(pMethod.toLowerCase())) return false;
         }
         if (sBrand !== 'ALL') {
-          if (String(item.brand_id) !== String(sBrand) && item.brand_name?.toLowerCase() !== sBrand.toLowerCase()) return false;
+          const matchBrand = (item.brand_id && String(item.brand_id) === String(sBrand)) || 
+                             (item.brand_name && item.brand_name.toLowerCase() === sBrand.toLowerCase());
+          if (!matchBrand) return false;
         }
         if (sCategory !== 'ALL') {
-          if (String(item.category_id) !== String(sCategory) && item.category_name?.toLowerCase() !== sCategory.toLowerCase()) return false;
+          const matchCat = (item.category_id && String(item.category_id) === String(sCategory)) || 
+                           (item.category_name && item.category_name.toLowerCase() === sCategory.toLowerCase());
+          if (!matchCat) return false;
         }
         if (sSubCategory !== 'ALL') {
-          if (String(item.subcategory_id) !== String(sSubCategory) && item.subcategory_name?.toLowerCase() !== sSubCategory.toLowerCase()) return false;
+          const matchSub = (item.subcategory_id && String(item.subcategory_id) === String(sSubCategory)) || 
+                           (item.subcategory_name && item.subcategory_name.toLowerCase() === sSubCategory.toLowerCase());
+          if (!matchSub) return false;
         }
         if (sSubSubcategory !== 'ALL') {
-          if (String(item.sub_subcategory_id) !== String(sSubSubcategory)) return false;
+          const matchSubSub = (item.sub_subcategory_id && String(item.sub_subcategory_id) === String(sSubSubcategory));
+          if (!matchSubSub) return false;
         }
         if (sVendor !== 'ALL') {
-          if (String(item.vendor_id) !== String(sVendor) && item.vendor_name?.toLowerCase() !== sVendor.toLowerCase()) return false;
+          const matchVen = (item.vendor_id && String(item.vendor_id) === String(sVendor)) || 
+                           (item.vendor_name && item.vendor_name.toLowerCase() === sVendor.toLowerCase());
+          if (!matchVen) return false;
         }
         if (sOrigin !== 'ALL') {
           if (item.country_of_origin?.toLowerCase() !== sOrigin.toLowerCase()) return false;
@@ -443,12 +509,15 @@ const ItemwiseSaleReport = () => {
 
       // BUILD ACCORDING TO REPORT TYPE
       if (rType === 'Details') {
-        const rows = filtered.map((r, idx) => ({
-          ...r,
-          sl: idx + 1,
-          date_display: new Date(r.created_at).toLocaleDateString(),
-          time_display: new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }));
+        const rows = filtered.map((r, idx) => {
+          const dt = getDisplayDateTime(r.created_at);
+          return {
+            ...r,
+            sl: idx + 1,
+            date_display: dt.date,
+            time_display: dt.time
+          };
+        });
 
         setReportData({
           type: 'Details',
@@ -1349,30 +1418,6 @@ const ItemwiseSaleReport = () => {
                   key={type.id}
                   onClick={() => {
                     setReportType(type.id);
-                    if (reportData) {
-                      executeReportQuery({
-                        fDate: fromDate,
-                        tDate: toDate,
-                        sType: storeType,
-                        sStore: selectedStore,
-                        pMethod: paymentMethod,
-                        sVendor: selectedVendor,
-                        sBrand: selectedBrand,
-                        sCategory: selectedCategory,
-                        sSubCategory: selectedSubCategory,
-                        sSubSubcategory: selectedSubSubcategory,
-                        sOrigin: countryOfOrigin,
-                        iName: itemNameInput,
-                        bCode: barcodeInput,
-                        rType: type.id,
-                        masterStores: stores,
-                        masterVendors: vendors,
-                        masterBrands: brands,
-                        masterCategories: categories,
-                        masterSubcategories: subcategories,
-                        masterProducts: productsList
-                      });
-                    }
                   }}
                   style={{
                     display: 'flex',

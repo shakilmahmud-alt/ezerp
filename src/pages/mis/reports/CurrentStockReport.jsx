@@ -336,21 +336,13 @@ const CurrentStockReport = () => {
     };
   };
 
-  // Instant switching on radio changes
+  // Update filter state on radio changes (report output changes only on Show button click)
   const handleReportTypeChange = (newType) => {
     setReportType(newType);
-    if (rawProducts.length > 0) {
-      const computed = computeReportOutput(newType, valueType, selectedStore, rawProducts, storeStocks, stores, vendors, categories, subcategories, subSubcategories);
-      setReportData(computed);
-    }
   };
 
   const handleValueTypeChange = (newValType) => {
     setValueType(newValType);
-    if (rawProducts.length > 0) {
-      const computed = computeReportOutput(reportType, newValType, selectedStore, rawProducts, storeStocks, stores, vendors, categories, subcategories, subSubcategories);
-      setReportData(computed);
-    }
   };
 
   // Reset Filters Handler

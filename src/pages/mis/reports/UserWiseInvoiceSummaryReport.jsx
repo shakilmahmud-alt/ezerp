@@ -209,13 +209,9 @@ const UserWiseInvoiceSummaryReport = () => {
     };
   };
 
-  // Instant Report Type Change handler
+  // Update filter state on radio changes (report output changes only on Show button click)
   const handleReportTypeChange = (newType) => {
     setReportType(newType);
-    if (rawSales) {
-      const computed = computeReportData(newType, rawSales);
-      setReportData(computed);
-    }
   };
 
   // Reset Filters Handler

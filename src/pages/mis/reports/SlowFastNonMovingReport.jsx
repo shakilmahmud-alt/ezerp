@@ -196,21 +196,13 @@ const SlowFastNonMovingReport = () => {
     };
   };
 
-  // Instant switching on radio changes
+  // Update filter state on radio changes (report output changes only on Show button click)
   const handleReportTypeChange = (newType) => {
     setReportType(newType);
-    if (rawAggregatedData) {
-      const computed = computeReportOutput(newType, valueType, showRecords, productLessThanValue, rawAggregatedData);
-      setReportData(computed);
-    }
   };
 
   const handleValueTypeChange = (newValType) => {
     setValueType(newValType);
-    if (rawAggregatedData) {
-      const computed = computeReportOutput(reportType, newValType, showRecords, productLessThanValue, rawAggregatedData);
-      setReportData(computed);
-    }
   };
 
   // Reset Filters Handler

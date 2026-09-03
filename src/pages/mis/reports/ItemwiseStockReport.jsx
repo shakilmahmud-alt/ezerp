@@ -13,10 +13,10 @@ import * as XLSX from 'xlsx';
 const ItemwiseStockReport = () => {
   const { user } = useAuth();
 
-  // Search Criteria Filter States (Matching 2nd Screenshot)
+  // Search Criteria Filter States
   const [storeType, setStoreType] = useState('ALL');
   const [selectedStore, setSelectedStore] = useState('ALL');
-  const [paymentMethod, setPaymentMethod] = useState('ALL');
+  const [paymentMethod, setPaymentMethod] = useState('ALL'); // Supplier Payment Type (CashPurchase / CreditPurchase)
   const [selectedVendor, setSelectedVendor] = useState('ALL');
   const [selectedBrand, setSelectedBrand] = useState('ALL');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
@@ -33,7 +33,6 @@ const ItemwiseStockReport = () => {
 
   // Master Data
   const [stores, setStores] = useState([]);
-  const [paymentMethods, setPaymentMethods] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [brands, setBrands] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -42,6 +41,8 @@ const ItemwiseStockReport = () => {
   const [countries, setCountries] = useState([]);
   const [rawProducts, setRawProducts] = useState([]);
   const [storeStocks, setStoreStocks] = useState([]);
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [purchaseOrderItems, setPurchaseOrderItems] = useState([]);
 
   // UI State
   const [loading, setLoading] = useState(false);
@@ -62,23 +63,25 @@ const ItemwiseStockReport = () => {
         catsRes, 
         subCatsRes, 
         subSubCatsRes, 
-        payMethodsRes,
         prodsRes, 
-        storeStocksRes
+        storeStocksRes,
+        poRes,
+        poiRes
       ] = await Promise.all([
         supabase.from('stores').select('id, name, shop_type').order('name'),
-        supabase.from('vendors').select('id, name').order('name'),
+        supabase.from('vendors').select('id, name, contract_details').order('name'),
         supabase.from('brands').select('id, name').order('name'),
         supabase.from('categories').select('id, name').order('name'),
         supabase.from('subcategories').select('id, name, category_id, category_name').order('name'),
         supabase.from('sub_subcategories').select('id, name, subcategory_id, category_name, subcategory_name').order('name'),
-        supabase.from('payment_methods').select('*').order('name'),
         supabase.from('products').select(`
           id, code, barcode, user_define_barcode, item_name, product_description,
           category_id, subcategory_id, sub_subcategory_id, brand_id, vendor_id,
           country_of_origin, purchase_price, mrp, wh_stock, str_stock, status
         `).order('item_name'),
-        supabase.from('store_stocks').select('*')
+        supabase.from('store_stocks').select('*'),
+        supabase.from('purchase_orders').select('id, vendor_id, supplier_payment_type'),
+        supabase.from('purchase_order_items').select('purchase_order_id, product_id')
       ]);
 
       const pList = prodsRes.data || [];
@@ -89,26 +92,17 @@ const ItemwiseStockReport = () => {
         }
       });
 
-      // Filter unique payment methods
-      const pmList = [];
-      const seenPm = new Set();
-      (payMethodsRes.data || []).forEach(pm => {
-        if (pm.name && !seenPm.has(pm.name.trim().toLowerCase())) {
-          seenPm.add(pm.name.trim().toLowerCase());
-          pmList.push(pm);
-        }
-      });
-
       setStores(storesRes.data || []);
       setVendors(vendorsRes.data || []);
       setBrands(brandsRes.data || []);
       setCategories(catsRes.data || []);
       setSubcategories(subCatsRes.data || []);
       setSubSubcategories(subSubCatsRes.data || []);
-      setPaymentMethods(pmList);
       setCountries(Array.from(countrySet).sort());
       setRawProducts(pList);
       setStoreStocks(storeStocksRes.data || []);
+      setPurchaseOrders(poRes.data || []);
+      setPurchaseOrderItems(poiRes.data || []);
     } catch (err) {
       console.error('Error fetching master data:', err);
       toast.error('Failed to load filter dropdowns');
@@ -138,7 +132,11 @@ const ItemwiseStockReport = () => {
   }, [selectedSubCategory, subSubcategories, subcategories]);
 
   // Pure function to calculate itemwise stock and generate report output
-  const computeReportOutput = (rType, vType, storeFilter, stType, vFilter, bFilter, cFilter, scFilter, sscFilter, nameInput, countryFilter, prods, sStocks, storeList, vendorList, brandList, catList, subCatList, subSubCatList) => {
+  const computeReportOutput = (
+    rType, vType, storeFilter, stType, payTypeFilter, vFilter, bFilter, cFilter, 
+    scFilter, sscFilter, nameInput, countryFilter, prods, sStocks, storeList, 
+    vendorList, brandList, catList, subCatList, subSubCatList, pos, pois
+  ) => {
     if (!prods || prods.length === 0) return null;
 
     // Fast lookups
@@ -157,7 +155,28 @@ const ItemwiseStockReport = () => {
     (storeList || []).forEach(s => storeMap.set(s.id, s));
 
     const vendorMap = new Map();
-    (vendorList || []).forEach(v => vendorMap.set(v.id, v.name));
+    const vendorPayTermsMap = new Map();
+    (vendorList || []).forEach(v => {
+      vendorMap.set(v.id, v.name);
+      const terms = v.contract_details?.payment_terms || '';
+      vendorPayTermsMap.set(v.id, terms.toLowerCase().includes('credit') ? 'CreditPurchase' : 'CashPurchase');
+    });
+
+    // Map Product Supplier Payment Types from Purchase Orders
+    const poMap = new Map();
+    (pos || []).forEach(po => {
+      if (po.id && po.supplier_payment_type) {
+        poMap.set(po.id, po.supplier_payment_type);
+      }
+    });
+
+    const productPaymentTypeMap = new Map();
+    (pois || []).forEach(poi => {
+      const pt = poMap.get(poi.purchase_order_id);
+      if (pt && poi.product_id) {
+        productPaymentTypeMap.set(poi.product_id, pt);
+      }
+    });
 
     const brandMap = new Map();
     (brandList || []).forEach(b => brandMap.set(b.id, b.name));
@@ -184,25 +203,35 @@ const ItemwiseStockReport = () => {
       const subSubCatName = subSubCatMap.get(p.sub_subcategory_id) || '-';
       const countryName = p.country_of_origin || '-';
 
-      // 1. Vendor Filter
+      // Determine Supplier Payment Type (Purchase method)
+      const supplierPaymentType = productPaymentTypeMap.get(p.id) || 
+                                  vendorPayTermsMap.get(p.vendor_id) || 
+                                  'CashPurchase';
+
+      // 1. Supplier Payment Type Filter
+      if (payTypeFilter !== 'ALL' && payTypeFilter !== '') {
+        if (supplierPaymentType.toLowerCase() !== payTypeFilter.toLowerCase()) return;
+      }
+
+      // 2. Vendor Filter
       if (vFilter !== 'ALL' && vendorName.toLowerCase() !== vFilter.toLowerCase()) return;
 
-      // 2. Brand Filter
+      // 3. Brand Filter
       if (bFilter !== 'ALL' && brandName.toLowerCase() !== bFilter.toLowerCase()) return;
 
-      // 3. Category Filter
+      // 4. Category Filter
       if (cFilter !== 'ALL' && catName.toLowerCase() !== cFilter.toLowerCase()) return;
 
-      // 4. Sub Category Filter
+      // 5. Sub Category Filter
       if (scFilter !== 'ALL' && subCatName.toLowerCase() !== scFilter.toLowerCase()) return;
 
-      // 5. Sub Subcategory Filter
+      // 6. Sub Subcategory Filter
       if (sscFilter !== 'ALL' && subSubCatName.toLowerCase() !== sscFilter.toLowerCase()) return;
 
-      // 6. Country of Origin Filter
+      // 7. Country of Origin Filter
       if (countryFilter !== 'ALL' && countryName.toLowerCase() !== countryFilter.toLowerCase()) return;
 
-      // 7. Item Name / Barcode Input Filter
+      // 8. Item Name / Barcode Input Filter
       if (nameInput !== 'ALL' && nameInput.trim()) {
         const q = nameInput.trim().toLowerCase();
         const matchName = itemName.toLowerCase().includes(q);
@@ -238,7 +267,7 @@ const ItemwiseStockReport = () => {
         effectiveBranch = bQty;
       }
 
-      // 8. Value Type Filter (Default, ONLY ZERO, NON ZERO, NEGATIVE)
+      // 9. Value Type Filter (Default, ONLY ZERO, NON ZERO, NEGATIVE)
       if (vType === 'ONLY ZERO' && effectiveStock !== 0) return;
       if (vType === 'NON ZERO' && effectiveStock === 0) return;
       if (vType === 'NEGATIVE' && effectiveStock >= 0) return;
@@ -259,6 +288,7 @@ const ItemwiseStockReport = () => {
         brand: brandName,
         vendor: vendorName,
         country: countryName,
+        supplier_payment_type: supplierPaymentType,
         central_stock: effectiveCentral,
         branch_stock: effectiveBranch,
         stock: effectiveStock,
@@ -331,35 +361,13 @@ const ItemwiseStockReport = () => {
     };
   };
 
-  // Instant switching on radio changes
+  // Update filter state on radio changes (report output changes only on Show button click)
   const handleReportTypeChange = (newType) => {
     setReportType(newType);
-    if (rawProducts.length > 0) {
-      const computed = computeReportOutput(
-        newType, valueType, selectedStore, storeType,
-        selectedVendor, selectedBrand, selectedCategory,
-        selectedSubCategory, selectedSubSubcategory,
-        itemNameInput, selectedCountry,
-        rawProducts, storeStocks, stores, vendors, brands,
-        categories, subcategories, subSubcategories
-      );
-      setReportData(computed);
-    }
   };
 
   const handleValueTypeChange = (newValType) => {
     setValueType(newValType);
-    if (rawProducts.length > 0) {
-      const computed = computeReportOutput(
-        reportType, newValType, selectedStore, storeType,
-        selectedVendor, selectedBrand, selectedCategory,
-        selectedSubCategory, selectedSubSubcategory,
-        itemNameInput, selectedCountry,
-        rawProducts, storeStocks, stores, vendors, brands,
-        categories, subcategories, subSubcategories
-      );
-      setReportData(computed);
-    }
   };
 
   // Reset Filters Handler
@@ -387,11 +395,12 @@ const ItemwiseStockReport = () => {
     try {
       const computed = computeReportOutput(
         reportType, valueType, selectedStore, storeType,
-        selectedVendor, selectedBrand, selectedCategory,
+        paymentMethod, selectedVendor, selectedBrand, selectedCategory,
         selectedSubCategory, selectedSubSubcategory,
         itemNameInput, selectedCountry,
         rawProducts, storeStocks, stores, vendors, brands,
-        categories, subcategories, subSubcategories
+        categories, subcategories, subSubcategories,
+        purchaseOrders, purchaseOrderItems
       );
       setReportData(computed);
 
@@ -417,6 +426,13 @@ const ItemwiseStockReport = () => {
       Object.values(r).some(val => String(val).toLowerCase().includes(q))
     );
   }, [reportData, tableSearch]);
+
+  // Determine store visibility context strictly from the snapshot of the generated report
+  const activeStore = reportData ? reportData.storeFilter : selectedStore;
+  const isAll = activeStore === 'ALL';
+  const isCentral = activeStore === 'CENTRAL_STORE';
+  const isSpecific = !isAll && !isCentral;
+  const specificStoreName = isSpecific ? (stores.find(s => s.id === activeStore)?.name || 'Store') : '';
 
   // Standardized PDF Export (Landscape with Signatures)
   const handlePrintPDF = () => {
@@ -450,7 +466,7 @@ const ItemwiseStockReport = () => {
     doc.setFontSize(8.5);
     doc.setTextColor(30, 30, 30);
     doc.text(`Date: ${new Date().toISOString().split('T')[0]}`, pageWidth - 14, 18.5, { align: 'right' });
-    doc.text(`Value Type: ${reportData.valueType}`, pageWidth - 14, 23, { align: 'right' });
+    doc.text(`Payment: ${paymentMethod} | Filter: ${reportData.valueType}`, pageWidth - 14, 23, { align: 'right' });
 
     // 3. Top Left Details
     doc.setFont("helvetica", "bold");
@@ -458,7 +474,7 @@ const ItemwiseStockReport = () => {
     doc.setTextColor(30, 30, 30);
     doc.text("Store:", 14, 18.5);
     doc.setFont("helvetica", "normal");
-    const storeLabel = selectedStore === 'ALL' ? 'All Stores & Central Warehouse' : selectedStore === 'CENTRAL_STORE' ? 'Central Store (Warehouse)' : (stores.find(s => s.id === selectedStore)?.name || selectedStore);
+    const storeLabel = isAll ? 'All Stores & Central Warehouse' : isCentral ? 'Central Store (Warehouse)' : specificStoreName;
     doc.text(storeLabel, 32, 18.5);
 
     doc.setFont("helvetica", "bold");
@@ -471,70 +487,98 @@ const ItemwiseStockReport = () => {
     doc.setFont("helvetica", "normal");
     doc.text(`${selectedVendor}`, 32, 27.5);
 
-    // 4. Build Table
+    // 4. Build Table dynamically based on selected Store
     let head = [];
     let body = [];
 
     if (reportData.reportType === 'Summary') {
-      head = [['SL', 'Category', 'Sub Category', 'Active Items', 'Central Stock', 'Branch Stock', 'Total Stock', 'Cost Value (TP)', 'MRP Value']];
-      displayedRows.forEach((r, idx) => {
+      if (isAll) {
+        head = [['SL', 'Category', 'Sub Category', 'Active Items', 'Central Stock', 'Branch Stock', 'Total Stock', 'Cost Value (TP)', 'MRP Value']];
+        displayedRows.forEach((r, idx) => {
+          body.push([
+            idx + 1, r.category, r.sub_category, r.total_items, r.central_stock, r.branch_stock, r.stock,
+            Number(r.total_cost).toFixed(2), Number(r.total_mrp).toFixed(2)
+          ]);
+        });
         body.push([
-          idx + 1,
-          r.category,
-          r.sub_category,
-          r.total_items,
-          r.central_stock,
-          r.branch_stock,
-          r.stock,
-          Number(r.total_cost).toFixed(2),
-          Number(r.total_mrp).toFixed(2)
+          'Total', `${reportData.rows.length} Groups`, '', reportData.totals.total_products,
+          reportData.totals.total_central_stock, reportData.totals.total_branch_stock, reportData.totals.total_stock,
+          Number(reportData.totals.total_cost_value).toFixed(2), Number(reportData.totals.total_mrp_value).toFixed(2)
         ]);
-      });
-      body.push([
-        'Total',
-        `${reportData.rows.length} Groups`,
-        '',
-        reportData.totals.total_products,
-        reportData.totals.total_central_stock,
-        reportData.totals.total_branch_stock,
-        reportData.totals.total_stock,
-        Number(reportData.totals.total_cost_value).toFixed(2),
-        Number(reportData.totals.total_mrp_value).toFixed(2)
-      ]);
+      } else if (isCentral) {
+        head = [['SL', 'Category', 'Sub Category', 'Active Items', 'Central Store Stock', 'Cost Value (TP)', 'MRP Value']];
+        displayedRows.forEach((r, idx) => {
+          body.push([
+            idx + 1, r.category, r.sub_category, r.total_items, r.central_stock,
+            Number(r.total_cost).toFixed(2), Number(r.total_mrp).toFixed(2)
+          ]);
+        });
+        body.push([
+          'Total', `${reportData.rows.length} Groups`, '', reportData.totals.total_products,
+          reportData.totals.total_central_stock,
+          Number(reportData.totals.total_cost_value).toFixed(2), Number(reportData.totals.total_mrp_value).toFixed(2)
+        ]);
+      } else {
+        head = [['SL', 'Category', 'Sub Category', 'Active Items', `${specificStoreName} Stock`, 'Cost Value (TP)', 'MRP Value']];
+        displayedRows.forEach((r, idx) => {
+          body.push([
+            idx + 1, r.category, r.sub_category, r.total_items, r.branch_stock,
+            Number(r.total_cost).toFixed(2), Number(r.total_mrp).toFixed(2)
+          ]);
+        });
+        body.push([
+          'Total', `${reportData.rows.length} Groups`, '', reportData.totals.total_products,
+          reportData.totals.total_branch_stock,
+          Number(reportData.totals.total_cost_value).toFixed(2), Number(reportData.totals.total_mrp_value).toFixed(2)
+        ]);
+      }
     } else {
-      head = [['SL', 'Barcode', 'Item Name', 'Category', 'Vendor', 'Country', 'Central WH', 'Branch', 'Total Stock', 'Cost (TP)', 'MRP', 'Cost Value', 'MRP Value']];
-      displayedRows.forEach((r, idx) => {
+      if (isAll) {
+        head = [['SL', 'Barcode', 'Item Name', 'Category', 'Vendor', 'Country', 'Central WH', 'Branch', 'Total Stock', 'Cost (TP)', 'MRP', 'Cost Value', 'MRP Value']];
+        displayedRows.forEach((r, idx) => {
+          body.push([
+            idx + 1, r.barcode, r.item_name, r.category, r.vendor, r.country,
+            r.central_stock, r.branch_stock, r.stock,
+            Number(r.cost_price).toFixed(2), Number(r.mrp).toFixed(2),
+            Number(r.total_cost).toFixed(2), Number(r.total_mrp).toFixed(2)
+          ]);
+        });
         body.push([
-          idx + 1,
-          r.barcode,
-          r.item_name,
-          r.category,
-          r.vendor,
-          r.country,
-          r.central_stock,
-          r.branch_stock,
-          r.stock,
-          Number(r.cost_price).toFixed(2),
-          Number(r.mrp).toFixed(2),
-          Number(r.total_cost).toFixed(2),
-          Number(r.total_mrp).toFixed(2)
+          'Total', '', `${reportData.rows.length} Items`, '', '', '',
+          reportData.totals.total_central_stock, reportData.totals.total_branch_stock, reportData.totals.total_stock,
+          '', '', Number(reportData.totals.total_cost_value).toFixed(2), Number(reportData.totals.total_mrp_value).toFixed(2)
         ]);
-      });
-      body.push([
-        'Total',
-        '',
-        `${reportData.rows.length} Items`,
-        '',
-        '',
-        '',
-        reportData.totals.total_central_stock,
-        reportData.totals.total_branch_stock,
-        reportData.totals.total_stock,
-        '',
-        '',
-        Number(reportData.totals.total_cost_value).toFixed(2),
-        Number(reportData.totals.total_mrp_value).toFixed(2)
-      ]);
+      } else if (isCentral) {
+        head = [['SL', 'Barcode', 'Item Name', 'Category', 'Vendor', 'Country', 'Central Store Stock', 'Cost (TP)', 'MRP', 'Cost Value', 'MRP Value']];
+        displayedRows.forEach((r, idx) => {
+          body.push([
+            idx + 1, r.barcode, r.item_name, r.category, r.vendor, r.country,
+            r.central_stock,
+            Number(r.cost_price).toFixed(2), Number(r.mrp).toFixed(2),
+            Number(r.total_cost).toFixed(2), Number(r.total_mrp).toFixed(2)
+          ]);
+        });
+        body.push([
+          'Total', '', `${reportData.rows.length} Items`, '', '', '',
+          reportData.totals.total_central_stock,
+          '', '', Number(reportData.totals.total_cost_value).toFixed(2), Number(reportData.totals.total_mrp_value).toFixed(2)
+        ]);
+      } else {
+        head = [['SL', 'Barcode', 'Item Name', 'Category', 'Vendor', 'Country', `${specificStoreName} Stock`, 'Cost (TP)', 'MRP', 'Cost Value', 'MRP Value']];
+        displayedRows.forEach((r, idx) => {
+          body.push([
+            idx + 1, r.barcode, r.item_name, r.category, r.vendor, r.country,
+            r.branch_stock,
+            Number(r.cost_price).toFixed(2), Number(r.mrp).toFixed(2),
+            Number(r.total_cost).toFixed(2), Number(r.total_mrp).toFixed(2)
+          ]);
+        });
+        body.push([
+          'Total', '', `${reportData.rows.length} Items`, '', '', '',
+          reportData.totals.total_branch_stock,
+          '', '', Number(reportData.totals.total_cost_value).toFixed(2), Number(reportData.totals.total_mrp_value).toFixed(2)
+        ]);
+      }
     }
 
     autoTable(doc, {
@@ -597,7 +641,7 @@ const ItemwiseStockReport = () => {
     toast.success("PDF Downloaded");
   };
 
-  // Export to Excel
+  // Export to Excel dynamically matching visible columns
   const handleExportExcel = () => {
     if (!reportData || reportData.rows.length === 0) {
       toast.error("Please click 'Show' first to generate report");
@@ -607,67 +651,173 @@ const ItemwiseStockReport = () => {
     let exportData = [];
 
     if (reportData.reportType === 'Summary') {
-      exportData = reportData.rows.map((r, idx) => ({
-        'SL': idx + 1,
-        'Category': r.category,
-        'Sub Category': r.sub_category,
-        'Active Items': r.total_items,
-        'Central Store Stock': r.central_stock,
-        'Branch Store Stock': r.branch_stock,
-        'Total Stock Qty': r.stock,
-        'Total Cost Value (TP)': Number(r.total_cost).toFixed(2),
-        'Total MRP Value': Number(r.total_mrp).toFixed(2)
-      }));
-
-      exportData.push({
-        'SL': 'Total',
-        'Category': `${reportData.rows.length} Summary Groups`,
-        'Sub Category': '',
-        'Active Items': reportData.totals.total_products,
-        'Central Store Stock': reportData.totals.total_central_stock,
-        'Branch Store Stock': reportData.totals.total_branch_stock,
-        'Total Stock Qty': reportData.totals.total_stock,
-        'Total Cost Value (TP)': Number(reportData.totals.total_cost_value).toFixed(2),
-        'Total MRP Value': Number(reportData.totals.total_mrp_value).toFixed(2)
-      });
+      if (isAll) {
+        exportData = reportData.rows.map((r, idx) => ({
+          'SL': idx + 1,
+          'Category': r.category,
+          'Sub Category': r.sub_category,
+          'Active Items': r.total_items,
+          'Central Store Stock': r.central_stock,
+          'Branch Store Stock': r.branch_stock,
+          'Total Stock Qty': r.stock,
+          'Total Cost Value (TP)': Number(r.total_cost).toFixed(2),
+          'Total MRP Value': Number(r.total_mrp).toFixed(2)
+        }));
+        exportData.push({
+          'SL': 'Total',
+          'Category': `${reportData.rows.length} Summary Groups`,
+          'Sub Category': '',
+          'Active Items': reportData.totals.total_products,
+          'Central Store Stock': reportData.totals.total_central_stock,
+          'Branch Store Stock': reportData.totals.total_branch_stock,
+          'Total Stock Qty': reportData.totals.total_stock,
+          'Total Cost Value (TP)': Number(reportData.totals.total_cost_value).toFixed(2),
+          'Total MRP Value': Number(reportData.totals.total_mrp_value).toFixed(2)
+        });
+      } else if (isCentral) {
+        exportData = reportData.rows.map((r, idx) => ({
+          'SL': idx + 1,
+          'Category': r.category,
+          'Sub Category': r.sub_category,
+          'Active Items': r.total_items,
+          'Central Store Stock': r.central_stock,
+          'Total Cost Value (TP)': Number(r.total_cost).toFixed(2),
+          'Total MRP Value': Number(r.total_mrp).toFixed(2)
+        }));
+        exportData.push({
+          'SL': 'Total',
+          'Category': `${reportData.rows.length} Summary Groups`,
+          'Sub Category': '',
+          'Active Items': reportData.totals.total_products,
+          'Central Store Stock': reportData.totals.total_central_stock,
+          'Total Cost Value (TP)': Number(reportData.totals.total_cost_value).toFixed(2),
+          'Total MRP Value': Number(reportData.totals.total_mrp_value).toFixed(2)
+        });
+      } else {
+        exportData = reportData.rows.map((r, idx) => ({
+          'SL': idx + 1,
+          'Category': r.category,
+          'Sub Category': r.sub_category,
+          'Active Items': r.total_items,
+          [`${specificStoreName} Stock`]: r.branch_stock,
+          'Total Cost Value (TP)': Number(r.total_cost).toFixed(2),
+          'Total MRP Value': Number(r.total_mrp).toFixed(2)
+        }));
+        exportData.push({
+          'SL': 'Total',
+          'Category': `${reportData.rows.length} Summary Groups`,
+          'Sub Category': '',
+          'Active Items': reportData.totals.total_products,
+          [`${specificStoreName} Stock`]: reportData.totals.total_branch_stock,
+          'Total Cost Value (TP)': Number(reportData.totals.total_cost_value).toFixed(2),
+          'Total MRP Value': Number(reportData.totals.total_mrp_value).toFixed(2)
+        });
+      }
     } else {
-      exportData = reportData.rows.map((r, idx) => ({
-        'SL': idx + 1,
-        'Barcode': r.barcode,
-        'Item Name': r.item_name,
-        'Category': r.category,
-        'Sub Category': r.sub_category,
-        'Sub Subcategory': r.sub_subcategory,
-        'Brand': r.brand,
-        'Vendor': r.vendor,
-        'Country': r.country,
-        'Central Store Stock': r.central_stock,
-        'Branch Store Stock': r.branch_stock,
-        'Total Current Stock': r.stock,
-        'Cost Price (TP)': Number(r.cost_price).toFixed(2),
-        'Sale Price (MRP)': Number(r.mrp).toFixed(2),
-        'Total Cost Value (TP)': Number(r.total_cost).toFixed(2),
-        'Total MRP Value': Number(r.total_mrp).toFixed(2)
-      }));
-
-      exportData.push({
-        'SL': 'Total',
-        'Barcode': '',
-        'Item Name': `${reportData.rows.length} Items Listed`,
-        'Category': '',
-        'Sub Category': '',
-        'Sub Subcategory': '',
-        'Brand': '',
-        'Vendor': '',
-        'Country': '',
-        'Central Store Stock': reportData.totals.total_central_stock,
-        'Branch Store Stock': reportData.totals.total_branch_stock,
-        'Total Current Stock': reportData.totals.total_stock,
-        'Cost Price (TP)': '',
-        'Sale Price (MRP)': '',
-        'Total Cost Value (TP)': Number(reportData.totals.total_cost_value).toFixed(2),
-        'Total MRP Value': Number(reportData.totals.total_mrp_value).toFixed(2)
-      });
+      if (isAll) {
+        exportData = reportData.rows.map((r, idx) => ({
+          'SL': idx + 1,
+          'Barcode': r.barcode,
+          'Item Name': r.item_name,
+          'Category': r.category,
+          'Sub Category': r.sub_category,
+          'Brand': r.brand,
+          'Vendor': r.vendor,
+          'Country': r.country,
+          'Supplier Payment Type': r.supplier_payment_type,
+          'Central Store Stock': r.central_stock,
+          'Branch Store Stock': r.branch_stock,
+          'Total Current Stock': r.stock,
+          'Cost Price (TP)': Number(r.cost_price).toFixed(2),
+          'Sale Price (MRP)': Number(r.mrp).toFixed(2),
+          'Total Cost Value (TP)': Number(r.total_cost).toFixed(2),
+          'Total MRP Value': Number(r.total_mrp).toFixed(2)
+        }));
+        exportData.push({
+          'SL': 'Total',
+          'Barcode': '',
+          'Item Name': `${reportData.rows.length} Items Listed`,
+          'Category': '',
+          'Sub Category': '',
+          'Brand': '',
+          'Vendor': '',
+          'Country': '',
+          'Supplier Payment Type': '',
+          'Central Store Stock': reportData.totals.total_central_stock,
+          'Branch Store Stock': reportData.totals.total_branch_stock,
+          'Total Current Stock': reportData.totals.total_stock,
+          'Cost Price (TP)': '',
+          'Sale Price (MRP)': '',
+          'Total Cost Value (TP)': Number(reportData.totals.total_cost_value).toFixed(2),
+          'Total MRP Value': Number(reportData.totals.total_mrp_value).toFixed(2)
+        });
+      } else if (isCentral) {
+        exportData = reportData.rows.map((r, idx) => ({
+          'SL': idx + 1,
+          'Barcode': r.barcode,
+          'Item Name': r.item_name,
+          'Category': r.category,
+          'Sub Category': r.sub_category,
+          'Brand': r.brand,
+          'Vendor': r.vendor,
+          'Country': r.country,
+          'Supplier Payment Type': r.supplier_payment_type,
+          'Central Store Stock': r.central_stock,
+          'Cost Price (TP)': Number(r.cost_price).toFixed(2),
+          'Sale Price (MRP)': Number(r.mrp).toFixed(2),
+          'Total Cost Value (TP)': Number(r.total_cost).toFixed(2),
+          'Total MRP Value': Number(r.total_mrp).toFixed(2)
+        }));
+        exportData.push({
+          'SL': 'Total',
+          'Barcode': '',
+          'Item Name': `${reportData.rows.length} Items Listed`,
+          'Category': '',
+          'Sub Category': '',
+          'Brand': '',
+          'Vendor': '',
+          'Country': '',
+          'Supplier Payment Type': '',
+          'Central Store Stock': reportData.totals.total_central_stock,
+          'Cost Price (TP)': '',
+          'Sale Price (MRP)': '',
+          'Total Cost Value (TP)': Number(reportData.totals.total_cost_value).toFixed(2),
+          'Total MRP Value': Number(reportData.totals.total_mrp_value).toFixed(2)
+        });
+      } else {
+        exportData = reportData.rows.map((r, idx) => ({
+          'SL': idx + 1,
+          'Barcode': r.barcode,
+          'Item Name': r.item_name,
+          'Category': r.category,
+          'Sub Category': r.sub_category,
+          'Brand': r.brand,
+          'Vendor': r.vendor,
+          'Country': r.country,
+          'Supplier Payment Type': r.supplier_payment_type,
+          [`${specificStoreName} Stock`]: r.branch_stock,
+          'Cost Price (TP)': Number(r.cost_price).toFixed(2),
+          'Sale Price (MRP)': Number(r.mrp).toFixed(2),
+          'Total Cost Value (TP)': Number(r.total_cost).toFixed(2),
+          'Total MRP Value': Number(r.total_mrp).toFixed(2)
+        }));
+        exportData.push({
+          'SL': 'Total',
+          'Barcode': '',
+          'Item Name': `${reportData.rows.length} Items Listed`,
+          'Category': '',
+          'Sub Category': '',
+          'Brand': '',
+          'Vendor': '',
+          'Country': '',
+          'Supplier Payment Type': '',
+          [`${specificStoreName} Stock`]: reportData.totals.total_branch_stock,
+          'Cost Price (TP)': '',
+          'Sale Price (MRP)': '',
+          'Total Cost Value (TP)': Number(reportData.totals.total_cost_value).toFixed(2),
+          'Total MRP Value': Number(reportData.totals.total_mrp_value).toFixed(2)
+        });
+      }
     }
 
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -680,12 +830,12 @@ const ItemwiseStockReport = () => {
   return (
     <div className="animate-fade-in" style={{ padding: '24px', backgroundColor: 'var(--bg-color)', minHeight: '100vh', boxSizing: 'border-box' }}>
       
-      {/* Top Header Title - Changed as requested: Itemwise Stock Report */}
+      {/* Top Header Title */}
       <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '18px' }}>
         Itemwise Stock Report
       </h2>
 
-      {/* Main Filter Panel - Exact 2-Column Grid matching 2nd Image */}
+      {/* Main Filter Panel - Exact 2-Column Grid */}
       <div style={{
         backgroundColor: 'var(--card-bg, #fff)',
         borderRadius: '8px',
@@ -705,7 +855,7 @@ const ItemwiseStockReport = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             
             {/* Store Type */}
-            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', alignItems: 'center' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '145px 1fr', alignItems: 'center' }}>
               <label style={{ fontSize: '12.5px', color: '#334155', fontWeight: 600 }}>Store Type</label>
               <select 
                 value={storeType} 
@@ -726,9 +876,9 @@ const ItemwiseStockReport = () => {
               </select>
             </div>
 
-            {/* Payment Method */}
-            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', alignItems: 'center' }}>
-              <label style={{ fontSize: '12.5px', color: '#334155', fontWeight: 600 }}>Payment Method</label>
+            {/* Supplier Payment Type (Purchase Method) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '145px 1fr', alignItems: 'center' }}>
+              <label style={{ fontSize: '12.5px', color: '#334155', fontWeight: 600 }}>Supplier Payment Type</label>
               <select 
                 value={paymentMethod} 
                 onChange={e => setPaymentMethod(e.target.value)}
@@ -744,12 +894,13 @@ const ItemwiseStockReport = () => {
                 }}
               >
                 <option value="ALL">ALL</option>
-                {paymentMethods.map(pm => <option key={pm.id} value={pm.name}>{pm.name}</option>)}
+                <option value="CashPurchase">CashPurchase</option>
+                <option value="CreditPurchase">CreditPurchase</option>
               </select>
             </div>
 
             {/* Brand */}
-            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', alignItems: 'center' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '145px 1fr', alignItems: 'center' }}>
               <label style={{ fontSize: '12.5px', color: '#334155', fontWeight: 600 }}>Brand</label>
               <select 
                 value={selectedBrand} 
@@ -771,7 +922,7 @@ const ItemwiseStockReport = () => {
             </div>
 
             {/* Sub Category */}
-            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', alignItems: 'center' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '145px 1fr', alignItems: 'center' }}>
               <label style={{ fontSize: '12.5px', color: '#334155', fontWeight: 600 }}>Sub Category</label>
               <select 
                 value={selectedSubCategory} 
@@ -793,7 +944,7 @@ const ItemwiseStockReport = () => {
             </div>
 
             {/* Item Name */}
-            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', alignItems: 'center' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '145px 1fr', alignItems: 'center' }}>
               <label style={{ fontSize: '12.5px', color: '#334155', fontWeight: 600 }}>Item Name</label>
               <input 
                 type="text" 
@@ -1104,7 +1255,7 @@ const ItemwiseStockReport = () => {
           boxShadow: '0 2px 10px rgba(0, 0, 0, 0.03)'
         }}>
           
-          {/* Summary KPI Metric Cards */}
+          {/* Summary KPI Metric Cards (Dynamically tailored to Selected Store) */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '24px' }}>
             
             <div style={{ padding: '14px', borderRadius: '8px', backgroundColor: '#f0f9ff', border: '1px solid #e0f2fe' }}>
@@ -1114,19 +1265,35 @@ const ItemwiseStockReport = () => {
               </div>
             </div>
 
-            <div style={{ padding: '14px', borderRadius: '8px', backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0' }}>
-              <div style={{ fontSize: '0.78rem', color: '#065f46', fontWeight: 600, textTransform: 'uppercase' }}>Central Store (WH)</div>
-              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#047857', marginTop: '4px' }}>
-                {reportData.totals.total_central_stock} Units
+            {/* Central Store Card: Show when ALL or CENTRAL_STORE */}
+            {(isAll || isCentral) && (
+              <div style={{ padding: '14px', borderRadius: '8px', backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0' }}>
+                <div style={{ fontSize: '0.78rem', color: '#065f46', fontWeight: 600, textTransform: 'uppercase' }}>Central Store (WH)</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#047857', marginTop: '4px' }}>
+                  {reportData.totals.total_central_stock} Units
+                </div>
               </div>
-            </div>
+            )}
 
-            <div style={{ padding: '14px', borderRadius: '8px', backgroundColor: '#f0fdf4', border: '1px solid #dcfce7' }}>
-              <div style={{ fontSize: '0.78rem', color: '#166534', fontWeight: 600, textTransform: 'uppercase' }}>Branch Stores Stock</div>
-              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#14532d', marginTop: '4px' }}>
-                {reportData.totals.total_branch_stock} Units
+            {/* Branch Store Card: Show when ALL */}
+            {isAll && (
+              <div style={{ padding: '14px', borderRadius: '8px', backgroundColor: '#f0fdf4', border: '1px solid #dcfce7' }}>
+                <div style={{ fontSize: '0.78rem', color: '#166534', fontWeight: 600, textTransform: 'uppercase' }}>Branch Stores Stock</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#14532d', marginTop: '4px' }}>
+                  {reportData.totals.total_branch_stock} Units
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Specific Branch Store Card: Show when specific branch selected */}
+            {isSpecific && (
+              <div style={{ padding: '14px', borderRadius: '8px', backgroundColor: '#f0fdf4', border: '1px solid #dcfce7' }}>
+                <div style={{ fontSize: '0.78rem', color: '#166534', fontWeight: 600, textTransform: 'uppercase' }}>{specificStoreName} Stock</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#14532d', marginTop: '4px' }}>
+                  {reportData.totals.total_branch_stock} Units
+                </div>
+              </div>
+            )}
 
             <div style={{ padding: '14px', borderRadius: '8px', backgroundColor: '#fdf4ff', border: '1px solid #fae8ff' }}>
               <div style={{ fontSize: '0.78rem', color: '#86198f', fontWeight: 600, textTransform: 'uppercase' }}>Grand Total Stock</div>
@@ -1182,9 +1349,19 @@ const ItemwiseStockReport = () => {
                       <th style={{ padding: '10px 10px' }}>Category</th>
                       <th style={{ padding: '10px 10px' }}>Sub Category</th>
                       <th style={{ padding: '10px 10px', textAlign: 'center' }}>Active Items</th>
-                      <th style={{ padding: '10px 10px', textAlign: 'right' }}>Central WH Stock</th>
-                      <th style={{ padding: '10px 10px', textAlign: 'right' }}>Branch Stock</th>
-                      <th style={{ padding: '10px 10px', textAlign: 'right' }}>Total Stock</th>
+                      {isAll && (
+                        <>
+                          <th style={{ padding: '10px 10px', textAlign: 'right' }}>Central WH Stock</th>
+                          <th style={{ padding: '10px 10px', textAlign: 'right' }}>Branch Stock</th>
+                          <th style={{ padding: '10px 10px', textAlign: 'right' }}>Total Stock</th>
+                        </>
+                      )}
+                      {isCentral && (
+                        <th style={{ padding: '10px 10px', textAlign: 'right' }}>Central Store Stock</th>
+                      )}
+                      {isSpecific && (
+                        <th style={{ padding: '10px 10px', textAlign: 'right' }}>{specificStoreName} Stock</th>
+                      )}
                       <th style={{ padding: '10px 10px', textAlign: 'right' }}>Cost Value (TP)</th>
                       <th style={{ padding: '10px 10px', textAlign: 'right' }}>MRP Value</th>
                     </>
@@ -1199,9 +1376,19 @@ const ItemwiseStockReport = () => {
                       <th style={{ padding: '10px 8px' }}>Brand</th>
                       <th style={{ padding: '10px 8px' }}>Vendor</th>
                       <th style={{ padding: '10px 8px' }}>Country</th>
-                      <th style={{ padding: '10px 8px', textAlign: 'right' }}>Central WH</th>
-                      <th style={{ padding: '10px 8px', textAlign: 'right' }}>Branch</th>
-                      <th style={{ padding: '10px 8px', textAlign: 'right' }}>Total Stock</th>
+                      {isAll && (
+                        <>
+                          <th style={{ padding: '10px 8px', textAlign: 'right' }}>Central WH</th>
+                          <th style={{ padding: '10px 8px', textAlign: 'right' }}>Branch</th>
+                          <th style={{ padding: '10px 8px', textAlign: 'right' }}>Total Stock</th>
+                        </>
+                      )}
+                      {isCentral && (
+                        <th style={{ padding: '10px 8px', textAlign: 'right' }}>Central Store Stock</th>
+                      )}
+                      {isSpecific && (
+                        <th style={{ padding: '10px 8px', textAlign: 'right' }}>{specificStoreName} Stock</th>
+                      )}
                       <th style={{ padding: '10px 8px', textAlign: 'right' }}>Cost (TP)</th>
                       <th style={{ padding: '10px 8px', textAlign: 'right' }}>MRP</th>
                       <th style={{ padding: '10px 8px', textAlign: 'right' }}>Cost Value</th>
@@ -1232,11 +1419,25 @@ const ItemwiseStockReport = () => {
                           <td style={{ padding: '8px 10px', fontWeight: 600, color: '#2e6f40' }}>{r.category}</td>
                           <td style={{ padding: '8px 10px' }}>{r.sub_category}</td>
                           <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600 }}>{r.total_items}</td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>{r.central_stock}</td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>{r.branch_stock}</td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: r.stock > 0 ? '#166534' : r.stock < 0 ? '#dc2626' : '#64748b' }}>
-                            {r.stock}
-                          </td>
+                          {isAll && (
+                            <>
+                              <td style={{ padding: '8px 10px', textAlign: 'right' }}>{r.central_stock}</td>
+                              <td style={{ padding: '8px 10px', textAlign: 'right' }}>{r.branch_stock}</td>
+                              <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: r.stock > 0 ? '#166534' : r.stock < 0 ? '#dc2626' : '#64748b' }}>
+                                {r.stock}
+                              </td>
+                            </>
+                          )}
+                          {isCentral && (
+                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: r.central_stock > 0 ? '#166534' : r.central_stock < 0 ? '#dc2626' : '#64748b' }}>
+                              {r.central_stock}
+                            </td>
+                          )}
+                          {isSpecific && (
+                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: r.branch_stock > 0 ? '#166534' : r.branch_stock < 0 ? '#dc2626' : '#64748b' }}>
+                              {r.branch_stock}
+                            </td>
+                          )}
                           <td style={{ padding: '8px 10px', textAlign: 'right' }}>{Number(r.total_cost).toFixed(2)}</td>
                           <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600 }}>{Number(r.total_mrp).toFixed(2)}</td>
                         </>
@@ -1252,11 +1453,25 @@ const ItemwiseStockReport = () => {
                           <td style={{ padding: '8px 8px' }}>{r.brand}</td>
                           <td style={{ padding: '8px 8px' }}>{r.vendor}</td>
                           <td style={{ padding: '8px 8px' }}>{r.country}</td>
-                          <td style={{ padding: '8px 8px', textAlign: 'right' }}>{r.central_stock}</td>
-                          <td style={{ padding: '8px 8px', textAlign: 'right' }}>{r.branch_stock}</td>
-                          <td style={{ padding: '8px 8px', textAlign: 'right', fontWeight: 700, color: r.stock > 0 ? '#166534' : r.stock < 0 ? '#dc2626' : '#64748b' }}>
-                            {r.stock}
-                          </td>
+                          {isAll && (
+                            <>
+                              <td style={{ padding: '8px 8px', textAlign: 'right' }}>{r.central_stock}</td>
+                              <td style={{ padding: '8px 8px', textAlign: 'right' }}>{r.branch_stock}</td>
+                              <td style={{ padding: '8px 8px', textAlign: 'right', fontWeight: 700, color: r.stock > 0 ? '#166534' : r.stock < 0 ? '#dc2626' : '#64748b' }}>
+                                {r.stock}
+                              </td>
+                            </>
+                          )}
+                          {isCentral && (
+                            <td style={{ padding: '8px 8px', textAlign: 'right', fontWeight: 700, color: r.central_stock > 0 ? '#166534' : r.central_stock < 0 ? '#dc2626' : '#64748b' }}>
+                              {r.central_stock}
+                            </td>
+                          )}
+                          {isSpecific && (
+                            <td style={{ padding: '8px 8px', textAlign: 'right', fontWeight: 700, color: r.branch_stock > 0 ? '#166534' : r.branch_stock < 0 ? '#dc2626' : '#64748b' }}>
+                              {r.branch_stock}
+                            </td>
+                          )}
                           <td style={{ padding: '8px 8px', textAlign: 'right' }}>{Number(r.cost_price).toFixed(2)}</td>
                           <td style={{ padding: '8px 8px', textAlign: 'right' }}>{Number(r.mrp).toFixed(2)}</td>
                           <td style={{ padding: '8px 8px', textAlign: 'right' }}>{Number(r.total_cost).toFixed(2)}</td>
@@ -1276,9 +1491,19 @@ const ItemwiseStockReport = () => {
                         <td style={{ padding: '10px 10px', textAlign: 'center' }}>Total</td>
                         <td colSpan={2} style={{ padding: '10px 10px' }}>{reportData.rows.length} Summary Groups</td>
                         <td style={{ padding: '10px 10px', textAlign: 'center' }}>{reportData.totals.total_products}</td>
-                        <td style={{ padding: '10px 10px', textAlign: 'right' }}>{reportData.totals.total_central_stock}</td>
-                        <td style={{ padding: '10px 10px', textAlign: 'right' }}>{reportData.totals.total_branch_stock}</td>
-                        <td style={{ padding: '10px 10px', textAlign: 'right' }}>{reportData.totals.total_stock}</td>
+                        {isAll && (
+                          <>
+                            <td style={{ padding: '10px 10px', textAlign: 'right' }}>{reportData.totals.total_central_stock}</td>
+                            <td style={{ padding: '10px 10px', textAlign: 'right' }}>{reportData.totals.total_branch_stock}</td>
+                            <td style={{ padding: '10px 10px', textAlign: 'right' }}>{reportData.totals.total_stock}</td>
+                          </>
+                        )}
+                        {isCentral && (
+                          <td style={{ padding: '10px 10px', textAlign: 'right' }}>{reportData.totals.total_central_stock}</td>
+                        )}
+                        {isSpecific && (
+                          <td style={{ padding: '10px 10px', textAlign: 'right' }}>{reportData.totals.total_branch_stock}</td>
+                        )}
                         <td style={{ padding: '10px 10px', textAlign: 'right' }}>৳ {Number(reportData.totals.total_cost_value).toFixed(2)}</td>
                         <td style={{ padding: '10px 10px', textAlign: 'right' }}>৳ {Number(reportData.totals.total_mrp_value).toFixed(2)}</td>
                       </>
@@ -1286,9 +1511,19 @@ const ItemwiseStockReport = () => {
                       <>
                         <td style={{ padding: '10px 8px', textAlign: 'center' }}>Total</td>
                         <td colSpan={7} style={{ padding: '10px 8px' }}>{reportData.rows.length} Listed Items</td>
-                        <td style={{ padding: '10px 8px', textAlign: 'right' }}>{reportData.totals.total_central_stock}</td>
-                        <td style={{ padding: '10px 8px', textAlign: 'right' }}>{reportData.totals.total_branch_stock}</td>
-                        <td style={{ padding: '10px 8px', textAlign: 'right' }}>{reportData.totals.total_stock}</td>
+                        {isAll && (
+                          <>
+                            <td style={{ padding: '10px 8px', textAlign: 'right' }}>{reportData.totals.total_central_stock}</td>
+                            <td style={{ padding: '10px 8px', textAlign: 'right' }}>{reportData.totals.total_branch_stock}</td>
+                            <td style={{ padding: '10px 8px', textAlign: 'right' }}>{reportData.totals.total_stock}</td>
+                          </>
+                        )}
+                        {isCentral && (
+                          <td style={{ padding: '10px 8px', textAlign: 'right' }}>{reportData.totals.total_central_stock}</td>
+                        )}
+                        {isSpecific && (
+                          <td style={{ padding: '10px 8px', textAlign: 'right' }}>{reportData.totals.total_branch_stock}</td>
+                        )}
                         <td style={{ padding: '10px 8px' }}></td>
                         <td style={{ padding: '10px 8px' }}></td>
                         <td style={{ padding: '10px 8px', textAlign: 'right' }}>৳ {Number(reportData.totals.total_cost_value).toFixed(2)}</td>

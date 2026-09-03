@@ -416,13 +416,9 @@ const PromotionWiseSalesReport = () => {
     };
   };
 
-  // Instant Report Type Change Handler (No reload needed!)
+  // Update filter state on radio changes (report output changes only on Show button click)
   const handleReportTypeChange = (newType) => {
     setReportType(newType);
-    if (rawProcessedItems && rawProcessedItems.length > 0) {
-      const updated = computeReportData(newType, rawProcessedItems);
-      setReportData(updated);
-    }
   };
 
   // Main Report Generation Logic

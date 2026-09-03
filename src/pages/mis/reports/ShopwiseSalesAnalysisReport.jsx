@@ -1250,21 +1250,6 @@ const ShopwiseSalesAnalysisReport = () => {
                   key={type}
                   onClick={() => {
                     setReportType(type);
-                    if (reportData) {
-                      executeReportQuery({
-                        fDate: fromDate,
-                        tDate: toDate,
-                        sType: storeType,
-                        sStore: selectedStore,
-                        sVendor: selectedVendor,
-                        sCategory: selectedCategory,
-                        sSubCategory: selectedSubCategory,
-                        sSubSubcategory: selectedSubSubcategory,
-                        iName: itemNameInput,
-                        bCode: barcodeInput,
-                        rType: type
-                      });
-                    }
                   }}
                   style={{
                     display: 'inline-flex',
