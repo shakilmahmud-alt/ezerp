@@ -728,7 +728,13 @@ const ShopwiseSalesAnalysisReport = () => {
       const pageHeight = doc.internal.pageSize.getHeight();
 
       const loggedInUser = user || JSON.parse(localStorage.getItem('erp_user') || '{}');
-      const preparedByName = loggedInUser?.full_name || loggedInUser?.name || loggedInUser?.username || 'Super Admin';
+      const preparedByName = 
+        loggedInUser?.user_metadata?.full_name || 
+        loggedInUser?.user_metadata?.name || 
+        loggedInUser?.full_name || 
+        loggedInUser?.name || 
+        loggedInUser?.username || 
+        (loggedInUser?.email ? loggedInUser.email.split('@')[0] : 'Super Admin');
 
       // 1. Header with Brand Green theme
       doc.setFillColor(46, 111, 64);
@@ -778,6 +784,17 @@ const ShopwiseSalesAnalysisReport = () => {
           `${r.contribution}%`,
           r.avg_price
         ]);
+        bodyData.push([
+          'TOTAL',
+          `${reportData.rows.length} Categories`,
+          reportData.totals.total_qty,
+          Number(reportData.totals.gross_amount).toFixed(2),
+          Number(reportData.totals.discount_amount).toFixed(2),
+          Number(reportData.totals.vat_amount).toFixed(2),
+          Number(reportData.totals.net_sales).toFixed(2),
+          '100.00%',
+          ''
+        ]);
       } else if (reportData.type === 'Sub Category Wise Summary') {
         headers = [['SL', 'Category', 'Sub Category', 'Total Sold Qty', 'Gross Amount (Tk)', 'Discount (Tk)', 'VAT (Tk)', 'Net Sales (Tk)', 'Contribution (%)']];
         bodyData = reportData.rows.map(r => [
@@ -790,6 +807,17 @@ const ShopwiseSalesAnalysisReport = () => {
           Number(r.vat_amount).toFixed(2),
           Number(r.net_sales).toFixed(2),
           `${r.contribution}%`
+        ]);
+        bodyData.push([
+          'TOTAL',
+          '',
+          `${reportData.rows.length} Sub Categories`,
+          reportData.totals.total_qty,
+          Number(reportData.totals.gross_amount).toFixed(2),
+          Number(reportData.totals.discount_amount).toFixed(2),
+          Number(reportData.totals.vat_amount).toFixed(2),
+          Number(reportData.totals.net_sales).toFixed(2),
+          '100.00%'
         ]);
       } else if (reportData.type === 'Item Name Wise Summary') {
         headers = [['SL', 'Item Name', 'Category', 'Brand', 'MRP (Tk)', 'Sold Qty', 'Gross (Tk)', 'Discount (Tk)', 'VAT (Tk)', 'Net Sales (Tk)', 'Avg Rate (Tk)']];
@@ -806,6 +834,19 @@ const ShopwiseSalesAnalysisReport = () => {
           Number(r.net_sales).toFixed(2),
           r.avg_rate
         ]);
+        bodyData.push([
+          'TOTAL',
+          `${reportData.rows.length} Items Listed`,
+          '',
+          '',
+          '',
+          reportData.totals.total_qty,
+          Number(reportData.totals.gross_amount).toFixed(2),
+          Number(reportData.totals.discount_amount).toFixed(2),
+          Number(reportData.totals.vat_amount).toFixed(2),
+          Number(reportData.totals.net_sales).toFixed(2),
+          ''
+        ]);
       } else if (reportData.type === 'Barcode Wise Summary(ShopWise)') {
         headers = [['SL', 'Store Name', 'Barcode', 'Item Code', 'Product Name', 'Category', 'Sold Qty', 'Gross (Tk)', 'Discount (Tk)', 'VAT (Tk)', 'Net Sales (Tk)']];
         bodyData = reportData.rows.map(r => [
@@ -821,6 +862,19 @@ const ShopwiseSalesAnalysisReport = () => {
           Number(r.vat_amount).toFixed(2),
           Number(r.net_sales).toFixed(2)
         ]);
+        bodyData.push([
+          'TOTAL',
+          '',
+          '',
+          '',
+          `${reportData.rows.length} Barcodes`,
+          '',
+          reportData.totals.total_qty,
+          Number(reportData.totals.gross_amount).toFixed(2),
+          Number(reportData.totals.discount_amount).toFixed(2),
+          Number(reportData.totals.vat_amount).toFixed(2),
+          Number(reportData.totals.net_sales).toFixed(2)
+        ]);
       } else if (reportData.type === 'Brand Wise Summary') {
         headers = [['SL', 'Brand Name', 'Total Sold Qty', 'Gross Amount (Tk)', 'Discount (Tk)', 'VAT (Tk)', 'Net Sales (Tk)', 'Contribution (%)']];
         bodyData = reportData.rows.map(r => [
@@ -832,6 +886,16 @@ const ShopwiseSalesAnalysisReport = () => {
           Number(r.vat_amount).toFixed(2),
           Number(r.net_sales).toFixed(2),
           `${r.contribution}%`
+        ]);
+        bodyData.push([
+          'TOTAL',
+          `${reportData.rows.length} Brands`,
+          reportData.totals.total_qty,
+          Number(reportData.totals.gross_amount).toFixed(2),
+          Number(reportData.totals.discount_amount).toFixed(2),
+          Number(reportData.totals.vat_amount).toFixed(2),
+          Number(reportData.totals.net_sales).toFixed(2),
+          '100.00%'
         ]);
       } else if (reportData.type === 'Product Wise Summary(ShopWise)') {
         headers = [['SL', 'Store Name', 'Code', 'Product Name', 'Category', 'Brand', 'Vendor', 'Sold Qty', 'Gross (Tk)', 'Net Sales (Tk)', 'Avg Price (Tk)']];
@@ -848,6 +912,19 @@ const ShopwiseSalesAnalysisReport = () => {
           Number(r.net_sales).toFixed(2),
           r.avg_price
         ]);
+        bodyData.push([
+          'TOTAL',
+          '',
+          '',
+          `${reportData.rows.length} Products`,
+          '',
+          '',
+          '',
+          reportData.totals.total_qty,
+          Number(reportData.totals.gross_amount).toFixed(2),
+          Number(reportData.totals.net_sales).toFixed(2),
+          ''
+        ]);
       } else if (reportData.type === 'Date Wise Summary') {
         headers = [['SL', 'Sale Date', 'Invoices', 'Items Sold', 'Gross Amount (Tk)', 'Discount (Tk)', 'VAT (Tk)', 'Net Revenue (Tk)', 'Avg Ticket (Tk)']];
         bodyData = reportData.rows.map(r => [
@@ -860,6 +937,17 @@ const ShopwiseSalesAnalysisReport = () => {
           Number(r.vat_amount).toFixed(2),
           Number(r.net_sales).toFixed(2),
           r.avg_ticket
+        ]);
+        bodyData.push([
+          'TOTAL',
+          `${reportData.rows.length} Days`,
+          reportData.totals.invoice_count,
+          reportData.totals.total_qty,
+          Number(reportData.totals.gross_amount).toFixed(2),
+          Number(reportData.totals.discount_amount).toFixed(2),
+          Number(reportData.totals.vat_amount).toFixed(2),
+          Number(reportData.totals.net_sales).toFixed(2),
+          ''
         ]);
       } else if (reportData.type === 'Month Wise Summary') {
         headers = [['SL', 'Month', 'Invoices', 'Items Sold', 'Gross Revenue (Tk)', 'Discount (Tk)', 'VAT (Tk)', 'Net Revenue (Tk)', 'Daily Avg (Tk)']];
@@ -874,6 +962,17 @@ const ShopwiseSalesAnalysisReport = () => {
           Number(r.net_sales).toFixed(2),
           r.daily_avg
         ]);
+        bodyData.push([
+          'TOTAL',
+          `${reportData.rows.length} Months`,
+          reportData.totals.invoice_count,
+          reportData.totals.total_qty,
+          Number(reportData.totals.gross_amount).toFixed(2),
+          Number(reportData.totals.discount_amount).toFixed(2),
+          Number(reportData.totals.vat_amount).toFixed(2),
+          Number(reportData.totals.net_sales).toFixed(2),
+          ''
+        ]);
       }
 
       autoTable(doc, {
@@ -883,6 +982,13 @@ const ShopwiseSalesAnalysisReport = () => {
         styles: { fontSize: 8, cellPadding: 2.2 },
         headStyles: { fillColor: [46, 111, 64], textColor: [255, 255, 255], fontStyle: 'bold' },
         alternateRowStyles: { fillColor: [248, 250, 252] },
+        didParseCell: function (data) {
+          if (data.row.index === bodyData.length - 1) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = [240, 245, 240];
+            data.cell.styles.textColor = [10, 60, 20];
+          }
+        },
         margin: { top: 10, left: 14, right: 14 },
         theme: 'grid'
       });

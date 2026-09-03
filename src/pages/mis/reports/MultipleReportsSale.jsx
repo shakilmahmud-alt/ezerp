@@ -643,7 +643,13 @@ const MultipleReportsSale = () => {
     doc.text(selectedReportType.toUpperCase(), pageWidth - 14, 14, { align: 'right' });
 
     const loggedInUser = user || JSON.parse(localStorage.getItem('erp_user') || '{}');
-    const preparedByName = loggedInUser?.full_name || loggedInUser?.name || loggedInUser?.username || 'Super Admin';
+    const preparedByName = 
+      loggedInUser?.user_metadata?.full_name || 
+      loggedInUser?.user_metadata?.name || 
+      loggedInUser?.full_name || 
+      loggedInUser?.name || 
+      loggedInUser?.username || 
+      (loggedInUser?.email ? loggedInUser.email.split('@')[0] : 'Super Admin');
 
     // 2. Meta parameters
     doc.setFont("helvetica", "normal");
@@ -664,7 +670,7 @@ const MultipleReportsSale = () => {
     let body = [];
 
     if (reportData.type === 'Invoice Wise Summary') {
-      head = [['SL', 'Invoice No', 'Date & Time', 'Store', 'Customer', 'Qty', 'Gross (৳)', 'Discount (৳)', 'Net Payable (৳)', 'Payment Type']];
+      head = [['SL', 'Invoice No', 'Date & Time', 'Store', 'Customer', 'Qty', 'Gross (Tk)', 'Discount (Tk)', 'VAT (Tk)', 'Net Payable (Tk)', 'Payment Type']];
       body = (filteredRows || []).map((s, idx) => [
         idx + 1,
         s.invoice_no || `INV-${s.id}`,
@@ -674,11 +680,30 @@ const MultipleReportsSale = () => {
         s.qty || 1,
         s.gross_amount.toFixed(2),
         s.discount.toFixed(2),
+        (Number(s.vat || 0)).toFixed(2),
         s.net_amount.toFixed(2),
         s.payment_type
       ]);
+      const totQty = (filteredRows || []).reduce((acc, r) => acc + (Number(r.qty) || 0), 0);
+      const totGross = (filteredRows || []).reduce((acc, r) => acc + (Number(r.gross_amount) || 0), 0);
+      const totDisc = (filteredRows || []).reduce((acc, r) => acc + (Number(r.discount) || 0), 0);
+      const totVat = (filteredRows || []).reduce((acc, r) => acc + (Number(r.vat) || 0), 0);
+      const totNet = (filteredRows || []).reduce((acc, r) => acc + (Number(r.net_amount) || 0), 0);
+      body.push([
+        'Total',
+        '',
+        `${filteredRows.length} Invoices`,
+        '',
+        '',
+        totQty,
+        totGross.toFixed(2),
+        totDisc.toFixed(2),
+        totVat.toFixed(2),
+        totNet.toFixed(2),
+        ''
+      ]);
     } else if (reportData.type === 'Invoice Wise Details') {
-      head = [['SL', 'Invoice No', 'Store', 'Barcode', 'Product Name', 'Qty', 'Rate (৳)', 'Discount (৳)', 'Total (৳)', 'Payment']];
+      head = [['SL', 'Invoice No', 'Store', 'Barcode', 'Product Name', 'Qty', 'Rate (Tk)', 'Discount (Tk)', 'VAT (Tk)', 'Total (Tk)', 'Payment']];
       body = (filteredRows || []).map((it, idx) => [
         idx + 1,
         it.invoice_no,
@@ -688,11 +713,29 @@ const MultipleReportsSale = () => {
         it.qty,
         it.unit_price.toFixed(2),
         it.discount.toFixed(2),
+        (Number(it.vat || 0)).toFixed(2),
         it.total_value.toFixed(2),
         it.payment_type
       ]);
+      const totQty = (filteredRows || []).reduce((acc, r) => acc + (Number(r.qty) || 0), 0);
+      const totDisc = (filteredRows || []).reduce((acc, r) => acc + (Number(r.discount) || 0), 0);
+      const totVat = (filteredRows || []).reduce((acc, r) => acc + (Number(r.vat) || 0), 0);
+      const totVal = (filteredRows || []).reduce((acc, r) => acc + (Number(r.total_value) || 0), 0);
+      body.push([
+        'Total',
+        '',
+        '',
+        '',
+        `${filteredRows.length} Items`,
+        totQty,
+        '',
+        totDisc.toFixed(2),
+        totVat.toFixed(2),
+        totVal.toFixed(2),
+        ''
+      ]);
     } else if (reportData.type === 'Barcode wise Sale Report' || reportData.type === 'Multiple Barcode wise Sale Report') {
-      head = [['SL', 'Barcode', 'Product Code', 'Product Name', 'MRP / Rate (৳)', 'Sold Qty', 'Total Revenue (৳)']];
+      head = [['SL', 'Barcode', 'Product Code', 'Product Name', 'MRP / Rate (Tk)', 'Sold Qty', 'Total Revenue (Tk)']];
       body = (filteredRows || []).map((b, idx) => [
         idx + 1,
         b.barcode,
@@ -702,8 +745,19 @@ const MultipleReportsSale = () => {
         b.totalQty,
         (Number(b.totalAmount || 0)).toFixed(2)
       ]);
+      const totQty = (filteredRows || []).reduce((acc, b) => acc + (Number(b.totalQty) || 0), 0);
+      const totAmt = (filteredRows || []).reduce((acc, b) => acc + (Number(b.totalAmount) || 0), 0);
+      body.push([
+        'Total',
+        '',
+        '',
+        `${filteredRows.length} Barcodes`,
+        '',
+        totQty,
+        totAmt.toFixed(2)
+      ]);
     } else if (reportData.type === 'Hourly Sale') {
-      head = [['SL', 'Hour Time Slot', 'Invoices Count', 'Sold Quantity', 'Total Sales (৳)', 'Contribution (%)', 'Avg Ticket (৳)']];
+      head = [['SL', 'Hour Time Slot', 'Invoices Count', 'Sold Quantity', 'Total Sales (Tk)', 'Contribution (%)', 'Avg Ticket (Tk)']];
       body = (filteredRows || []).map((h, idx) => [
         idx + 1,
         h.label,
@@ -713,8 +767,20 @@ const MultipleReportsSale = () => {
         `${h.contributionPct}%`,
         h.avgTicket.toFixed(2)
       ]);
+      const totInv = (filteredRows || []).reduce((acc, h) => acc + (Number(h.invoices) || 0), 0);
+      const totQty = (filteredRows || []).reduce((acc, h) => acc + (Number(h.totalQty) || 0), 0);
+      const totAmt = (filteredRows || []).reduce((acc, h) => acc + (Number(h.totalAmount) || 0), 0);
+      body.push([
+        'Total',
+        `${filteredRows.length} Slots`,
+        totInv,
+        totQty,
+        totAmt.toFixed(2),
+        '100%',
+        (totInv > 0 ? (totAmt / totInv).toFixed(2) : '0.00')
+      ]);
     } else if (reportData.type === 'Sale Basket') {
-      head = [['SL', 'Basket Size Bracket', 'Number of Invoices', 'Total Qty', 'Total Revenue (৳)', 'Contribution (%)', 'Avg Basket (৳)']];
+      head = [['SL', 'Basket Size Bracket', 'Number of Invoices', 'Total Qty', 'Total Revenue (Tk)', 'Contribution (%)', 'Avg Basket (Tk)']];
       body = (filteredRows || []).map((b, idx) => [
         idx + 1,
         b.basketRange,
@@ -724,8 +790,20 @@ const MultipleReportsSale = () => {
         `${b.contributionPct}%`,
         b.avgBasketValue.toFixed(2)
       ]);
+      const totInv = (filteredRows || []).reduce((acc, b) => acc + (Number(b.invoiceCount) || 0), 0);
+      const totQty = (filteredRows || []).reduce((acc, b) => acc + (Number(b.totalQty) || 0), 0);
+      const totAmt = (filteredRows || []).reduce((acc, b) => acc + (Number(b.totalAmount) || 0), 0);
+      body.push([
+        'Total',
+        `${filteredRows.length} Brackets`,
+        totInv,
+        totQty,
+        totAmt.toFixed(2),
+        '100%',
+        (totInv > 0 ? (totAmt / totInv).toFixed(2) : '0.00')
+      ]);
     } else if (reportData.type === 'Sub Category wise Summary') {
-      head = [['SL', 'Sub Category', 'Total Sold Qty', 'Gross Amount (৳)', 'Discount (৳)', 'Net Sales (৳)', 'Contribution (%)']];
+      head = [['SL', 'Sub Category', 'Total Sold Qty', 'Gross Amount (Tk)', 'Discount (Tk)', 'Net Sales (Tk)', 'Contribution (%)']];
       body = (filteredRows || []).map((c, idx) => [
         idx + 1,
         c.subCategory,
@@ -735,8 +813,21 @@ const MultipleReportsSale = () => {
         c.netAmount.toFixed(2),
         `${c.contributionPct}%`
       ]);
+      const totQty = (filteredRows || []).reduce((acc, c) => acc + (Number(c.totalQty) || 0), 0);
+      const totGross = (filteredRows || []).reduce((acc, c) => acc + (Number(c.grossAmount) || 0), 0);
+      const totDisc = (filteredRows || []).reduce((acc, c) => acc + (Number(c.discount) || 0), 0);
+      const totNet = (filteredRows || []).reduce((acc, c) => acc + (Number(c.netAmount) || 0), 0);
+      body.push([
+        'Total',
+        `${filteredRows.length} Sub Categories`,
+        totQty,
+        totGross.toFixed(2),
+        totDisc.toFixed(2),
+        totNet.toFixed(2),
+        '100%'
+      ]);
     } else if (reportData.type === 'Brand wise Summary') {
-      head = [['SL', 'Brand Name', 'Total Sold Qty', 'Gross Amount (৳)', 'Discount (৳)', 'Net Sales (৳)', 'Contribution (%)']];
+      head = [['SL', 'Brand Name', 'Total Sold Qty', 'Gross Amount (Tk)', 'Discount (Tk)', 'Net Sales (Tk)', 'Contribution (%)']];
       body = (filteredRows || []).map((b, idx) => [
         idx + 1,
         b.brand,
@@ -745,6 +836,19 @@ const MultipleReportsSale = () => {
         b.discount.toFixed(2),
         b.netAmount.toFixed(2),
         `${b.contributionPct}%`
+      ]);
+      const totQty = (filteredRows || []).reduce((acc, b) => acc + (Number(b.totalQty) || 0), 0);
+      const totGross = (filteredRows || []).reduce((acc, b) => acc + (Number(b.grossAmount) || 0), 0);
+      const totDisc = (filteredRows || []).reduce((acc, b) => acc + (Number(b.discount) || 0), 0);
+      const totNet = (filteredRows || []).reduce((acc, b) => acc + (Number(b.netAmount) || 0), 0);
+      body.push([
+        'Total',
+        `${filteredRows.length} Brands`,
+        totQty,
+        totGross.toFixed(2),
+        totDisc.toFixed(2),
+        totNet.toFixed(2),
+        '100%'
       ]);
     } else if (reportData.type === 'Category wise Summary') {
       head = [['SL', 'Category Name', 'Total Sold Qty', 'Gross Amount (Tk)', 'Discount (Tk)', 'Net Sales (Tk)', 'Contribution (%)']];
@@ -757,6 +861,19 @@ const MultipleReportsSale = () => {
         c.netAmount.toFixed(2),
         `${c.contributionPct}%`
       ]);
+      const totQty = (filteredRows || []).reduce((acc, c) => acc + (Number(c.totalQty) || 0), 0);
+      const totGross = (filteredRows || []).reduce((acc, c) => acc + (Number(c.grossAmount) || 0), 0);
+      const totDisc = (filteredRows || []).reduce((acc, c) => acc + (Number(c.discount) || 0), 0);
+      const totNet = (filteredRows || []).reduce((acc, c) => acc + (Number(c.netAmount) || 0), 0);
+      body.push([
+        'Total',
+        `${filteredRows.length} Categories`,
+        totQty,
+        totGross.toFixed(2),
+        totDisc.toFixed(2),
+        totNet.toFixed(2),
+        '100%'
+      ]);
     } else if (reportData.type === 'Store wise Summary') {
       head = [['SL', 'Store / Branch Name', 'Invoices', 'Items Sold', 'Gross Sales (Tk)', 'Discounts (Tk)', 'Net Revenue (Tk)']];
       body = (filteredRows || []).map((s, idx) => [
@@ -767,6 +884,20 @@ const MultipleReportsSale = () => {
         s.grossAmount.toFixed(2),
         s.discount.toFixed(2),
         s.netAmount.toFixed(2)
+      ]);
+      const totInv = (filteredRows || []).reduce((acc, s) => acc + (Number(s.invoiceCount) || 0), 0);
+      const totQty = (filteredRows || []).reduce((acc, s) => acc + (Number(s.totalQty) || 0), 0);
+      const totGross = (filteredRows || []).reduce((acc, s) => acc + (Number(s.grossAmount) || 0), 0);
+      const totDisc = (filteredRows || []).reduce((acc, s) => acc + (Number(s.discount) || 0), 0);
+      const totNet = (filteredRows || []).reduce((acc, s) => acc + (Number(s.netAmount) || 0), 0);
+      body.push([
+        'Total',
+        `${filteredRows.length} Stores`,
+        totInv,
+        totQty,
+        totGross.toFixed(2),
+        totDisc.toFixed(2),
+        totNet.toFixed(2)
       ]);
     } else if (reportData.type === 'Invoice wise Exchange Report') {
       head = [['SL', 'Exchange No', 'Original Inv', 'Store', 'Barcode', 'Product', 'Exchange Qty', 'Exchange Value (Tk)', 'Date']];
@@ -781,6 +912,19 @@ const MultipleReportsSale = () => {
         e.exchange_amount.toFixed(2),
         e.date
       ]);
+      const totQty = (filteredRows || []).reduce((acc, e) => acc + (Number(e.qty) || 0), 0);
+      const totAmt = (filteredRows || []).reduce((acc, e) => acc + (Number(e.exchange_amount) || 0), 0);
+      body.push([
+        'Total',
+        '',
+        '',
+        '',
+        '',
+        `${filteredRows.length} Records`,
+        totQty,
+        totAmt.toFixed(2),
+        ''
+      ]);
     } else if (reportData.type === 'Invoice wise Return Report') {
       head = [['SL', 'Return No', 'Original Inv', 'Store', 'Barcode', 'Product', 'Return Qty', 'Refund Amount (Tk)', 'Date']];
       body = (filteredRows || []).map((r, idx) => [
@@ -794,6 +938,19 @@ const MultipleReportsSale = () => {
         r.return_amount.toFixed(2),
         r.date
       ]);
+      const totQty = (filteredRows || []).reduce((acc, r) => acc + (Number(r.qty) || 0), 0);
+      const totAmt = (filteredRows || []).reduce((acc, r) => acc + (Number(r.return_amount) || 0), 0);
+      body.push([
+        'Total',
+        '',
+        '',
+        '',
+        '',
+        `${filteredRows.length} Records`,
+        totQty,
+        totAmt.toFixed(2),
+        ''
+      ]);
     } else if (reportData.type === 'Single Invoice Details') {
       head = [['SL', 'Barcode', 'Product Name', 'Qty', 'Unit Price (Tk)', 'Discount (Tk)', 'Total Amount (Tk)']];
       body = (reportData.items || []).map((it, idx) => [
@@ -805,6 +962,18 @@ const MultipleReportsSale = () => {
         (Number(it.discount_amount || it.discount || 0)).toFixed(2),
         (Number(it.total_value || it.total || 0)).toFixed(2)
       ]);
+      const totQty = (reportData.items || []).reduce((acc, it) => acc + (Number(it.qty || it.quantity || 1) || 0), 0);
+      const totDisc = (reportData.items || []).reduce((acc, it) => acc + (Number(it.discount_amount || it.discount || 0) || 0), 0);
+      const totVal = (reportData.items || []).reduce((acc, it) => acc + (Number(it.total_value || it.total || 0) || 0), 0);
+      body.push([
+        'Total',
+        '',
+        `${reportData.items?.length || 0} Items`,
+        totQty,
+        '',
+        totDisc.toFixed(2),
+        totVal.toFixed(2)
+      ]);
     }
 
     autoTable(doc, {
@@ -814,6 +983,13 @@ const MultipleReportsSale = () => {
       theme: 'grid',
       styles: { fontSize: 8, cellPadding: 2.5 },
       headStyles: { fillColor: [46, 111, 64], textColor: [255, 255, 255], fontStyle: 'bold' },
+      didParseCell: function (data) {
+        if (data.row.index === body.length - 1) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [240, 245, 240];
+          data.cell.styles.textColor = [10, 60, 20];
+        }
+      },
       margin: { top: 10, left: 14, right: 14 }
     });
 
@@ -1325,6 +1501,7 @@ const MultipleReportsSale = () => {
                     <th style={{ padding: '10px 12px', textAlign: 'right' }}>Qty</th>
                     <th style={{ padding: '10px 12px', textAlign: 'right' }}>Gross (৳)</th>
                     <th style={{ padding: '10px 12px', textAlign: 'right' }}>Discount (৳)</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>VAT (৳)</th>
                     <th style={{ padding: '10px 12px', textAlign: 'right' }}>Net Payable (৳)</th>
                     <th style={{ padding: '10px 12px', textAlign: 'center' }}>Payment</th>
                   </tr>
@@ -1332,7 +1509,7 @@ const MultipleReportsSale = () => {
                 <tbody>
                   {filteredRows.length === 0 ? (
                     <tr>
-                      <td colSpan={10} style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>No sales records found</td>
+                      <td colSpan={11} style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>No sales records found</td>
                     </tr>
                   ) : (
                     filteredRows.map((s, idx) => (
@@ -1345,6 +1522,7 @@ const MultipleReportsSale = () => {
                         <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600 }}>{s.qty}</td>
                         <td style={{ padding: '9px 12px', textAlign: 'right' }}>{s.gross_amount.toFixed(2)}</td>
                         <td style={{ padding: '9px 12px', textAlign: 'right', color: '#dc2626' }}>{s.discount.toFixed(2)}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'right', color: '#0284c7' }}>{(Number(s.vat) || 0).toFixed(2)}</td>
                         <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600, color: '#16a34a' }}>{s.net_amount.toFixed(2)}</td>
                         <td style={{ padding: '9px 12px', textAlign: 'center' }}>
                           <span style={{ padding: '3px 8px', borderRadius: '4px', backgroundColor: '#f1f5f9', fontSize: '0.76rem', color: '#334155' }}>
@@ -1355,6 +1533,22 @@ const MultipleReportsSale = () => {
                     ))
                   )}
                 </tbody>
+                {filteredRows.length > 0 && (
+                  <tfoot>
+                    <tr style={{ backgroundColor: '#f0fdf4', fontWeight: 'bold', borderTop: '2px solid #2e6f40', color: '#166534' }}>
+                      <td style={{ padding: '10px 12px' }}>Total</td>
+                      <td style={{ padding: '10px 12px' }}></td>
+                      <td style={{ padding: '10px 12px' }}>{filteredRows.length} Invoices</td>
+                      <td colSpan={2}></td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right' }}>{filteredRows.reduce((a, b) => a + (Number(b.qty) || 0), 0)}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right' }}>{filteredRows.reduce((a, b) => a + (Number(b.gross_amount) || 0), 0).toFixed(2)}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', color: '#dc2626' }}>{filteredRows.reduce((a, b) => a + (Number(b.discount) || 0), 0).toFixed(2)}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', color: '#0284c7' }}>{filteredRows.reduce((a, b) => a + (Number(b.vat) || 0), 0).toFixed(2)}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', color: '#16a34a' }}>{filteredRows.reduce((a, b) => a + (Number(b.net_amount) || 0), 0).toFixed(2)}</td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           )}
@@ -1373,6 +1567,7 @@ const MultipleReportsSale = () => {
                     <th style={{ padding: '10px 12px', textAlign: 'right' }}>Qty</th>
                     <th style={{ padding: '10px 12px', textAlign: 'right' }}>Unit Price (৳)</th>
                     <th style={{ padding: '10px 12px', textAlign: 'right' }}>Discount (৳)</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>VAT (৳)</th>
                     <th style={{ padding: '10px 12px', textAlign: 'right' }}>Total (৳)</th>
                     <th style={{ padding: '10px 12px', textAlign: 'center' }}>Payment</th>
                   </tr>
@@ -1380,7 +1575,7 @@ const MultipleReportsSale = () => {
                 <tbody>
                   {filteredRows.length === 0 ? (
                     <tr>
-                      <td colSpan={10} style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>No item details found</td>
+                      <td colSpan={11} style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>No item details found</td>
                     </tr>
                   ) : (
                     filteredRows.map((it, idx) => (
@@ -1393,12 +1588,28 @@ const MultipleReportsSale = () => {
                         <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600 }}>{it.qty}</td>
                         <td style={{ padding: '9px 12px', textAlign: 'right' }}>{it.unit_price.toFixed(2)}</td>
                         <td style={{ padding: '9px 12px', textAlign: 'right', color: '#dc2626' }}>{it.discount.toFixed(2)}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'right', color: '#0284c7' }}>{(Number(it.vat) || 0).toFixed(2)}</td>
                         <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600, color: '#16a34a' }}>{it.total_value.toFixed(2)}</td>
                         <td style={{ padding: '9px 12px', textAlign: 'center' }}>{it.payment_type}</td>
                       </tr>
                     ))
                   )}
                 </tbody>
+                {filteredRows.length > 0 && (
+                  <tfoot>
+                    <tr style={{ backgroundColor: '#f0fdf4', fontWeight: 'bold', borderTop: '2px solid #2e6f40', color: '#166534' }}>
+                      <td style={{ padding: '10px 12px' }}>Total</td>
+                      <td style={{ padding: '10px 12px' }}></td>
+                      <td colSpan={3} style={{ padding: '10px 12px' }}>{filteredRows.length} Items</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right' }}>{filteredRows.reduce((a, b) => a + (Number(b.qty) || 0), 0)}</td>
+                      <td></td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', color: '#dc2626' }}>{filteredRows.reduce((a, b) => a + (Number(b.discount) || 0), 0).toFixed(2)}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', color: '#0284c7' }}>{filteredRows.reduce((a, b) => a + (Number(b.vat) || 0), 0).toFixed(2)}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', color: '#16a34a' }}>{filteredRows.reduce((a, b) => a + (Number(b.total_value) || 0), 0).toFixed(2)}</td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           )}

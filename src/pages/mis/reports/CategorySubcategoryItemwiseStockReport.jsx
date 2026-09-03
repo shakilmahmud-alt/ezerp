@@ -328,40 +328,54 @@ const CategorySubcategoryItemwiseStockReport = () => {
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
 
-    // Company Header
+    // 1. Header with Brand Green Banner theme (Image 1)
+    doc.setFillColor(46, 111, 64);
+    doc.rect(0, 0, pageWidth, 22, 'F');
+
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.setTextColor(46, 111, 64);
-    doc.text("E-COMMERCE GENERAL ERP", pageWidth / 2, 11, { align: 'center' });
+    doc.setFontSize(14);
+    doc.setTextColor(255, 255, 255);
+    doc.text("EZ ERP MANAGEMENT INFORMATION SYSTEM (MIS)", 14, 11);
 
-    doc.setFontSize(11);
+    doc.setFontSize(9.5);
     doc.setFont("helvetica", "normal");
-    doc.setTextColor(71, 85, 105);
-    doc.text("CATEGORY / SUBCATEGORY / ITEMWISE STOCK REPORT", pageWidth / 2, 16.5, { align: 'center' });
+    doc.text("CENTRAL INVENTORY & POS SALES ANALYTICS", 14, 17);
 
-    // Meta Info
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text(reportData.reportType.toUpperCase(), pageWidth - 14, 14, { align: 'right' });
+
+    const loggedInUser = user || JSON.parse(localStorage.getItem('erp_user') || '{}');
+    const preparedByName = 
+      loggedInUser?.user_metadata?.full_name || 
+      loggedInUser?.user_metadata?.name || 
+      loggedInUser?.full_name || 
+      loggedInUser?.name || 
+      loggedInUser?.username || 
+      (loggedInUser?.email ? loggedInUser.email.split('@')[0] : 'Super Admin');
+
+    // 2. Meta parameters on white background (Image 1)
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
-    doc.setTextColor(30, 41, 59);
+    doc.setTextColor(50, 50, 50);
 
     const activeStoreName = reportData.storeFilter === 'CENTRAL_STORE'
       ? 'Central Store (Warehouse)'
       : reportData.storeFilter
       ? (stores.find(st => st.id === reportData.storeFilter)?.name || 'Store')
-      : 'All Stores & Central Warehouse';
+      : 'All (All Stores)';
 
-    doc.setFont("helvetica", "bold");
-    doc.text(`REPORT TYPE: ${reportData.reportType.toUpperCase()}`, 14, 22);
-    doc.text(`STORE: ${activeStoreName}`, 14, 26.5);
-
-    doc.setFont("helvetica", "normal");
-    doc.text(`Generated On: ${new Date().toLocaleString()}`, pageWidth - 14, 26.5, { align: 'right' });
+    doc.text(`Report Type: ${reportData.reportType}`, 14, 30);
+    doc.text(`Store Scope: ${activeStoreName}`, 14, 35);
+    doc.text(`Generated On: ${new Date().toLocaleString()}`, pageWidth - 14, 30, { align: 'right' });
+    doc.text(`Printed By: ${preparedByName}`, pageWidth - 14, 35, { align: 'right' });
 
     // Table Headers and Rows
     let head = [];
     let body = [];
 
     if (reportData.reportType === 'Category Wise') {
-      head = [['SL', 'Category Name', 'Total Items (SKUs)', 'Stock Qty (Pcs)', 'Cost Value (৳)', 'MRP Value (৳)', 'Contribution (%)']];
+      head = [['SL', 'Category Name', 'Total Items (SKUs)', 'Stock Qty (Pcs)', 'Cost Value (Tk)', 'MRP Value (Tk)', 'Contribution (%)']];
       displayedRows.forEach(r => {
         body.push([
           r.sl,
@@ -383,7 +397,7 @@ const CategorySubcategoryItemwiseStockReport = () => {
         '100.00%'
       ]);
     } else if (reportData.reportType === 'Sub Category Wise') {
-      head = [['SL', 'Category Name', 'Sub Category Name', 'Total Items', 'Stock Qty (Pcs)', 'Cost Value (৳)', 'MRP Value (৳)', 'Contribution (%)']];
+      head = [['SL', 'Category Name', 'Sub Category Name', 'Total Items', 'Stock Qty (Pcs)', 'Cost Value (Tk)', 'MRP Value (Tk)', 'Contribution (%)']];
       displayedRows.forEach(r => {
         body.push([
           r.sl,
@@ -407,7 +421,7 @@ const CategorySubcategoryItemwiseStockReport = () => {
         '100.00%'
       ]);
     } else if (reportData.reportType === 'Item wise') {
-      head = [['SL', 'Barcode', 'Item Code', 'Item Name', 'Category', 'Sub Category', 'Brand', 'Cost (৳)', 'MRP (৳)', 'Stock Qty', 'Cost Value (৳)', 'MRP Value (৳)']];
+      head = [['SL', 'Barcode', 'Item Code', 'Item Name', 'Category', 'Sub Category', 'Brand', 'Cost (Tk)', 'MRP (Tk)', 'Stock Qty', 'Cost Value (Tk)', 'MRP Value (Tk)']];
       displayedRows.forEach(r => {
         body.push([
           r.sl,
@@ -438,7 +452,7 @@ const CategorySubcategoryItemwiseStockReport = () => {
     autoTable(doc, {
       head,
       body,
-      startY: 30,
+      startY: 40,
       theme: 'grid',
       headStyles: {
         fillColor: [46, 111, 64],
@@ -460,22 +474,38 @@ const CategorySubcategoryItemwiseStockReport = () => {
       }
     });
 
-    // Bottom Signatures
+    // Bottom Signatures (Image 2)
     const finalY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 22 : pageHeight - 25;
-    const signY = finalY > pageHeight - 25 ? pageHeight - 20 : finalY;
+    const sigY = Math.max(finalY, pageHeight - 22);
 
+    doc.setDrawColor(160, 174, 192);
+
+    // Prepared By: User Name ABOVE line, Label BELOW line
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(8.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text(preparedByName, 47.5, sigY - 2.5, { align: 'center' });
+
+    doc.line(20, sigY, 75, sigY);
+
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
     doc.setTextColor(100, 116, 139);
+    doc.text('Prepared By', 47.5, sigY + 5, { align: 'center' });
 
-    doc.line(14, signY, 55, signY);
-    doc.text("Prepared By", 25, signY + 4);
+    // Checked By
+    doc.line(pageWidth / 2 - 27.5, sigY, pageWidth / 2 + 27.5, sigY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
 
-    doc.line(pageWidth / 2 - 20, signY, pageWidth / 2 + 20, signY);
-    doc.text("Checked By", pageWidth / 2 - 8, signY + 4);
-
-    doc.line(pageWidth - 55, signY, pageWidth - 14, signY);
-    doc.text("Approved By", pageWidth - 42, signY + 4);
+    // Authorized Signature
+    doc.line(pageWidth - 75, sigY, pageWidth - 20, sigY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Authorized Signature', pageWidth - 47.5, sigY + 5, { align: 'center' });
 
     // Page Number
     const totalPages = doc.internal.getNumberOfPages();

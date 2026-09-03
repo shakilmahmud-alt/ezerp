@@ -639,47 +639,42 @@ const PromotionWiseSalesReport = () => {
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
 
-    // 1. Centered Company Header
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.setTextColor(46, 111, 64);
-    doc.text("EZ ERP", pageWidth / 2, 13, { align: 'center' });
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.setTextColor(70, 70, 70);
-    doc.text("House: 352, Lane: 05, 2nd floor, Baridhara DOHS, Dhaka-1212, Bangladesh", pageWidth / 2, 18, { align: 'center' });
+    // 1. Header with Brand Green Banner theme (Image 1)
+    doc.setFillColor(46, 111, 64);
+    doc.rect(0, 0, pageWidth, 22, 'F');
 
-    // 2. Top Right Information
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(255, 255, 255);
+    doc.text("EZ ERP MANAGEMENT INFORMATION SYSTEM (MIS)", 14, 11);
+
+    doc.setFontSize(9.5);
+    doc.setFont("helvetica", "normal");
+    doc.text("CENTRAL INVENTORY & POS SALES ANALYTICS", 14, 17);
+
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
-    doc.setTextColor(46, 111, 64);
-    doc.text("PROMOTION WISE SALES REPORT", pageWidth - 14, 13, { align: 'right' });
+    doc.text(`PROMOTION WISE SALES - ${reportType.toUpperCase()}`, pageWidth - 14, 14, { align: 'right' });
 
+    const loggedInUser = user || JSON.parse(localStorage.getItem('erp_user') || '{}');
+    const preparedByName = 
+      loggedInUser?.user_metadata?.full_name || 
+      loggedInUser?.user_metadata?.name || 
+      loggedInUser?.full_name || 
+      loggedInUser?.name || 
+      loggedInUser?.username || 
+      (loggedInUser?.email ? loggedInUser.email.split('@')[0] : 'Super Admin');
+
+    // 2. Meta parameters on white background (Image 1)
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
-    doc.setTextColor(30, 30, 30);
-    doc.text(`Report Type: ${reportType}`, pageWidth - 14, 18.5, { align: 'right' });
-    doc.text(`Period: ${fromDate} to ${toDate}`, pageWidth - 14, 23, { align: 'right' });
-    doc.text(`Store: ${selectedStore || 'ALL'}`, pageWidth - 14, 27.5, { align: 'right' });
+    doc.setTextColor(50, 50, 50);
 
-    // 3. Top Left Details
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(30, 30, 30);
-    doc.text("Promotion Type:", 14, 18.5);
-    doc.setFont("helvetica", "normal");
-    doc.text(`${selectedPromoType}`, 45, 18.5);
-
-    doc.setFont("helvetica", "bold");
-    doc.text("Promotion Name:", 14, 23);
-    doc.setFont("helvetica", "normal");
-    doc.text(`${selectedPromoName}`, 45, 23);
-
-    doc.setFont("helvetica", "bold");
-    doc.text("Circular No:", 14, 27.5);
-    doc.setFont("helvetica", "normal");
-    doc.text(`${selectedCircularNo}`, 45, 27.5);
+    const storeLabel = selectedStore === 'ALL' || !selectedStore ? 'All (All Stores)' : (stores.find(s => s.id === selectedStore)?.name || selectedStore);
+    doc.text(`Date Range: ${fromDate} to ${toDate}`, 14, 30);
+    doc.text(`Store Scope: ${storeLabel} | Promo Type: ${selectedPromoType} | Promo: ${selectedPromoName}`, 14, 35);
+    doc.text(`Generated On: ${new Date().toLocaleString()}`, pageWidth - 14, 30, { align: 'right' });
+    doc.text(`Printed By: ${preparedByName}`, pageWidth - 14, 35, { align: 'right' });
 
     // 4. Build Table
     const currentType = reportData.reportType;
@@ -834,9 +829,9 @@ const PromotionWiseSalesReport = () => {
     }
 
     autoTable(doc, {
-      startY: 33,
       head: head,
       body: body,
+      startY: 40,
       theme: 'grid',
       styles: { fontSize: 7.5, cellPadding: 1.8, textColor: [30, 30, 30] },
       headStyles: { fillColor: [46, 111, 64], fontStyle: 'bold', textColor: [255, 255, 255] },
@@ -855,37 +850,38 @@ const PromotionWiseSalesReport = () => {
       margin: { top: 10, left: 14, right: 14 }
     });
 
-    const finalY = doc.lastAutoTable.finalY || 150;
+    // 5. Signatures (Image 2)
+    const finalY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 22 : pageHeight - 25;
+    const sigY = Math.max(finalY, pageHeight - 22);
 
-    // 5. Signatures (Exact Match to Project Design Standard - Image 3)
-    const sigY = Math.max(finalY + 24, pageHeight - 18);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.setLineWidth(0.4);
+    doc.setDrawColor(160, 174, 192);
 
-    const currentUserName = user?.name || user?.username || (localStorage.getItem('erp_user') ? JSON.parse(localStorage.getItem('erp_user'))?.name || JSON.parse(localStorage.getItem('erp_user'))?.username : '') || 'Admin';
-    const displayName = (currentUserName === 'msmraqeeb@gmail.com' || currentUserName === 'admin@email.com') ? 'Admin' : currentUserName;
-
-    // Posted By
-    doc.line(20, sigY, 70, sigY);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.setTextColor(2, 132, 199);
-    doc.text(displayName, 45, sigY - 2, { align: 'center' });
-
+    // Prepared By: User Name ABOVE line, Label BELOW line
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(40, 40, 40);
-    doc.text('Posted By', 45, sigY + 5, { align: 'center' });
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text(preparedByName, 47.5, sigY - 2.5, { align: 'center' });
+
+    doc.line(20, sigY, 75, sigY);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Prepared By', 47.5, sigY + 5, { align: 'center' });
 
     // Checked By
-    doc.setFont("helvetica", "bold");
-    doc.line(pageWidth / 2 - 25, sigY, pageWidth / 2 + 25, sigY);
+    doc.line(pageWidth / 2 - 27.5, sigY, pageWidth / 2 + 27.5, sigY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
     doc.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
 
     // Authorized Signature
-    doc.setFont("helvetica", "bold");
-    doc.line(pageWidth - 70, sigY, pageWidth - 20, sigY);
-    doc.text('Authorized Signature', pageWidth - 45, sigY + 5, { align: 'center' });
+    doc.line(pageWidth - 75, sigY, pageWidth - 20, sigY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Authorized Signature', pageWidth - 47.5, sigY + 5, { align: 'center' });
 
     doc.save(`Promotion_Wise_Sales_${reportData.reportType.replace(/[^a-zA-Z0-9_-]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
     toast.success("PDF Downloaded");

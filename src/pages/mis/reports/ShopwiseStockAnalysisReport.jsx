@@ -586,39 +586,52 @@ const ShopwiseStockAnalysisReport = () => {
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
 
-    // 1. Centered Company Header
+    // 1. Header with Brand Green Banner theme (Image 1)
+    doc.setFillColor(46, 111, 64);
+    doc.rect(0, 0, pageWidth, 22, 'F');
+
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.setTextColor(46, 111, 64); // Emerald Green
-    doc.text("E-COMMERCE GENERAL ERP", pageWidth / 2, 11, { align: 'center' });
+    doc.setFontSize(14);
+    doc.setTextColor(255, 255, 255);
+    doc.text("EZ ERP MANAGEMENT INFORMATION SYSTEM (MIS)", 14, 11);
 
-    doc.setFontSize(11);
+    doc.setFontSize(9.5);
     doc.setFont("helvetica", "normal");
-    doc.setTextColor(71, 85, 105);
-    doc.text("SHOPWISE STOCK ANALYSIS REPORT", pageWidth / 2, 16.5, { align: 'center' });
+    doc.text("CENTRAL INVENTORY & POS SALES ANALYTICS", 14, 17);
 
-    // 2. Report Meta Info
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text(reportData.reportType.toUpperCase(), pageWidth - 14, 14, { align: 'right' });
+
+    const loggedInUser = user || JSON.parse(localStorage.getItem('erp_user') || '{}');
+    const preparedByName = 
+      loggedInUser?.user_metadata?.full_name || 
+      loggedInUser?.user_metadata?.name || 
+      loggedInUser?.full_name || 
+      loggedInUser?.name || 
+      loggedInUser?.username || 
+      (loggedInUser?.email ? loggedInUser.email.split('@')[0] : 'Super Admin');
+
+    // 2. Meta parameters on white background (Image 1)
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
-    doc.setTextColor(30, 41, 59);
+    doc.setTextColor(50, 50, 50);
 
     const activeStoreName = reportData.storeFilter 
       ? (stores.find(st => st.id === reportData.storeFilter)?.name || 'Store') 
-      : (reportData.storeType === 'ALL' ? 'All Stores & Central Warehouse' : 'All Branch Stores');
+      : (reportData.storeType === 'ALL' ? 'All (All Stores & Warehouse)' : 'All Branch Stores');
 
-    doc.setFont("helvetica", "bold");
-    doc.text(`REPORT TYPE: ${reportData.reportType.toUpperCase()}`, 14, 22);
-    doc.text(`STORE: ${activeStoreName}`, 14, 26.5);
-    
-    doc.setFont("helvetica", "normal");
-    doc.text(`Value Type: ${reportData.valueType}`, pageWidth - 14, 22, { align: 'right' });
-    doc.text(`Generated On: ${new Date().toLocaleString()}`, pageWidth - 14, 26.5, { align: 'right' });
+    doc.text(`Report Type: ${reportData.reportType}`, 14, 30);
+    doc.text(`Store Scope: ${activeStoreName} | Value: ${reportData.valueType}`, 14, 35);
+    doc.text(`Generated On: ${new Date().toLocaleString()}`, pageWidth - 14, 30, { align: 'right' });
+    doc.text(`Printed By: ${preparedByName}`, pageWidth - 14, 35, { align: 'right' });
 
     // 3. Build Table Headers and Rows
     let head = [];
     let body = [];
 
     if (reportData.reportType === 'Category Wise Stock') {
-      head = [['SL', 'Category Name', 'Items Count', 'Stock Qty', 'Cost Value (৳)', 'MRP Value (৳)', 'Contribution (%)']];
+      head = [['SL', 'Category Name', 'Items Count', 'Stock Qty', 'Cost Value (Tk)', 'MRP Value (Tk)', 'Contribution (%)']];
       displayedRows.forEach(r => {
         body.push([
           r.sl,
@@ -641,7 +654,7 @@ const ShopwiseStockAnalysisReport = () => {
       ]);
     } 
     else if (reportData.reportType === 'Sub Category Wise Stock') {
-      head = [['SL', 'Category', 'Sub Category', 'Items Count', 'Stock Qty', 'Cost Value (৳)', 'MRP Value (৳)', 'Contribution (%)']];
+      head = [['SL', 'Category', 'Sub Category', 'Items Count', 'Stock Qty', 'Cost Value (Tk)', 'MRP Value (Tk)', 'Contribution (%)']];
       displayedRows.forEach(r => {
         body.push([
           r.sl,
@@ -666,7 +679,7 @@ const ShopwiseStockAnalysisReport = () => {
       ]);
     }
     else if (reportData.reportType === 'Item Name Wise Stock') {
-      head = [['SL', 'Item Name', 'Category', 'Sub Category', 'Brand', 'Vendor', 'Cost (৳)', 'MRP (৳)', 'Stock Qty', 'Cost Value (৳)', 'MRP Value (৳)']];
+      head = [['SL', 'Item Name', 'Category', 'Sub Category', 'Brand', 'Vendor', 'Cost (Tk)', 'MRP (Tk)', 'Stock Qty', 'Cost Value (Tk)', 'MRP Value (Tk)']];
       displayedRows.forEach(r => {
         body.push([
           r.sl,
@@ -692,7 +705,7 @@ const ShopwiseStockAnalysisReport = () => {
       ]);
     }
     else if (reportData.reportType === 'Barcode Wise Stock(ShopWise)') {
-      head = [['SL', 'Store Name', 'Barcode', 'Item Code', 'Product Name', 'Category', 'Brand', 'Cost (৳)', 'MRP (৳)', 'Stock Qty', 'Cost Value (৳)', 'MRP Value (৳)']];
+      head = [['SL', 'Store Name', 'Barcode', 'Item Code', 'Product Name', 'Category', 'Brand', 'Cost (Tk)', 'MRP (Tk)', 'Stock Qty', 'Cost Value (Tk)', 'MRP Value (Tk)']];
       displayedRows.forEach(r => {
         body.push([
           r.sl,
@@ -720,7 +733,7 @@ const ShopwiseStockAnalysisReport = () => {
       ]);
     }
     else if (reportData.reportType === 'Product Wise Stock(ShopWise)') {
-      head = [['SL', 'Store Name', 'Code', 'Product Name', 'Category', 'Brand', 'Vendor', 'Cost (৳)', 'MRP (৳)', 'Stock Qty', 'Cost Value (৳)', 'MRP Value (৳)']];
+      head = [['SL', 'Store Name', 'Code', 'Product Name', 'Category', 'Brand', 'Vendor', 'Cost (Tk)', 'MRP (Tk)', 'Stock Qty', 'Cost Value (Tk)', 'MRP Value (Tk)']];
       displayedRows.forEach(r => {
         body.push([
           r.sl,
@@ -748,7 +761,7 @@ const ShopwiseStockAnalysisReport = () => {
       ]);
     }
     else if (reportData.reportType === 'Brand Wise Stock') {
-      head = [['SL', 'Brand Name', 'Items Count', 'Stock Qty', 'Cost Value (৳)', 'MRP Value (৳)', 'Contribution (%)']];
+      head = [['SL', 'Brand Name', 'Items Count', 'Stock Qty', 'Cost Value (Tk)', 'MRP Value (Tk)', 'Contribution (%)']];
       displayedRows.forEach(r => {
         body.push([
           r.sl,
@@ -774,7 +787,7 @@ const ShopwiseStockAnalysisReport = () => {
     autoTable(doc, {
       head,
       body,
-      startY: 30,
+      startY: 40,
       theme: 'grid',
       headStyles: {
         fillColor: [46, 111, 64],
@@ -796,22 +809,38 @@ const ShopwiseStockAnalysisReport = () => {
       }
     });
 
-    // 4. Signatures at Bottom
+    // 4. Signatures at Bottom (Image 2)
     const finalY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 22 : pageHeight - 25;
-    const signY = finalY > pageHeight - 25 ? pageHeight - 20 : finalY;
+    const sigY = Math.max(finalY, pageHeight - 22);
 
+    doc.setDrawColor(160, 174, 192);
+
+    // Prepared By: User Name ABOVE line, Label BELOW line
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(8.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text(preparedByName, 47.5, sigY - 2.5, { align: 'center' });
+
+    doc.line(20, sigY, 75, sigY);
+
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
     doc.setTextColor(100, 116, 139);
+    doc.text('Prepared By', 47.5, sigY + 5, { align: 'center' });
 
-    doc.line(14, signY, 55, signY);
-    doc.text("Prepared By", 25, signY + 4);
+    // Checked By
+    doc.line(pageWidth / 2 - 27.5, sigY, pageWidth / 2 + 27.5, sigY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
 
-    doc.line(pageWidth / 2 - 20, signY, pageWidth / 2 + 20, signY);
-    doc.text("Checked By", pageWidth / 2 - 8, signY + 4);
-
-    doc.line(pageWidth - 55, signY, pageWidth - 14, signY);
-    doc.text("Approved By", pageWidth - 42, signY + 4);
+    // Authorized Signature
+    doc.line(pageWidth - 75, sigY, pageWidth - 20, sigY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Authorized Signature', pageWidth - 47.5, sigY + 5, { align: 'center' });
 
     // Page Number
     const totalPages = doc.internal.getNumberOfPages();

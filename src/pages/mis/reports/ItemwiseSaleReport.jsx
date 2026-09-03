@@ -839,7 +839,13 @@ const ItemwiseSaleReport = () => {
       const pageHeight = doc.internal.pageSize.getHeight();
 
       const loggedInUser = user || JSON.parse(localStorage.getItem('erp_user') || '{}');
-      const preparedByName = loggedInUser?.full_name || loggedInUser?.name || loggedInUser?.username || 'Super Admin';
+      const preparedByName = 
+        loggedInUser?.user_metadata?.full_name || 
+        loggedInUser?.user_metadata?.name || 
+        loggedInUser?.full_name || 
+        loggedInUser?.name || 
+        loggedInUser?.username || 
+        (loggedInUser?.email ? loggedInUser.email.split('@')[0] : 'Super Admin');
 
       // 1. Header with Brand Green theme (Matching Image 2)
       doc.setFillColor(46, 111, 64);

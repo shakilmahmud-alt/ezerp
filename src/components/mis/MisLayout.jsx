@@ -150,8 +150,7 @@ const MisLayout = () => {
       path: '/mis/purchase-order-reports', 
       icon: <FileSpreadsheet size={18} />,
       subItems: [
-        { name: 'PO Summary Report', path: '/mis/purchase-order-reports/summary' },
-        { name: 'Pending PO Report', path: '/mis/purchase-order-reports/pending' },
+        { name: 'Purchase Order Report', path: '/mis/purchase-order-reports/purchase-order-report' }
       ]
     },
     { 
