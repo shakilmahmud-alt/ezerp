@@ -73,16 +73,55 @@ const RequisitionApproval = () => {
       setSelectedReq(req);
       fetchRequisitionDetails(req.id);
     } else if (action === 'Cancel') {
-      if (window.confirm('Are you sure you want to cancel this requisition?')) {
+      if (window.confirm('Are you sure you want to cancel this requisition?\nIf it was already approved, stock will be returned to Central Store.')) {
         try {
+          // If requisition was approved, restore wh_stock
+          if (req.status === 'Approved') {
+            const { data: itemsToRestore } = await supabase
+              .from('store_requisition_items')
+              .select('*')
+              .eq('requisition_id', req.id);
+
+            for (const item of (itemsToRestore || [])) {
+              if (item.is_approved !== false) {
+                const qtyToRestore = Number(item.app_qty !== undefined ? item.app_qty : (item.req_qty || 0));
+                if (qtyToRestore > 0) {
+                  let prodId = item.product_id;
+                  let currentWh = 0;
+                  if (prodId) {
+                    const { data: prod } = await supabase.from('products').select('id, wh_stock').eq('id', prodId).single();
+                    if (prod) currentWh = Number(prod.wh_stock || 0);
+                  } else if (item.barcode || item.product_code) {
+                    const { data: prod } = await supabase.from('products').select('id, wh_stock')
+                      .or(`barcode.eq.${item.barcode || item.product_code},code.eq.${item.barcode || item.product_code}`)
+                      .limit(1);
+                    if (prod && prod.length > 0) {
+                      prodId = prod[0].id;
+                      currentWh = Number(prod[0].wh_stock || 0);
+                    }
+                  }
+                  if (prodId) {
+                    await supabase.from('products').update({ wh_stock: currentWh + qtyToRestore }).eq('id', prodId);
+                  }
+                }
+              }
+            }
+          }
+
           const { error } = await supabase
             .from('store_requisitions')
             .update({ status: 'Cancelled' })
             .eq('id', req.id);
           if (error) throw error;
+
+          if (req.requisition_no) {
+            await supabase.from('requisitions').update({ status: 'Cancelled' }).eq('requisition_no', req.requisition_no);
+          }
+
           toast.success('Requisition Cancelled');
           fetchRequisitions();
         } catch (err) {
+          console.error(err);
           toast.error('Failed to cancel');
         }
       }
@@ -116,7 +155,7 @@ const RequisitionApproval = () => {
   const handleApprove = async () => {
     setIsLoading(true);
     try {
-      // Update each item
+      // 1. Update each item in store_requisition_items
       const updatePromises = reqItems.map(item => 
         supabase
           .from('store_requisition_items')
@@ -129,15 +168,107 @@ const RequisitionApproval = () => {
       
       await Promise.all(updatePromises);
 
-      // Update main status
+      // 2. Deduct approved quantity from Central Store stock (products.wh_stock)
+      for (const item of reqItems) {
+        if (item.is_approved !== false) {
+          const approvedQty = Number(item.app_qty !== undefined ? item.app_qty : (item.req_qty || 0));
+          if (approvedQty > 0) {
+            let prodId = item.product_id;
+            let currentWh = 0;
+            if (prodId) {
+              const { data: prod } = await supabase.from('products').select('id, wh_stock').eq('id', prodId).single();
+              if (prod) {
+                currentWh = Number(prod.wh_stock || 0);
+              }
+            } else if (item.barcode || item.product_code) {
+              const { data: prod } = await supabase.from('products').select('id, wh_stock')
+                .or(`barcode.eq.${item.barcode || item.product_code},code.eq.${item.barcode || item.product_code}`)
+                .limit(1);
+              if (prod && prod.length > 0) {
+                prodId = prod[0].id;
+                currentWh = Number(prod[0].wh_stock || 0);
+              }
+            }
+
+            if (prodId) {
+              const newWh = Math.max(0, currentWh - approvedQty);
+              await supabase.from('products').update({ wh_stock: newWh }).eq('id', prodId);
+            }
+          }
+        }
+      }
+
+      // 3. Update main status on store_requisitions
       const { error } = await supabase
         .from('store_requisitions')
         .update({ status: 'Approved' })
         .eq('id', selectedReq.id);
 
       if (error) throw error;
+
+      // 4. Update/Create corresponding delivery record in requisitions table with status 'Delivered'
+      try {
+        const { data: existingReq } = await supabase
+          .from('requisitions')
+          .select('id')
+          .eq('requisition_no', selectedReq.requisition_no)
+          .maybeSingle();
+
+        if (existingReq) {
+          await supabase
+            .from('requisitions')
+            .update({
+              status: 'Delivered',
+              challan_no: selectedReq.requisition_no,
+              delivery_date: new Date().toISOString().slice(0, 10)
+            })
+            .eq('id', existingReq.id);
+
+          // Update requisition_items
+          for (const item of reqItems) {
+            const approvedQty = Number(item.app_qty !== undefined ? item.app_qty : (item.req_qty || 0));
+            await supabase
+              .from('requisition_items')
+              .update({ approve_qty: approvedQty })
+              .eq('requisition_id', existingReq.id)
+              .or(`barcode.eq.${item.barcode || item.product_code},product_code.eq.${item.barcode || item.product_code}`);
+          }
+        } else {
+          // Insert into requisitions as Delivered
+          const { data: newR } = await supabase
+            .from('requisitions')
+            .insert({
+              shop_id: selectedReq.shop_id,
+              requisition_no: selectedReq.requisition_no,
+              challan_no: selectedReq.requisition_no,
+              requisition_date: selectedReq.requisition_date || new Date().toISOString().slice(0, 10),
+              status: 'Delivered'
+            })
+            .select('id')
+            .single();
+
+          if (newR) {
+            const rItems = reqItems.map(item => ({
+              requisition_id: newR.id,
+              product_id: item.product_id,
+              barcode: item.barcode,
+              product_code: item.product_code,
+              product_name: item.product_name,
+              cpu: item.cpu,
+              mrp: item.mrp,
+              req_qty: item.req_qty,
+              approve_qty: Number(item.app_qty !== undefined ? item.app_qty : (item.req_qty || 0)),
+              cost_value: item.cost_value,
+              bal_qty: item.bal_qty
+            }));
+            await supabase.from('requisition_items').insert(rItems);
+          }
+        }
+      } catch (rErr) {
+        console.warn("Requisition delivery sync note:", rErr);
+      }
       
-      toast.success('Requisition Approved Successfully');
+      toast.success('Requisition Approved & Stock Delivered from Central Store!');
       setView('list');
     } catch (err) {
       console.error(err);

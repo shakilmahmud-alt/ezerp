@@ -1382,16 +1382,15 @@ const PurchaseReceiveReport = () => {
 
             <button
               onClick={handleReload}
+              disabled={loading}
+              className="btn-danger"
               style={{
                 padding: '6px 18px',
-                backgroundColor: '#ffffff',
-                border: '1px solid #cbd5e1',
-                color: '#dc2626',
                 borderRadius: '4px',
                 fontSize: '0.85rem',
-                fontWeight: 500,
+                fontWeight: 600,
                 cursor: 'pointer',
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px'
               }}

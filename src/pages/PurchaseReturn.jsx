@@ -379,7 +379,7 @@ const PurchaseReturn = () => {
       return;
     }
     
-    const doc = new jsPDF('landscape', 'mm', 'a4');
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const vendorName = vendors.find(v => String(v.id) === String(formData.vendorId))?.name || 'N/A';
@@ -387,146 +387,142 @@ const PurchaseReturn = () => {
     let displayChallanNo = formData.challanNo ? String(formData.challanNo) : `#PRT-${new Date().getTime()}`;
     if (!displayChallanNo.startsWith('#')) displayChallanNo = `#${displayChallanNo}`;
 
-    const renderPageContent = (docInstance) => {
-      // 1. Top Middle / Center: Company Name & Address
-      docInstance.setFont("helvetica", "bold");
-      docInstance.setFontSize(16);
-      docInstance.setTextColor(46, 111, 64); // Project theme green #2e6f40
-      docInstance.text('EZ ERP', pageWidth / 2, 13, { align: 'center' });
+    // 1. Top Green Banner (#2e6f40)
+    doc.setFillColor(46, 111, 64);
+    doc.rect(0, 0, pageWidth, 22, 'F');
 
-      docInstance.setFont("helvetica", "normal");
-      docInstance.setFontSize(8.5);
-      docInstance.setTextColor(70, 70, 70);
-      docInstance.text('House: 352, Lane: 05, 2nd floor, Baridhara DOHS, Dhaka-1212, Bangladesh', pageWidth / 2, 18, { align: 'center' });
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(255, 255, 255);
+    doc.text("EZ ERP MANAGEMENT INFORMATION SYSTEM (MIS)", 14, 11);
 
-      // 2. Right Side: CHALLAN Header & Details
-      docInstance.setFont("helvetica", "bold");
-      docInstance.setFontSize(11);
-      docInstance.setTextColor(46, 111, 64);
-      docInstance.text('PURCHASE RETURN CHALLAN', pageWidth - 14, 13, { align: 'right' });
+    doc.setFontSize(9.5);
+    doc.setFont("helvetica", "normal");
+    const subTitle = preview 
+      ? "PURCHASE RETURN CHALLAN (PREVIEW)" 
+      : duplicate 
+      ? "PURCHASE RETURN CHALLAN (DUPLICATE)" 
+      : "PURCHASE RETURN CHALLAN";
+    doc.text(subTitle, 14, 17.5);
 
-      docInstance.setFont("helvetica", "normal");
-      docInstance.setFontSize(8.5);
-      docInstance.setTextColor(30, 30, 30);
-      docInstance.text(`Challan No: ${displayChallanNo}`, pageWidth - 14, 18.5, { align: 'right' });
-      docInstance.text(`Return Date: ${formData.returnDate}`, pageWidth - 14, 23, { align: 'right' });
+    const printDateStr = new Date().toLocaleString('en-GB', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: true
+    });
+    const loggedInUser = JSON.parse(localStorage.getItem('erp_user') || '{}');
+    const rawUser = loggedInUser?.user_metadata?.full_name || 
+      loggedInUser?.user_metadata?.name || 
+      loggedInUser?.full_name || 
+      loggedInUser?.name || 
+      loggedInUser?.username || 
+      user?.username || 
+      user?.name || 
+      'Super Admin';
+    const preparedByName = (rawUser === 'msmraqeeb@gmail.com' || rawUser === 'admin@email.com') ? 'Super Admin' : rawUser;
 
-      if (duplicate) {
-        docInstance.setFont("helvetica", "bold");
-        docInstance.setFontSize(9);
-        docInstance.setTextColor(220, 38, 38);
-        docInstance.text('[DUPLICATE]', pageWidth - 14, 27.5, { align: 'right' });
-      } else if (preview) {
-        docInstance.setFont("helvetica", "bold");
-        docInstance.setFontSize(9);
-        docInstance.setTextColor(2, 132, 199);
-        docInstance.text('[PREVIEW]', pageWidth - 14, 27.5, { align: 'right' });
-      }
+    doc.setFontSize(8);
+    doc.text(`Generated: ${printDateStr}`, pageWidth - 14, 11, { align: 'right' });
+    doc.text(`User: ${preparedByName}`, pageWidth - 14, 17.5, { align: 'right' });
 
-      // 3. Left Side: Vendor & Reference Info
-      docInstance.setFont("helvetica", "bold");
-      docInstance.setFontSize(8.5);
-      docInstance.setTextColor(30, 30, 30);
-      docInstance.text('Vendor Name:', 14, 18.5);
-      docInstance.setFont("helvetica", "normal");
-      docInstance.text(`${vendorName}`, 42, 18.5);
+    // 2. Filter Criteria Subheader
+    doc.setFontSize(8.5);
+    doc.setTextColor(50, 50, 50);
+    doc.text(`Date: ${formData.returnDate}   |   Challan No: ${displayChallanNo}   |   Vendor: ${vendorName}   |   Reference No: ${formData.referenceNo || 'N/A'}`, 14, 30);
 
-      docInstance.setFont("helvetica", "bold");
-      docInstance.text('Reference No:', 14, 23);
-      docInstance.setFont("helvetica", "normal");
-      docInstance.text(`${formData.referenceNo || 'N/A'}`, 42, 23);
+    // 3. Table Columns & Body
+    const headers = [['SL', 'Barcode', 'Product Name', 'Rtn. Qty', 'Cost Price (Tk)', 'Sale Price (Tk)', 'Current Stock', 'Amount (Tk)', 'Reason']];
+    const body = selectedItems.map((item, idx) => [
+      idx + 1,
+      item.barcode || '-',
+      item.productName || '',
+      Number(item.returnQty || 0),
+      Number(item.costPrice || 0).toFixed(2),
+      Number(item.salePrice || 0).toFixed(2),
+      Number(item.currentStock || 0),
+      Number(item.amount || 0).toFixed(2),
+      item.returnReason || ''
+    ]);
 
-      // 4. Table Columns: SL, Barcode, Product Name, Return Qty, Cost Price, Sale Price, Current Stock, Amount, Reason
-      const tableCols = ["SL", "Barcode", "Product Name", "Rtn. Qty", "Cost Price", "Sale Price", "Current Stock", "Amount", "Reason"];
-      const tableRows = selectedItems.map((item, idx) => [
-        idx + 1,
-        item.barcode || '-',
-        item.productName || '',
-        Number(item.returnQty || 0),
-        Number(item.costPrice || 0).toFixed(2),
-        Number(item.salePrice || 0).toFixed(2),
-        Number(item.currentStock || 0),
-        Number(item.amount || 0).toFixed(2),
-        item.returnReason || ''
-      ]);
+    body.push([
+      '',
+      'TOTAL SUMMARY',
+      `${selectedItems.length} Items`,
+      totals.qty,
+      '',
+      '',
+      '',
+      totals.value.toFixed(2),
+      ''
+    ]);
 
-      tableRows.push([
-        'Total', '', '', totals.qty, '', '', '', totals.value.toFixed(2), ''
-      ]);
+    autoTable(doc, {
+      head: headers,
+      body: body,
+      startY: 36,
+      theme: 'grid',
+      styles: { fontSize: 7.5, cellPadding: 1.8, textColor: [30, 30, 30] },
+      headStyles: { fillColor: [46, 111, 64], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+      didParseCell: function (data) {
+        if (data.section === 'head') {
+          if (data.column.index === 0) data.cell.styles.halign = 'center';
+          else if (data.column.index === 1 || data.column.index === 2 || data.column.index === 8) data.cell.styles.halign = 'left';
+          else data.cell.styles.halign = 'right';
+        } else if (data.section === 'body') {
+          if (data.column.index === 0) data.cell.styles.halign = 'center';
+          else if (data.column.index === 1 || data.column.index === 2 || data.column.index === 8) data.cell.styles.halign = 'left';
+          else data.cell.styles.halign = 'right';
+        }
+        if (data.row.index === body.length - 1) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [240, 245, 240];
+          data.cell.styles.textColor = [10, 60, 20];
+        }
+      },
+      margin: { top: 10, left: 14, right: 14 }
+    });
 
-      const startY = (duplicate || preview) ? 33 : 30;
+    // 4. Signatures at bottom
+    const finalY = doc.lastAutoTable.finalY || 160;
+    const sigY = Math.max(finalY + 24, pageHeight - 20);
 
-      autoTable(docInstance, {
-        head: [tableCols],
-        body: tableRows,
-        startY: startY,
-        theme: 'grid',
-        styles: { fontSize: 7.5, cellPadding: 1.8, textColor: [30, 30, 30] },
-        headStyles: { fillColor: [46, 111, 64], fontStyle: 'bold', textColor: [255, 255, 255], halign: 'right' },
-        columnStyles: {
-          0: { halign: 'center', cellWidth: 10 },
-          1: { halign: 'left', cellWidth: 26 },
-          2: { halign: 'left', cellWidth: 'auto' },
-          3: { halign: 'right', cellWidth: 20 },
-          4: { halign: 'right', cellWidth: 24 },
-          5: { halign: 'right', cellWidth: 24 },
-          6: { halign: 'right', cellWidth: 24 },
-          7: { halign: 'right', cellWidth: 28 },
-          8: { halign: 'left', cellWidth: 35 }
-        },
-        didParseCell: function (data) {
-          if (data.section === 'head') {
-            if (data.column.index === 0) data.cell.styles.halign = 'center';
-            if (data.column.index === 1 || data.column.index === 2 || data.column.index === 8) data.cell.styles.halign = 'left';
-          }
-          if (data.row.index === tableRows.length - 1) {
-            data.cell.styles.fontStyle = 'bold';
-            data.cell.styles.fillColor = [240, 245, 240];
-            data.cell.styles.textColor = [10, 60, 20];
-          }
-        },
-        margin: { top: 10, left: 14, right: 14 }
-      });
+    doc.setDrawColor(160, 174, 192);
+    doc.setLineWidth(0.4);
 
-      const finalY = docInstance.lastAutoTable.finalY || startY + 50;
+    // Posted By (Left)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text(preparedByName, 47.5, sigY - 2.5, { align: 'center' });
+    doc.line(20, sigY, 75, sigY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Posted By', 47.5, sigY + 5, { align: 'center' });
 
-      // 5. Signatures at bottom
-      const sigY = Math.max(finalY + 26, pageHeight - 20);
+    // Checked By (Middle)
+    doc.line(pageWidth / 2 - 27.5, sigY, pageWidth / 2 + 27.5, sigY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
 
-      docInstance.setFont("helvetica", "normal");
-      docInstance.setFontSize(8.5);
-      docInstance.setLineWidth(0.4);
-      docInstance.setDrawColor(120, 120, 120);
-      docInstance.setTextColor(40, 40, 40);
+    // Authorized Signature (Right)
+    doc.line(pageWidth - 75, sigY, pageWidth - 20, sigY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Authorized Signature', pageWidth - 47.5, sigY + 5, { align: 'center' });
 
-      const currentUserName = user?.name || user?.username || (localStorage.getItem('erp_user') ? JSON.parse(localStorage.getItem('erp_user'))?.name || JSON.parse(localStorage.getItem('erp_user'))?.username : '') || 'Admin';
-      const displayName = (currentUserName === 'msmraqeeb@gmail.com' || currentUserName === 'admin@email.com') ? 'Admin' : currentUserName;
-
-      // Posted By
-      docInstance.line(20, sigY, 70, sigY);
-      docInstance.setFont("helvetica", "normal");
-      docInstance.setFontSize(8.5);
-      docInstance.setTextColor(2, 132, 199);
-      docInstance.text(displayName, 45, sigY - 2, { align: 'center' });
-
-      docInstance.setFont("helvetica", "bold");
-      docInstance.setTextColor(40, 40, 40);
-      docInstance.text('Posted By', 45, sigY + 5, { align: 'center' });
-
-      // Checked By
-      docInstance.setFont("helvetica", "bold");
-      docInstance.line(pageWidth / 2 - 25, sigY, pageWidth / 2 + 25, sigY);
-      docInstance.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
-
-      // Authorized Signature
-      docInstance.setFont("helvetica", "bold");
-      docInstance.line(pageWidth - 70, sigY, pageWidth - 20, sigY);
-      docInstance.text('Authorized Signature', pageWidth - 45, sigY + 5, { align: 'center' });
-    };
-
-    renderPageContent(doc);
-    const cleanFilename = String(displayChallanNo).replace(/[^a-zA-Z0-9_-]/g, '_');
-    doc.save(`PurchaseReturn_${cleanFilename}.pdf`);
+    if (preview) {
+      const blob = doc.output('blob');
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+      toast.success('Purchase Return Preview opened in new tab');
+    } else {
+      const cleanFilename = String(displayChallanNo).replace(/[^a-zA-Z0-9_-]/g, '_');
+      doc.save(`PurchaseReturn_${cleanFilename}.pdf`);
+      toast.success('Purchase Return PDF downloaded');
+    }
   };
 
   return (
@@ -668,18 +664,16 @@ const PurchaseReturn = () => {
               <input type="text" value={formData.returnReason} onChange={(e) => setFormData({...formData, returnReason: e.target.value})} className="input-animated" />
             </div>
 
-            <button className="btn-theme" 
+            <button 
+              className="btn-theme" 
               onClick={handleAdd}
               disabled={!formData.productId}
               style={{
                 marginTop: '10px',
                 padding: '10px',
-                backgroundColor: formData.productId ? '#4caf50' : '#ccc',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '4px',
                 cursor: formData.productId ? 'pointer' : 'not-allowed',
-                fontWeight: 'bold'
+                fontWeight: 'bold',
+                opacity: formData.productId ? 1 : 0.6
               }}
             >
               Add to Return
@@ -745,11 +739,31 @@ const PurchaseReturn = () => {
             </table>
           </div>
 
-          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '20px' }}>
-            <button className="btn-info" onClick={() => generatePDF(false, true)} disabled={selectedItems.length === 0} style={{ padding: '10px 20px', backgroundColor: '#e0e0e0', color: '#000', border: 'none', borderRadius: '4px', cursor: selectedItems.length > 0 ? 'pointer' : 'not-allowed', fontWeight: 'bold' }}>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '20px' }}>
+            <button 
+              type="button"
+              className="btn-info" 
+              onClick={() => generatePDF(false, true)} 
+              disabled={selectedItems.length === 0} 
+              style={{ 
+                padding: '8px 24px', 
+                cursor: selectedItems.length > 0 ? 'pointer' : 'not-allowed', 
+                opacity: selectedItems.length > 0 ? 1 : 0.6 
+              }}
+            >
               Preview
             </button>
-            <button  onClick={handleSave} disabled={selectedItems.length === 0 || isLoading} style={{ padding: '10px 20px', backgroundColor: selectedItems.length > 0 ? '#4caf50' : '#ccc', color: '#fff', border: 'none', borderRadius: '4px', cursor: selectedItems.length > 0 ? 'pointer' : 'not-allowed', fontWeight: 'bold' }}>
+            <button 
+              type="button"
+              className="btn-theme" 
+              onClick={handleSave} 
+              disabled={selectedItems.length === 0 || isLoading} 
+              style={{ 
+                padding: '8px 24px', 
+                cursor: (selectedItems.length > 0 && !isLoading) ? 'pointer' : 'not-allowed', 
+                opacity: (selectedItems.length > 0 && !isLoading) ? 1 : 0.6 
+              }}
+            >
               Save
             </button>
           </div>

@@ -85,6 +85,10 @@ import PurchaseOrderReport from './pages/mis/reports/PurchaseOrderReport';
 import PurchaseReceiveReport from './pages/mis/reports/PurchaseReceiveReport';
 import ItemwisePurchaseReceiveReport from './pages/mis/reports/ItemwisePurchaseReceiveReport';
 import StoreRequisitionReport from './pages/mis/reports/StoreRequisitionReport';
+import StoreDeliveryReport from './pages/mis/reports/StoreDeliveryReport';
+import ItemWiseDeliveryReport from './pages/mis/reports/ItemWiseDeliveryReport';
+import PurchaseReturnReport from './pages/mis/reports/PurchaseReturnReport';
+import ItemwisePurchaseReturnReport from './pages/mis/reports/ItemwisePurchaseReturnReport';
 
 function App() {
   return (
@@ -163,10 +167,17 @@ function App() {
             <Route path="requisition-reports" element={<StoreRequisitionReport />} />
             <Route path="requisition-reports/store" element={<StoreRequisitionReport />} />
             <Route path="requisition-reports/*" element={<StoreRequisitionReport />} />
-            <Route path="delivery-reports" element={<MisReportPlaceholder title="Delivery Reports" />} />
-            <Route path="delivery-reports/*" element={<MisReportPlaceholder />} />
-            <Route path="purchase-return-reports" element={<MisReportPlaceholder title="Purchase Return Reports" />} />
-            <Route path="purchase-return-reports/*" element={<MisReportPlaceholder />} />
+            <Route path="delivery-reports" element={<StoreDeliveryReport />} />
+            <Route path="delivery-reports/store" element={<StoreDeliveryReport />} />
+            <Route path="delivery-reports/store-delivery-report" element={<StoreDeliveryReport />} />
+            <Route path="delivery-reports/item-wise" element={<ItemWiseDeliveryReport />} />
+            <Route path="delivery-reports/item-wise-delivery-report" element={<ItemWiseDeliveryReport />} />
+            <Route path="delivery-reports/*" element={<StoreDeliveryReport />} />
+            <Route path="purchase-return-reports" element={<PurchaseReturnReport />} />
+            <Route path="purchase-return-reports/purchase-return-report" element={<PurchaseReturnReport />} />
+            <Route path="purchase-return-reports/itemwise-purchase-return-report" element={<ItemwisePurchaseReturnReport />} />
+            <Route path="purchase-return-reports/summary" element={<PurchaseReturnReport />} />
+            <Route path="purchase-return-reports/*" element={<PurchaseReturnReport />} />
             <Route path="damage-lost-reports" element={<MisReportPlaceholder title="Damage and Lost Reports" />} />
             <Route path="damage-lost-reports/*" element={<MisReportPlaceholder />} />
             <Route path="promotional-reports" element={<PromotionWiseSalesReport />} />

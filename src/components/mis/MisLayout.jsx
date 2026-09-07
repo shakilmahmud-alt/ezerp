@@ -176,7 +176,7 @@ const MisLayout = () => {
       icon: <Truck size={18} />,
       subItems: [
         { name: 'Store Delivery Report', path: '/mis/delivery-reports/store' },
-        { name: 'Challan Delivery Log', path: '/mis/delivery-reports/challan' },
+        { name: 'Item Wise Delivery Report', path: '/mis/delivery-reports/item-wise-delivery-report' },
       ]
     },
     { 
@@ -184,8 +184,8 @@ const MisLayout = () => {
       path: '/mis/purchase-return-reports', 
       icon: <RotateCcw size={18} />,
       subItems: [
-        { name: 'Purchase Return Summary', path: '/mis/purchase-return-reports/summary' },
-        { name: 'Vendor Debit Report', path: '/mis/purchase-return-reports/debit' },
+        { name: 'Purchase Return Report', path: '/mis/purchase-return-reports/purchase-return-report' },
+        { name: 'Itemwise Purchase Return Report', path: '/mis/purchase-return-reports/itemwise-purchase-return-report' },
       ]
     },
     { 

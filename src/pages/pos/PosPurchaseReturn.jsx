@@ -429,67 +429,61 @@ const PosPurchaseReturn = () => {
       return;
     }
     
-    const doc = new jsPDF('landscape', 'mm', 'a4');
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
     const vendorName = vendors.find(v => v.id === formData.vendorId)?.name || 'N/A';
 
     let displayChallanNo = formData.challanNo ? String(formData.challanNo) : `#PRT-${new Date().getTime()}`;
     if (!displayChallanNo.startsWith('#')) displayChallanNo = `#${displayChallanNo}`;
 
-    // 1. Center: Company Info
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.setTextColor(46, 111, 64);
-    doc.text('EZ ERP', pageWidth / 2, 13, { align: 'center' });
+    // 1. Top Green Banner (#2e6f40)
+    doc.setFillColor(46, 111, 64);
+    doc.rect(0, 0, pageWidth, 22, 'F');
 
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(255, 255, 255);
+    doc.text("EZ ERP MANAGEMENT INFORMATION SYSTEM (MIS)", 14, 11);
+
+    doc.setFontSize(9.5);
     doc.setFont("helvetica", "normal");
+    const challanTitle = preview 
+      ? "STORE PURCHASE RETURN CHALLAN (PREVIEW)" 
+      : duplicate 
+      ? "STORE PURCHASE RETURN CHALLAN (DUPLICATE)" 
+      : "STORE PURCHASE RETURN CHALLAN";
+    doc.text(challanTitle, 14, 17.5);
+
+    // User info & Print date
+    const printDateStr = new Date().toLocaleString('en-GB', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: true
+    });
+    const loggedInUser = JSON.parse(localStorage.getItem('erp_user') || '{}');
+    const rawUser = loggedInUser?.user_metadata?.full_name || 
+      loggedInUser?.user_metadata?.name || 
+      loggedInUser?.full_name || 
+      loggedInUser?.name || 
+      loggedInUser?.username || 
+      user?.username || 
+      user?.name || 
+      'Super Admin';
+    const preparedByName = (rawUser === 'msmraqeeb@gmail.com' || rawUser === 'admin@email.com') ? 'Super Admin' : rawUser;
+
+    doc.setFontSize(8);
+    doc.text(`Generated: ${printDateStr}`, pageWidth - 14, 11, { align: 'right' });
+    doc.text(`User: ${preparedByName}`, pageWidth - 14, 17.5, { align: 'right' });
+
+    // 2. Metadata Section below Banner
     doc.setFontSize(8.5);
-    doc.setTextColor(70, 70, 70);
-    doc.text('House: 352, Lane: 05, 2nd floor, Baridhara DOHS, Dhaka-1212, Bangladesh', pageWidth / 2, 18, { align: 'center' });
+    doc.setTextColor(50, 50, 50);
+    doc.text(`Store: ${storeName}   |   Date: ${formData.returnDate}   |   Challan No: ${displayChallanNo}   |   Vendor: ${vendorName}   |   Reference No: ${formData.referenceNo || 'N/A'}`, 14, 30);
 
-    // 2. Right: Header Details
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.setTextColor(46, 111, 64);
-    doc.text('STORE PURCHASE RETURN CHALLAN', pageWidth - 14, 13, { align: 'right' });
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.setTextColor(30, 30, 30);
-    doc.text(`Challan No: ${displayChallanNo}`, pageWidth - 14, 18.5, { align: 'right' });
-    doc.text(`Return Date: ${formData.returnDate}`, pageWidth - 14, 23, { align: 'right' });
-    doc.text(`Store: ${storeName}`, pageWidth - 14, 27.5, { align: 'right' });
-
-    if (duplicate) {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(220, 38, 38);
-      doc.text('[DUPLICATE]', pageWidth - 14, 32, { align: 'right' });
-    } else if (preview) {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(2, 132, 199);
-      doc.text('[PREVIEW]', pageWidth - 14, 32, { align: 'right' });
-    }
-
-    // 3. Left: Vendor & Ref
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(30, 30, 30);
-    doc.text('Vendor Name:', 14, 18.5);
-    doc.setFont("helvetica", "normal");
-    doc.text(`${vendorName}`, 42, 18.5);
-
-    doc.setFont("helvetica", "bold");
-    doc.text('Reference No:', 14, 23);
-    doc.setFont("helvetica", "normal");
-    doc.text(`${formData.referenceNo || 'N/A'}`, 42, 23);
-
-    // 4. Table
-    const tableCols = ["SL", "Code", "Barcode", "Product Name", "Rtn. Qty", "Cost Price", "Sale Price", "Current Stock", "Amount", "Reason"];
-    const tableRows = selectedItems.map((item, idx) => [
+    // 3. Table
+    const headers = [["SL", "Barcode", "Product Name", "Rtn. Qty", "Cost Price (Tk)", "Sale Price (Tk)", "Current Stock", "Amount (Tk)", "Reason"]];
+    const body = selectedItems.map((item, idx) => [
       idx + 1,
-      item.productCode || '-',
       item.barcode || '-',
       item.productName || '',
       Number(item.returnQty || 0),
@@ -500,43 +494,86 @@ const PosPurchaseReturn = () => {
       item.returnReason || ''
     ]);
 
-    tableRows.push([
-      'Total', '', '', '', totals.qty, '', '', '', totals.value.toFixed(2), ''
+    body.push([
+      '',
+      'TOTAL SUMMARY',
+      `${selectedItems.length} Items`,
+      totals.qty,
+      '',
+      '',
+      '',
+      totals.value.toFixed(2),
+      ''
     ]);
 
-    const startY = (duplicate || preview) ? 36 : 32;
-
     autoTable(doc, {
-      head: [tableCols],
-      body: tableRows,
-      startY: startY,
+      head: headers,
+      body: body,
+      startY: 36,
       theme: 'grid',
       styles: { fontSize: 7.5, cellPadding: 1.8, textColor: [30, 30, 30] },
-      headStyles: { fillColor: [46, 111, 64], fontStyle: 'bold', textColor: [255, 255, 255], halign: 'right' },
-      columnStyles: {
-        0: { halign: 'center', cellWidth: 10 },
-        1: { halign: 'left', cellWidth: 25 },
-        2: { halign: 'left', cellWidth: 28 },
-        3: { halign: 'left' },
-        4: { halign: 'right', cellWidth: 20 },
-        5: { halign: 'right', cellWidth: 22 },
-        6: { halign: 'right', cellWidth: 22 },
-        7: { halign: 'right', cellWidth: 20 },
-        8: { halign: 'right', cellWidth: 25 },
-        9: { halign: 'left', cellWidth: 35 }
-      },
+      headStyles: { fillColor: [46, 111, 64], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
       didParseCell: (data) => {
         if (data.section === 'head') {
-          if (data.column.index <= 3 || data.column.index === 9) {
-            data.cell.styles.halign = data.column.index === 0 ? 'center' : 'left';
-          }
+          if (data.column.index === 0) data.cell.styles.halign = 'center';
+          else if (data.column.index === 1 || data.column.index === 2 || data.column.index === 8) data.cell.styles.halign = 'left';
+          else data.cell.styles.halign = 'right';
+        } else if (data.section === 'body') {
+          if (data.column.index === 0) data.cell.styles.halign = 'center';
+          else if (data.column.index === 1 || data.column.index === 2 || data.column.index === 8) data.cell.styles.halign = 'left';
+          else data.cell.styles.halign = 'right';
         }
-      }
+        if (data.row.index === body.length - 1) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [240, 245, 240];
+          data.cell.styles.textColor = [10, 60, 20];
+        }
+      },
+      margin: { top: 10, left: 14, right: 14 }
     });
 
-    const pdfBlob = doc.output('blob');
-    const blobUrl = URL.createObjectURL(pdfBlob);
-    window.open(blobUrl, '_blank');
+    // 4. Signatures at bottom
+    const finalY = doc.lastAutoTable.finalY || 160;
+    const sigY = Math.max(finalY + 24, pageHeight - 20);
+
+    doc.setDrawColor(160, 174, 192);
+    doc.setLineWidth(0.4);
+
+    // Posted By (Left)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text(preparedByName, 47.5, sigY - 2.5, { align: 'center' });
+    doc.line(20, sigY, 75, sigY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Posted By', 47.5, sigY + 5, { align: 'center' });
+
+    // Checked By (Middle)
+    doc.line(pageWidth / 2 - 27.5, sigY, pageWidth / 2 + 27.5, sigY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
+
+    // Authorized Signature (Right)
+    doc.line(pageWidth - 75, sigY, pageWidth - 20, sigY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Authorized Signature', pageWidth - 47.5, sigY + 5, { align: 'center' });
+
+    if (preview) {
+      const pdfBlob = doc.output('blob');
+      const blobUrl = URL.createObjectURL(pdfBlob);
+      window.open(blobUrl, '_blank');
+      toast.success('Purchase Return Preview opened in new tab');
+    } else {
+      const cleanFilename = String(displayChallanNo).replace(/[^a-zA-Z0-9_-]/g, '_');
+      doc.save(`StorePurchaseReturn_${cleanFilename}.pdf`);
+      toast.success('Purchase Return PDF downloaded');
+    }
   };
 
   return (
