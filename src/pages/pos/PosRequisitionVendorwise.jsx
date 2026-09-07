@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import toast from 'react-hot-toast';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { useAuth } from '../../context/AuthContext';
-import { Search, Plus, Trash2, Send, Building, FileText } from 'lucide-react';
+import { Search, Plus, Trash2, Send, Building, FileText, Printer } from 'lucide-react';
 import CustomSelect from '../../components/CustomSelect';
 
 const PosRequisitionVendorwise = () => {
@@ -355,6 +357,194 @@ const PosRequisitionVendorwise = () => {
     }
   };
 
+  // Generate and Download PDF Requisition Challan
+  const handlePrintSlip = async (req) => {
+    try {
+      let itemsToPrint = [];
+      const { data, error } = await supabase
+        .from('store_requisition_items')
+        .select('*')
+        .eq('requisition_id', req.id);
+
+      if (!error && data && data.length > 0) {
+        itemsToPrint = data;
+      }
+
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+
+      // 1. Top Green Banner
+      doc.setFillColor(46, 111, 64);
+      doc.rect(0, 0, pageWidth, 22, 'F');
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(255, 255, 255);
+      doc.text("EZ ERP MANAGEMENT INFORMATION SYSTEM (MIS)", 14, 11);
+
+      doc.setFontSize(9.5);
+      doc.setFont("helvetica", "normal");
+      doc.text("CENTRAL INVENTORY & POS SALES ANALYTICS", 14, 17);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text("STORE REQUISITION CHALLAN", pageWidth - 14, 14, { align: 'right' });
+
+      // User info
+      const loggedInUser = JSON.parse(localStorage.getItem('erp_user') || '{}');
+      const preparedByName = 
+        req.prepared_by ||
+        loggedInUser?.user_metadata?.full_name || 
+        loggedInUser?.user_metadata?.name || 
+        loggedInUser?.full_name || 
+        loggedInUser?.name || 
+        loggedInUser?.username || 
+        (loggedInUser?.email ? loggedInUser.email.split('@')[0] : 'Super Admin');
+
+      const reqDate = req.requisition_date 
+        ? new Date(req.requisition_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+        : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+      // 2. Metadata Section below Banner
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(50, 50, 50);
+
+      doc.text(`Requisition No: ${req.requisition_no} | Date: ${reqDate}`, 14, 30);
+      doc.text(`Store / Branch: ${req.shop_name || storeDetails?.name || 'All'} | Status: ${req.status || 'Pending'}`, 14, 35);
+      doc.text(`Generated On: ${new Date().toLocaleString()}`, pageWidth - 14, 30, { align: 'right' });
+      doc.text(`Printed By: ${preparedByName}`, pageWidth - 14, 35, { align: 'right' });
+
+      // 3. Table
+      const head = [['SL', 'Barcode', 'Product Name', 'CPU (Tk)', 'MRP (Tk)', 'Central Stock', 'Branch Stock', 'Req Qty', 'Cost Value (Tk)']];
+      
+      let totalReqQty = 0;
+      let totalCostValue = 0;
+
+      const body = (itemsToPrint || []).map((item, idx) => {
+        const cpu = parseFloat(item.cpu || 0);
+        const mrp = parseFloat(item.mrp || 0);
+        const cs = parseFloat(item.stock_in_cs || 0);
+        const bs = parseFloat(item.bal_qty || 0);
+        const reqQty = parseFloat(item.req_qty || item.app_qty || 0);
+        const costVal = parseFloat(item.cost_value || (cpu * reqQty) || 0);
+
+        totalReqQty += reqQty;
+        totalCostValue += costVal;
+
+        return [
+          idx + 1,
+          item.barcode || item.product_code || '',
+          item.product_name || '',
+          cpu.toFixed(2),
+          mrp.toFixed(2),
+          cs.toFixed(2),
+          bs.toFixed(2),
+          reqQty,
+          costVal.toFixed(2)
+        ];
+      });
+
+      // Total summary row
+      body.push([
+        'Total',
+        '',
+        `${itemsToPrint.length} Items`,
+        '',
+        '',
+        '',
+        '',
+        totalReqQty,
+        totalCostValue.toFixed(2)
+      ]);
+
+      autoTable(doc, {
+        head,
+        body,
+        startY: 40,
+        theme: 'grid',
+        styles: {
+          fontSize: 7.5,
+          cellPadding: 2,
+          valign: 'middle',
+          overflow: 'linebreak',
+          textColor: [50, 50, 50]
+        },
+        headStyles: {
+          fillColor: [46, 111, 64],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          halign: 'center'
+        },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 12 },
+          1: { halign: 'center', cellWidth: 32 },
+          2: { halign: 'left', cellWidth: 'auto' },
+          3: { halign: 'right', cellWidth: 26 },
+          4: { halign: 'right', cellWidth: 26 },
+          5: { halign: 'right', cellWidth: 28 },
+          6: { halign: 'right', cellWidth: 28 },
+          7: { halign: 'right', fontStyle: 'bold', cellWidth: 24 },
+          8: { halign: 'right', fontStyle: 'bold', cellWidth: 32 }
+        },
+        didParseCell: function (data) {
+          if (data.section === 'head') {
+            if (data.column.index === 0) data.cell.styles.halign = 'center';
+            if (data.column.index === 1) data.cell.styles.halign = 'center';
+            if (data.column.index === 2) data.cell.styles.halign = 'left';
+            if (data.column.index >= 3) data.cell.styles.halign = 'right';
+          }
+          if (data.row.index === body.length - 1) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = [240, 245, 240];
+            data.cell.styles.textColor = [10, 60, 20];
+          }
+        },
+        margin: { top: 10, left: 14, right: 14 }
+      });
+
+      // 4. Bottom Signatures
+      const finalY = doc.lastAutoTable?.finalY || 100;
+      const sigY = Math.max(finalY + 22, pageHeight - 24);
+
+      doc.setDrawColor(160, 174, 192);
+
+      // Prepared By (Left)
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.setTextColor(30, 41, 59);
+      doc.text(preparedByName, 47.5, sigY - 2.5, { align: 'center' });
+
+      doc.line(20, sigY, 75, sigY);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Prepared By', 47.5, sigY + 5, { align: 'center' });
+
+      // Checked By (Middle)
+      doc.line(pageWidth / 2 - 27.5, sigY, pageWidth / 2 + 27.5, sigY);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
+
+      // Authorized Signature (Right)
+      doc.line(pageWidth - 75, sigY, pageWidth - 20, sigY);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Authorized Signature', pageWidth - 47.5, sigY + 5, { align: 'center' });
+
+      doc.save(`${req.requisition_no}_Challan.pdf`);
+      toast.success(`Downloaded ${req.requisition_no} Requisition Slip PDF!`);
+    } catch (err) {
+      console.error("Error generating slip:", err);
+      toast.error('Failed to generate PDF slip');
+    }
+  };
+
   const totalCostCalculated = reqItems.reduce((sum, i) => sum + i.cost_value, 0);
   const totalQtyCalculated = reqItems.reduce((sum, i) => sum + i.req_qty, 0);
 
@@ -601,11 +791,12 @@ const PosRequisitionVendorwise = () => {
               <th style={{ padding: '8px 12px', textAlign: 'right' }}>Total Qty</th>
               <th style={{ padding: '8px 12px', textAlign: 'right' }}>Cost Value</th>
               <th style={{ padding: '8px 12px', textAlign: 'center' }}>Status</th>
+              <th style={{ padding: '8px 12px', textAlign: 'center', width: '90px' }}>Action</th>
             </tr>
           </thead>
           <tbody>
             {recentRequisitions.length === 0 ? (
-              <tr><td colSpan="6" style={{ padding: '15px', textAlign: 'center', color: '#94a3b8' }}>No requisitions submitted yet.</td></tr>
+              <tr><td colSpan="7" style={{ padding: '15px', textAlign: 'center', color: '#94a3b8' }}>No requisitions submitted yet.</td></tr>
             ) : (
               recentRequisitions.map((req) => (
                 <tr key={req.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
@@ -625,6 +816,27 @@ const PosRequisitionVendorwise = () => {
                     }}>
                       {req.status}
                     </span>
+                  </td>
+                  <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => handlePrintSlip(req)}
+                      style={{
+                        padding: '4px 8px',
+                        backgroundColor: '#eff6ff',
+                        border: '1px solid #bfdbfe',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                        fontSize: '11px',
+                        color: '#1d4ed8'
+                      }}
+                      title="Download PDF Challan"
+                    >
+                      <Printer size={13} /> Print
+                    </button>
                   </td>
                 </tr>
               ))

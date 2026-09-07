@@ -66,6 +66,7 @@ import PosStockReports from './pages/pos/reports/PosStockReports';
 import PosReprintLog from './pages/pos/reports/PosReprintLog';
 import PosDiscountCircularReport from './pages/pos/reports/PosDiscountCircularReport';
 
+import PosProtectedRoute from './components/pos/PosProtectedRoute';
 import MisLayout from './components/mis/MisLayout';
 import MisHome from './pages/mis/MisHome';
 import MisReportPlaceholder from './pages/mis/MisReportPlaceholder';
@@ -81,6 +82,8 @@ import ItemwiseStockReport from './pages/mis/reports/ItemwiseStockReport';
 import ShopwiseStockAnalysisReport from './pages/mis/reports/ShopwiseStockAnalysisReport';
 import CategorySubcategoryItemwiseStockReport from './pages/mis/reports/CategorySubcategoryItemwiseStockReport';
 import PurchaseOrderReport from './pages/mis/reports/PurchaseOrderReport';
+import PurchaseReceiveReport from './pages/mis/reports/PurchaseReceiveReport';
+import ItemwisePurchaseReceiveReport from './pages/mis/reports/ItemwisePurchaseReceiveReport';
 
 function App() {
   return (
@@ -99,31 +102,31 @@ function App() {
           
           <Route path="/pos/login" element={<PosLogin />} />
           <Route path="/pos" element={<PosLayout />}>
-            <Route index element={<PosDashboard />} />
-            <Route path="customers" element={<PosCustomerManagement />} />
-            <Route path="stock-search" element={<PosStockSearch />} />
-            <Route path="stock-receive" element={<PosStockReceive />} />
-            <Route path="stock-transfer" element={<PosStockTransfer />} />
-            <Route path="payment-type-change" element={<PosPaymentTypeChange />} />
-            <Route path="requisition" element={<PosRequisition />} />
-            <Route path="requisition-vendorwise" element={<PosRequisitionVendorwise />} />
-            <Route path="purchase-receive" element={<PosPurchaseReceive />} />
-            <Route path="purchase-return" element={<PosPurchaseReturn />} />
-            <Route path="invoice-search" element={<PosInvoiceSearch />} />
-            <Route path="reports/invoice-search" element={<PosInvoiceSearch />} />
-            <Route path="reports/reprint" element={<PosReprint />} />
-            <Route path="reports/sale" element={<PosSaleReports />} />
-            <Route path="reports/sale-daily" element={<PosSaleReports initialTab="daily" />} />
-            <Route path="reports/sale-summary" element={<PosSaleReports initialTab="summary" />} />
-            <Route path="reports/sale-itemwise" element={<PosSaleReports initialTab="itemwise" />} />
-            <Route path="reports/sale-payment-type" element={<PosSaleReports initialTab="payment-type" />} />
-            <Route path="reports/receive" element={<PosReceiveReport />} />
-            <Route path="reports/transfer" element={<PosTransferReport />} />
-            <Route path="reports/stock" element={<PosStockReports />} />
-            <Route path="reports/stock-current" element={<PosStockReports initialTab="current" />} />
-            <Route path="reports/stock-journal" element={<PosStockReports initialTab="journal" />} />
-            <Route path="reports/reprint-log" element={<PosReprintLog />} />
-            <Route path="reports/discount-circular" element={<PosDiscountCircularReport />} />
+            <Route index element={<PosProtectedRoute moduleName="Point of Sale"><PosDashboard /></PosProtectedRoute>} />
+            <Route path="customers" element={<PosProtectedRoute moduleName="Customer Management"><PosCustomerManagement /></PosProtectedRoute>} />
+            <Route path="stock-search" element={<PosProtectedRoute moduleName="Stock Search"><PosStockSearch /></PosProtectedRoute>} />
+            <Route path="stock-receive" element={<PosProtectedRoute moduleName="Stock Receive"><PosStockReceive /></PosProtectedRoute>} />
+            <Route path="stock-transfer" element={<PosProtectedRoute moduleName="Stock Transfer"><PosStockTransfer /></PosProtectedRoute>} />
+            <Route path="payment-type-change" element={<PosProtectedRoute moduleName="Invoice Payment Type Change"><PosPaymentTypeChange /></PosProtectedRoute>} />
+            <Route path="requisition" element={<PosProtectedRoute moduleName="Requisition"><PosRequisition /></PosProtectedRoute>} />
+            <Route path="requisition-vendorwise" element={<PosProtectedRoute moduleName="Requisition (Vendorwise)"><PosRequisitionVendorwise /></PosProtectedRoute>} />
+            <Route path="purchase-receive" element={<PosProtectedRoute moduleName="Purchase Receive"><PosPurchaseReceive /></PosProtectedRoute>} />
+            <Route path="purchase-return" element={<PosProtectedRoute moduleName="Purchase Return"><PosPurchaseReturn /></PosProtectedRoute>} />
+            <Route path="invoice-search" element={<PosProtectedRoute moduleName="Invoice Search"><PosInvoiceSearch /></PosProtectedRoute>} />
+            <Route path="reports/invoice-search" element={<PosProtectedRoute moduleName="Invoice Search"><PosInvoiceSearch /></PosProtectedRoute>} />
+            <Route path="reports/reprint" element={<PosProtectedRoute moduleName="Reprint"><PosReprint /></PosProtectedRoute>} />
+            <Route path="reports/sale" element={<PosProtectedRoute moduleName="Daily Sale Report"><PosSaleReports /></PosProtectedRoute>} />
+            <Route path="reports/sale-daily" element={<PosProtectedRoute moduleName="Daily Sale Report"><PosSaleReports initialTab="daily" /></PosProtectedRoute>} />
+            <Route path="reports/sale-summary" element={<PosProtectedRoute moduleName="Summary Sale Report"><PosSaleReports initialTab="summary" /></PosProtectedRoute>} />
+            <Route path="reports/sale-itemwise" element={<PosProtectedRoute moduleName="Itemwise Sale Report"><PosSaleReports initialTab="itemwise" /></PosProtectedRoute>} />
+            <Route path="reports/sale-payment-type" element={<PosProtectedRoute moduleName="Payment Type Sale Report"><PosSaleReports initialTab="payment-type" /></PosProtectedRoute>} />
+            <Route path="reports/receive" element={<PosProtectedRoute moduleName="Receive Report"><PosReceiveReport /></PosProtectedRoute>} />
+            <Route path="reports/transfer" element={<PosProtectedRoute moduleName="Transfer Report"><PosTransferReport /></PosProtectedRoute>} />
+            <Route path="reports/stock" element={<PosProtectedRoute moduleName="Current Stock Report"><PosStockReports /></PosProtectedRoute>} />
+            <Route path="reports/stock-current" element={<PosProtectedRoute moduleName="Current Stock Report"><PosStockReports initialTab="current" /></PosProtectedRoute>} />
+            <Route path="reports/stock-journal" element={<PosProtectedRoute moduleName="Product Stock Journal Report"><PosStockReports initialTab="journal" /></PosProtectedRoute>} />
+            <Route path="reports/reprint-log" element={<PosProtectedRoute moduleName="Reprint Log"><PosReprintLog /></PosProtectedRoute>} />
+            <Route path="reports/discount-circular" element={<PosProtectedRoute moduleName="Discount Circular Report"><PosDiscountCircularReport /></PosProtectedRoute>} />
           </Route>
 
           {/* MIS Module Routes */}
@@ -149,8 +152,13 @@ function App() {
             <Route path="purchase-order-reports" element={<PurchaseOrderReport />} />
             <Route path="purchase-order-reports/purchase-order-report" element={<PurchaseOrderReport />} />
             <Route path="purchase-order-reports/*" element={<PurchaseOrderReport />} />
-            <Route path="purchase-reports" element={<MisReportPlaceholder title="Purchase Reports" />} />
-            <Route path="purchase-reports/*" element={<MisReportPlaceholder />} />
+            <Route path="purchase-reports" element={<PurchaseReceiveReport />} />
+            <Route path="purchase-reports/receive" element={<PurchaseReceiveReport />} />
+            <Route path="purchase-reports/purchase-receive-report" element={<PurchaseReceiveReport />} />
+            <Route path="purchase-reports/itemwise-purchase-receive-report" element={<ItemwisePurchaseReceiveReport />} />
+            <Route path="purchase-reports/item-wise" element={<ItemwisePurchaseReceiveReport />} />
+            <Route path="purchase-reports/vendor" element={<ItemwisePurchaseReceiveReport />} />
+            <Route path="purchase-reports/*" element={<PurchaseReceiveReport />} />
             <Route path="requisition-reports" element={<MisReportPlaceholder title="Requisition Reports" />} />
             <Route path="requisition-reports/*" element={<MisReportPlaceholder />} />
             <Route path="delivery-reports" element={<MisReportPlaceholder title="Delivery Reports" />} />

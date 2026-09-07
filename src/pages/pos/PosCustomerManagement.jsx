@@ -6,6 +6,7 @@ import { Country, City } from 'country-state-city';
 import { useAuth } from '../../context/AuthContext';
 import { Search } from 'lucide-react';
 import CustomSelect from '../../components/CustomSelect';
+import { getAllCustomersPointsMap } from '../../utils/customerPoints';
 
 const initialFormState = {
   customer_type_id: '',
@@ -77,15 +78,28 @@ const PosCustomerManagement = () => {
 
   const fetchCustomers = async () => {
     try {
-      const { data, error } = await supabase
-        .from('customers')
-        .select(`
-          *,
-          customer_type:customer_types(name)
-        `)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      setCustomers(data || []);
+      const [custRes, pointsRes] = await Promise.all([
+        supabase
+          .from('customers')
+          .select(`
+            *,
+            customer_type:customer_types(name, earning_point)
+          `)
+          .order('created_at', { ascending: false }),
+        getAllCustomersPointsMap()
+      ]);
+
+      if (custRes.error) throw custRes.error;
+      const pointsMap = pointsRes.pointsMap || {};
+
+      const merged = (custRes.data || []).map(c => ({
+        ...c,
+        total_earn_point: pointsMap[c.id]?.total_earn_point || 0,
+        total_redeem_point: pointsMap[c.id]?.total_redeem_point || 0,
+        balance_point: pointsMap[c.id]?.balance_point || 0
+      }));
+
+      setCustomers(merged);
     } catch (err) {
       console.error(err);
       toast.error('Failed to fetch Customers');
@@ -201,6 +215,9 @@ const PosCustomerManagement = () => {
                   <th style={{ padding: '8px', textAlign: 'left', minWidth: '100px' }}>Middle Name</th>
                   <th style={{ padding: '8px', textAlign: 'left', minWidth: '100px' }}>Last Name</th>
                   <th style={{ padding: '8px', textAlign: 'left', minWidth: '80px' }}>Type</th>
+                  <th style={{ padding: '8px', textAlign: 'right', minWidth: '80px' }}>Earn Pt</th>
+                  <th style={{ padding: '8px', textAlign: 'right', minWidth: '80px' }}>Redeem Pt</th>
+                  <th style={{ padding: '8px', textAlign: 'right', minWidth: '80px', color: '#2e7d32' }}>Balance Pt</th>
                   <th style={{ padding: '8px', textAlign: 'left', minWidth: '80px' }}>Discount(%)</th>
                   <th style={{ padding: '8px', textAlign: 'left', minWidth: '100px' }}>Phone</th>
                   <th style={{ padding: '8px', textAlign: 'left', minWidth: '120px' }}>Email</th>
@@ -225,6 +242,9 @@ const PosCustomerManagement = () => {
                     <td style={{ padding: '6px 8px' }}>{cust.middle_name}</td>
                     <td style={{ padding: '6px 8px' }}>{cust.last_name}</td>
                     <td style={{ padding: '6px 8px' }}>{cust.customer_type?.name}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold' }}>{cust.total_earn_point || 0}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right', color: '#d32f2f' }}>{cust.total_redeem_point || 0}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', color: '#2e7d32' }}>{cust.balance_point || 0}</td>
                     <td style={{ padding: '6px 8px' }}>{cust.discount_percent || '0.00'}</td>
                     <td style={{ padding: '6px 8px' }}>{cust.contact_no}</td>
                     <td style={{ padding: '6px 8px' }}>{cust.email}</td>

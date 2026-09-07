@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Search, Plus, Trash2, Printer, CheckCircle, RefreshCw, X, ShoppingCart, DollarSign, CreditCard, HelpCircle, ArrowLeftRight, RotateCcw } from 'lucide-react';
 
 const PosDashboard = () => {
-  const { user, posTerminal } = useAuth();
+  const { user, posTerminal, hasPosPermission } = useAuth();
 
   // Primary POS States
   const [invoiceNo, setInvoiceNo] = useState('');
@@ -521,7 +521,8 @@ const PosDashboard = () => {
 
     const execName = executives.find(e => e.id === selectedExecutiveId)?.name || 'Executive';
     const price = Number(product.mrp || product.purchase_price || 0);
-    const vatPct = Number(product.sale_vat_percent || 0);
+    const rawVat = Number(product.sale_vat_percent || 0);
+    const vatPct = (rawVat > 0 && rawVat <= 1) ? Number((rawVat * 100).toFixed(2)) : rawVat;
 
     // Check if product is covered by an active promotion
     const pBc = String(product.barcode || '').trim().toLowerCase();
@@ -605,6 +606,10 @@ const PosDashboard = () => {
 
   // Cart Row Removal (F4)
   const handleRemoveSelectedItem = () => {
+    if (typeof hasPosPermission === 'function' && !hasPosPermission('Remove Item (F4)')) {
+      toast.error("You're not authorized to use this module.");
+      return;
+    }
     if (selectedRowIndex === null || selectedRowIndex < 0 || selectedRowIndex >= cart.length) {
       toast.error('Please select an item to remove');
       return;
@@ -617,6 +622,10 @@ const PosDashboard = () => {
 
   // Change Quantity (F2)
   const handleOpenQtyModal = () => {
+    if (typeof hasPosPermission === 'function' && !hasPosPermission('Change Quantity (F2)')) {
+      toast.error("You're not authorized to use this module.");
+      return;
+    }
     if (selectedRowIndex === null || selectedRowIndex < 0 || selectedRowIndex >= cart.length) {
       toast.error('Please select an item to change quantity');
       return;
@@ -654,6 +663,10 @@ const PosDashboard = () => {
 
   // Hold Invoice (F6)
   const handleHoldInvoice = async () => {
+    if (typeof hasPosPermission === 'function' && !hasPosPermission('Hold Invoice (F6)')) {
+      toast.error("You're not authorized to use this module.");
+      return;
+    }
     if (cart.length === 0) {
       toast.error('Cart is empty');
       return;
@@ -692,6 +705,10 @@ const PosDashboard = () => {
 
   // Recall Invoice (F7)
   const handleOpenRecallModal = async () => {
+    if (typeof hasPosPermission === 'function' && !hasPosPermission('Recall Invoice (F7)')) {
+      toast.error("You're not authorized to use this module.");
+      return;
+    }
     try {
       const { data } = await supabase.from('held_invoices').select('*').order('created_at', { ascending: false });
       if (data && data.length > 0) {
@@ -718,6 +735,10 @@ const PosDashboard = () => {
 
   // Cancel Invoice (F10) / Void
   const handleCancelInvoice = () => {
+    if (typeof hasPosPermission === 'function' && !hasPosPermission('Cancel Invoice (F10)') && !hasPosPermission('VOID Invoice')) {
+      toast.error("You're not authorized to use this module.");
+      return;
+    }
     if (cart.length === 0) return;
     if (window.confirm('Are you sure you want to cancel / void this invoice?')) {
       setCart([]);
@@ -730,6 +751,39 @@ const PosDashboard = () => {
       handleClearCustomer();
       toast.success('Invoice canceled');
     }
+  };
+
+  // Modals with permissions
+  const handleOpenExchangeModal = () => {
+    if (typeof hasPosPermission === 'function' && !hasPosPermission('Exchange / Debit Note (F3)')) {
+      toast.error("You're not authorized to use this module.");
+      return;
+    }
+    setShowExchangeModal(true);
+  };
+
+  const handleOpenReturnModal = () => {
+    if (typeof hasPosPermission === 'function' && !hasPosPermission('Return (F8)')) {
+      toast.error("You're not authorized to use this module.");
+      return;
+    }
+    setShowReturnModal(true);
+  };
+
+  const handleOpenPromoDetailsModal = () => {
+    if (typeof hasPosPermission === 'function' && !hasPosPermission('Promotion Details')) {
+      toast.error("You're not authorized to use this module.");
+      return;
+    }
+    setShowPromoDetailsModal(true);
+  };
+
+  const handleOpenReprintModal = () => {
+    if (typeof hasPosPermission === 'function' && !hasPosPermission('Reprint Invoice')) {
+      toast.error("You're not authorized to use this module.");
+      return;
+    }
+    setShowReprintModal(true);
   };
 
   // Live Calculations
@@ -750,11 +804,16 @@ const PosDashboard = () => {
     : (nonPromotedGrossTotal * Number(overallDiscountPercent)) / 100;
 
   const totalDiscountCalculated = itemDiscountsCalculated + computedDiscountAmt;
+  const effectiveDiscountPercent = grossTotalCalculated > 0 ? ((totalDiscountCalculated / grossTotalCalculated) * 100) : 0;
   const subTotalCalculated = (grossTotalCalculated + totalVatCalculated + totalSdCalculated) - totalDiscountCalculated - Number(returnAmount) - Number(redeemPoints);
   const netAmountCalculated = Math.max(0, Math.round(subTotalCalculated));
 
   // Open Invoice Payment Modal (1st Image)
   const handleOpenPaymentModal = () => {
+    if (typeof hasPosPermission === 'function' && !hasPosPermission('Pay Now / Checkout')) {
+      toast.error("You're not authorized to use this module.");
+      return;
+    }
     if (cart.length === 0) {
       toast.error('Cart is empty');
       return;
@@ -1040,20 +1099,24 @@ const PosDashboard = () => {
         return prev.filter(item => item.id !== p.id && item.product_id !== p.id);
       } else {
         toast.success(`Selected "${p.item_name}" (Tk ${unitPrice})`);
+        const rawVat = Number(p.sale_vat_percent || 0);
+        const vatPct = (rawVat > 0 && rawVat <= 1) ? Number((rawVat * 100).toFixed(2)) : rawVat;
+        const exQty = Number(exchangeQty) || 1;
+        const itemVatAmt = (unitPrice * exQty * vatPct) / 100;
         const newItem = {
           id: p.id,
           product_id: p.id,
           product_name: p.item_name,
           barcode: p.barcode || p.user_barcode || '',
           price: unitPrice,
-          qty: Number(exchangeQty) || 1,
+          qty: exQty,
           sd_percent: Number(p.sd_percent) || 0,
           sd_amount: 0,
-          vat_percent: Number(p.sale_vat_percent) || 0,
-          vat_amount: (unitPrice * (Number(p.sale_vat_percent) || 0)) / 100,
+          vat_percent: vatPct,
+          vat_amount: itemVatAmt,
           discount_percent: 0,
           discount_amount: 0,
-          total_value: unitPrice * (Number(exchangeQty) || 1)
+          total_value: (unitPrice * exQty) + itemVatAmt
         };
         return [...prev, newItem];
       }
@@ -1324,7 +1387,7 @@ const PosDashboard = () => {
           searchBarcodeInputRef.current?.focus();
           searchBarcodeInputRef.current?.select();
         } else {
-          setShowExchangeModal(true);
+          handleOpenExchangeModal();
         }
       } else if (e.key === 'F4') {
         e.preventDefault();
@@ -1349,7 +1412,7 @@ const PosDashboard = () => {
         handleOpenRecallModal();
       } else if (e.key === 'F8') {
         e.preventDefault();
-        setShowReturnModal(true);
+        handleOpenReturnModal();
       } else if (e.key === 'F9') {
         e.preventDefault();
         customerSelectRef.current?.focus();
@@ -1766,7 +1829,7 @@ const PosDashboard = () => {
             </button>
             <button 
               className="btn-warning"
-              onClick={() => setShowExchangeModal(true)} 
+              onClick={handleOpenExchangeModal} 
               style={{ padding: '8px 2px', fontSize: '10px', borderRadius: '4px' }}
             >
               Exchange/ Debit Note (F3)
@@ -1796,14 +1859,14 @@ const PosDashboard = () => {
 
             <button 
               className="btn-danger"
-              onClick={() => setShowPromoDetailsModal(true)} 
+              onClick={handleOpenPromoDetailsModal} 
               style={{ padding: '8px 2px', fontSize: '10px', borderRadius: '4px' }}
             >
               Promotion Details
             </button>
             <button 
               className="btn-danger"
-              onClick={() => setShowReturnModal(true)} 
+              onClick={handleOpenReturnModal} 
               style={{ padding: '8px 2px', fontSize: '10px', borderRadius: '4px' }}
             >
               Return (F8)
@@ -1843,7 +1906,7 @@ const PosDashboard = () => {
               <label style={{ fontWeight: 'bold', textAlign: 'right' }}>Discount (%) :</label>
               <input 
                 type="number" 
-                value={overallDiscountPercent} 
+                value={overallDiscountPercent !== '' && Number(overallDiscountPercent) > 0 ? overallDiscountPercent : (itemDiscountsCalculated > 0 && grossTotalCalculated > 0 ? effectiveDiscountPercent.toFixed(2) : (overallDiscountPercent ?? '0'))} 
                 onChange={(e) => {
                   setOverallDiscountPercent(e.target.value);
                   setOverallDiscountAmount(0);
@@ -1855,7 +1918,7 @@ const PosDashboard = () => {
               <label style={{ fontWeight: 'bold', textAlign: 'right' }}>Discount :</label>
               <input 
                 type="number" 
-                value={overallDiscountAmount} 
+                value={overallDiscountAmount !== '' && Number(overallDiscountAmount) > 0 ? overallDiscountAmount : (totalDiscountCalculated > 0 ? totalDiscountCalculated.toFixed(2) : (overallDiscountAmount ?? '0'))} 
                 onChange={(e) => setOverallDiscountAmount(e.target.value)} 
                 style={{ padding: '2px 4px', border: '1px solid #ccc', textAlign: 'right' }} 
               />
@@ -1916,7 +1979,7 @@ const PosDashboard = () => {
         <div style={{ display: 'flex', gap: '8px' }}>
           <button 
             className="btn-theme"
-            onClick={() => setShowReprintModal(true)} 
+            onClick={handleOpenReprintModal} 
             style={{ padding: '8px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
             <Printer size={16} /> Reprint

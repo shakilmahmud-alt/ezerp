@@ -145,30 +145,20 @@ const MultipleReportsSale = () => {
         salesQuery = salesQuery.lte('created_at', `${toDate}T23:59:59.999Z`);
       }
 
-      let { data: sales, error: sErr } = await salesQuery;
-      
-      // Fallback: If 0 sales returned under strict ISO time filter, query all sales and filter flexibly
-      if (sErr || !sales || sales.length === 0) {
-        let fbQuery = supabase.from('sales').select('*').order('created_at', { ascending: false });
-        if (storeType === 'Store' && selectedStore) {
-          fbQuery = fbQuery.eq('store_id', selectedStore);
-        }
-        const { data: allSales } = await fbQuery;
-        if (allSales && allSales.length > 0) {
-          const filtered = allSales.filter(s => {
-            const dStr = (s.created_at || s.sale_date || '').slice(0, 10);
-            if (!dStr) return true;
-            if (fromDate && dStr < fromDate) return false;
-            if (toDate && dStr > toDate) return false;
-            return true;
-          });
-          sales = filtered.length > 0 ? filtered : allSales;
-        }
+      let fbQuery = supabase.from('sales').select('*').order('created_at', { ascending: false });
+      if (storeType === 'Store' && selectedStore) {
+        fbQuery = fbQuery.eq('store_id', selectedStore);
       }
+      const { data: allSales } = await fbQuery;
+      const salesList = (allSales || []).filter(s => {
+        const dStr = (s.created_at || s.sale_date || '').slice(0, 10);
+        if (!dStr) return false;
+        if (fromDate && dStr < fromDate) return false;
+        if (toDate && dStr > toDate) return false;
+        return true;
+      });
 
-      const salesList = sales || [];
-
-      // Fetch sale_items for the found sales
+      // Fetch sale_items strictly for the found sales
       const saleIds = salesList.map(s => s.id).filter(Boolean);
       const invoiceNos = salesList.map(s => s.invoice_no).filter(Boolean);
       
@@ -191,11 +181,6 @@ const MultipleReportsSale = () => {
         if (itemsByInv && itemsByInv.length > 0) {
           allSaleItems = itemsByInv;
         }
-      }
-
-      if (allSaleItems.length === 0) {
-        const { data: allItems } = await supabase.from('sale_items').select('*').limit(1500);
-        allSaleItems = allItems || [];
       }
 
       // 2. Invoice Wise Summary

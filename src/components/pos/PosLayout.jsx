@@ -7,7 +7,8 @@ import { supabase } from '../../lib/supabaseClient';
 import PageLoader from '../PageLoader';
 
 const PosLayout = () => {
-  const { user, posTerminal, logout, loading } = useAuth();
+  const { user, posTerminal, logout, loading, hasPosPermission } = useAuth();
+  const [activeStoreName, setActiveStoreName] = useState(posTerminal?.store_name || '');
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const [hamburgerMenuOpen, setHamburgerMenuOpen] = useState(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
@@ -22,6 +23,25 @@ const PosLayout = () => {
   const inventoryMenuRef = useRef(null);
   const reportMenuRef = useRef(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (posTerminal?.store_name) {
+      setActiveStoreName(posTerminal.store_name);
+    } else if (posTerminal?.store_id) {
+      supabase
+        .from('stores')
+        .select('name')
+        .eq('id', posTerminal.store_id)
+        .single()
+        .then(({ data }) => {
+          if (data && data.name) {
+            setActiveStoreName(data.name);
+            const updated = { ...posTerminal, store_name: data.name };
+            localStorage.setItem('erp_pos_terminal', JSON.stringify(updated));
+          }
+        });
+    }
+  }, [posTerminal]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -55,14 +75,25 @@ const PosLayout = () => {
     return <Navigate to="/pos/login" replace />;
   }
 
-  const handleCustomerManagementClick = () => {
+  const handleNavClick = (moduleName, targetPath, callback) => {
     setFileMenuOpen(false);
-    navigate('/pos/customers');
-  };
+    setInventoryMenuOpen(false);
+    setReportMenuOpen(false);
+    setSaleSubmenuOpen(false);
+    setStockSubmenuOpen(false);
+    setHamburgerMenuOpen(false);
 
-  const handleStockSearchClick = () => {
-    setFileMenuOpen(false);
-    navigate('/pos/stock-search');
+    if (moduleName && typeof hasPosPermission === 'function' && !hasPosPermission(moduleName)) {
+      toast.error("You're not authorized to use this module.");
+      return;
+    }
+
+    if (callback) {
+      callback();
+    }
+    if (targetPath) {
+      navigate(targetPath);
+    }
   };
 
   const handleChangePassword = async (e) => {
@@ -171,29 +202,80 @@ const PosLayout = () => {
               <div 
                 style={{ padding: '6px 20px 6px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} 
                 className="pos-menu-item"
-                onClick={handleCustomerManagementClick}
+                onClick={() => handleNavClick('Customer Management', '/pos/customers')}
               >
                 <User size={14} /> Customer Management
               </div>
-              <div style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} className="pos-menu-item">Day Close Session</div>
-              <div style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} className="pos-menu-item">Cash Return</div>
-              <div style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} className="pos-menu-item">Issue Credit Note</div>
-              <div style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} className="pos-menu-item" onClick={handleStockSearchClick}>Stock Search</div>
               <div 
                 style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} 
                 className="pos-menu-item"
-                onClick={() => {
-                  setFileMenuOpen(false);
-                  navigate('/pos/payment-type-change');
-                }}
+                onClick={() => handleNavClick('Day Close Session', null, () => toast('Day Close Session'))}
+              >
+                Day Close Session
+              </div>
+              <div 
+                style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => handleNavClick('Cash Return', null, () => toast('Cash Return'))}
+              >
+                Cash Return
+              </div>
+              <div 
+                style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => handleNavClick('Issue Credit Note', null, () => toast('Issue Credit Note'))}
+              >
+                Issue Credit Note
+              </div>
+              <div 
+                style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} 
+                className="pos-menu-item" 
+                onClick={() => handleNavClick('Stock Search', '/pos/stock-search')}
+              >
+                Stock Search
+              </div>
+              <div 
+                style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => handleNavClick('Invoice Payment Type Change', '/pos/payment-type-change')}
               >
                 Invoice Payment Type Change
               </div>
-              <div style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} className="pos-menu-item">Manual Data Download-Upload</div>
-              <div style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} className="pos-menu-item">Change Password</div>
-              <div style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} className="pos-menu-item">Settings</div>
-              <div style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} className="pos-menu-item">Data Sync</div>
-              <div style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} className="pos-menu-item">Exit</div>
+              <div 
+                style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => handleNavClick('Manual Data Download-Upload', null, () => toast('Manual Data Download-Upload'))}
+              >
+                Manual Data Download-Upload
+              </div>
+              <div 
+                style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => handleNavClick('Change Password', null, () => setPasswordModalOpen(true))}
+              >
+                Change Password
+              </div>
+              <div 
+                style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => handleNavClick('Settings', null, () => toast('Settings module'))}
+              >
+                Settings
+              </div>
+              <div 
+                style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => handleNavClick('Data Sync', null, () => toast('Data Sync module'))}
+              >
+                Data Sync
+              </div>
+              <div 
+                style={{ padding: '6px 20px 6px 32px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => handleNavClick('Exit', null, handleSignOut)}
+              >
+                Exit
+              </div>
             </div>
           )}
         </div>
@@ -238,68 +320,80 @@ const PosLayout = () => {
               <div 
                 style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} 
                 className="pos-menu-item"
-                onClick={() => {
-                  setInventoryMenuOpen(false);
-                  navigate('/pos/requisition');
-                }}
+                onClick={() => handleNavClick('Requisition', '/pos/requisition')}
               >
                 Requisition
               </div>
               <div 
                 style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} 
                 className="pos-menu-item"
-                onClick={() => {
-                  setInventoryMenuOpen(false);
-                  navigate('/pos/requisition-vendorwise');
-                }}
+                onClick={() => handleNavClick('Requisition (Vendorwise)', '/pos/requisition-vendorwise')}
               >
                 Requisition (Vendorwise)
               </div>
               <div 
                 style={{ padding: '4px 20px 4px 32px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} 
                 className="pos-menu-item"
-                onClick={() => {
-                  setInventoryMenuOpen(false);
-                  navigate('/pos/stock-receive');
-                }}
+                onClick={() => handleNavClick('Stock Receive', '/pos/stock-receive')}
               >
                 <Package size={14} /> Stock Receive
               </div>
               <div 
                 style={{ padding: '4px 20px 4px 32px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} 
                 className="pos-menu-item"
-                onClick={() => {
-                  setInventoryMenuOpen(false);
-                  navigate('/pos/stock-transfer');
-                }}
+                onClick={() => handleNavClick('Stock Transfer', '/pos/stock-transfer')}
               >
                 Stock Transfer
               </div>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Stock Transfer By Category</div>
               <div 
                 style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} 
                 className="pos-menu-item"
-                onClick={() => {
-                  setInventoryMenuOpen(false);
-                  navigate('/pos/purchase-receive');
-                }}
+                onClick={() => handleNavClick('Stock Transfer By Category', null, () => toast('Stock Transfer By Category'))}
+              >
+                Stock Transfer By Category
+              </div>
+              <div 
+                style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => handleNavClick('Purchase Receive', '/pos/purchase-receive')}
               >
                 Purchase Receive
               </div>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Purchase Receive By PO</div>
               <div 
                 style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} 
                 className="pos-menu-item"
-                onClick={() => {
-                  setInventoryMenuOpen(false);
-                  navigate('/pos/purchase-return');
-                }}
+                onClick={() => handleNavClick('Purchase Receive By PO', null, () => toast('Purchase Receive By PO'))}
+              >
+                Purchase Receive By PO
+              </div>
+              <div 
+                style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => handleNavClick('Purchase Return', '/pos/purchase-return')}
               >
                 Purchase Return
               </div>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Product Stock Journal</div>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Global Stock Search</div>
-              <div style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} className="pos-menu-item">Discount Circular Search</div>
+              <div 
+                style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => handleNavClick('Product Stock Journal', null, () => toast('Product Stock Journal'))}
+              >
+                Product Stock Journal
+              </div>
+              <div 
+                style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => handleNavClick('Global Stock Search', null, () => toast('Global Stock Search'))}
+              >
+                Global Stock Search
+              </div>
+              <div 
+                style={{ padding: '4px 20px 4px 32px', cursor: 'pointer' }} 
+                className="pos-menu-item"
+                onClick={() => handleNavClick('Discount Circular Search', null, () => toast('Discount Circular Search'))}
+              >
+                Discount Circular Search
+              </div>
             </div>
           )}
         </div>
@@ -345,7 +439,7 @@ const PosLayout = () => {
               <div 
                 style={{ padding: '6px 20px 6px 24px', cursor: 'pointer' }} 
                 className="pos-menu-item"
-                onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/reprint'); }}
+                onClick={() => handleNavClick('Reprint', '/pos/reports/reprint')}
               >
                 Reprint
               </div>
@@ -380,10 +474,10 @@ const PosLayout = () => {
                     borderRadius: '4px',
                     whiteSpace: 'nowrap'
                   }}>
-                    <div className="pos-menu-item" style={{ padding: '6px 20px' }} onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/sale-daily'); }}>Daily Sale Report</div>
-                    <div className="pos-menu-item" style={{ padding: '6px 20px' }} onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/sale-summary'); }}>Summary Sale Report</div>
-                    <div className="pos-menu-item" style={{ padding: '6px 20px' }} onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/sale-itemwise'); }}>Itemwise Sale Report</div>
-                    <div className="pos-menu-item" style={{ padding: '6px 20px' }} onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/sale-payment-type'); }}>Payment Type Sale Report</div>
+                    <div className="pos-menu-item" style={{ padding: '6px 20px' }} onClick={() => handleNavClick('Daily Sale Report', '/pos/reports/sale-daily')}>Daily Sale Report</div>
+                    <div className="pos-menu-item" style={{ padding: '6px 20px' }} onClick={() => handleNavClick('Summary Sale Report', '/pos/reports/sale-summary')}>Summary Sale Report</div>
+                    <div className="pos-menu-item" style={{ padding: '6px 20px' }} onClick={() => handleNavClick('Itemwise Sale Report', '/pos/reports/sale-itemwise')}>Itemwise Sale Report</div>
+                    <div className="pos-menu-item" style={{ padding: '6px 20px' }} onClick={() => handleNavClick('Payment Type Sale Report', '/pos/reports/sale-payment-type')}>Payment Type Sale Report</div>
                   </div>
                 )}
               </div>
@@ -392,7 +486,7 @@ const PosLayout = () => {
               <div 
                 style={{ padding: '6px 20px 6px 24px', cursor: 'pointer' }} 
                 className="pos-menu-item"
-                onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/receive'); }}
+                onClick={() => handleNavClick('Receive Report', '/pos/reports/receive')}
               >
                 Receive
               </div>
@@ -401,7 +495,7 @@ const PosLayout = () => {
               <div 
                 style={{ padding: '6px 20px 6px 24px', cursor: 'pointer' }} 
                 className="pos-menu-item"
-                onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/transfer'); }}
+                onClick={() => handleNavClick('Transfer Report', '/pos/reports/transfer')}
               >
                 Transfer
               </div>
@@ -436,8 +530,8 @@ const PosLayout = () => {
                     borderRadius: '4px',
                     whiteSpace: 'nowrap'
                   }}>
-                    <div className="pos-menu-item" style={{ padding: '6px 20px' }} onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/stock-current'); }}>Current Stock Report</div>
-                    <div className="pos-menu-item" style={{ padding: '6px 20px' }} onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/stock-journal'); }}>Product Stock Journal</div>
+                    <div className="pos-menu-item" style={{ padding: '6px 20px' }} onClick={() => handleNavClick('Current Stock Report', '/pos/reports/stock-current')}>Current Stock Report</div>
+                    <div className="pos-menu-item" style={{ padding: '6px 20px' }} onClick={() => handleNavClick('Product Stock Journal Report', '/pos/reports/stock-journal')}>Product Stock Journal</div>
                   </div>
                 )}
               </div>
@@ -446,7 +540,7 @@ const PosLayout = () => {
               <div 
                 style={{ padding: '6px 20px 6px 24px', cursor: 'pointer', fontWeight: 'bold', color: '#0284c7' }} 
                 className="pos-menu-item"
-                onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/invoice-search'); }}
+                onClick={() => handleNavClick('Invoice Search', '/pos/reports/invoice-search')}
               >
                 Invoice Search
               </div>
@@ -455,7 +549,7 @@ const PosLayout = () => {
               <div 
                 style={{ padding: '6px 20px 6px 24px', cursor: 'pointer' }} 
                 className="pos-menu-item"
-                onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/reprint-log'); }}
+                onClick={() => handleNavClick('Reprint Log', '/pos/reports/reprint-log')}
               >
                 Reprint Log
               </div>
@@ -464,7 +558,7 @@ const PosLayout = () => {
               <div 
                 style={{ padding: '6px 20px 6px 24px', cursor: 'pointer' }} 
                 className="pos-menu-item"
-                onClick={() => { setReportMenuOpen(false); navigate('/pos/reports/discount-circular'); }}
+                onClick={() => handleNavClick('Discount Circular Report', '/pos/reports/discount-circular')}
               >
                 Discount Circular Report
               </div>
@@ -557,7 +651,7 @@ const PosLayout = () => {
               borderBottom: '1px solid #eee'
             }}
             title="Main POS Monitor"
-            onClick={() => navigate('/pos')}
+            onClick={() => handleNavClick('Point of Sale', '/pos')}
           >
             <ShoppingCart size={30} color="var(--accent-primary)" />
           </div>
@@ -572,7 +666,7 @@ const PosLayout = () => {
               borderBottom: '1px solid #eee'
             }}
             title="Stock Receive"
-            onClick={() => navigate('/pos/stock-receive')}
+            onClick={() => handleNavClick('Stock Receive', '/pos/stock-receive')}
           >
             <Package size={30} color="var(--accent-primary)" />
           </div>
@@ -587,7 +681,7 @@ const PosLayout = () => {
               borderBottom: '1px solid #eee'
             }}
             title="Stock Transfer"
-            onClick={() => navigate('/pos/stock-transfer')}
+            onClick={() => handleNavClick('Stock Transfer', '/pos/stock-transfer')}
           >
             <Truck size={30} color="var(--accent-primary)" />
           </div>
@@ -601,7 +695,7 @@ const PosLayout = () => {
               cursor: 'pointer'
             }}
             title="Customer Management"
-            onClick={() => navigate('/pos/customers')}
+            onClick={() => handleNavClick('Customer Management', '/pos/customers')}
           >
             <Settings size={30} color="var(--accent-primary)" />
           </div>
@@ -636,7 +730,7 @@ const PosLayout = () => {
           Developed by: MSM-WEB | Version 1.3.0.0
         </div>
         <div>
-          Terminal: {posTerminal.counter_id} | Store: {posTerminal.store_name}
+          Terminal: {posTerminal.counter_id} | Store: {activeStoreName || posTerminal.store_name || ''}
         </div>
       </div>
 

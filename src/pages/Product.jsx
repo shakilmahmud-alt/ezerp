@@ -239,7 +239,11 @@ const Product = () => {
           const sdcVatCode = String(getFuzzyRowVal(row, ['sdcvatcode', 'sdc_vat_code', 'sdcvat', 'sdc', 'sdccode']) || '10140445').trim() || '10140445';
           
           const rawSaleVat = getFuzzyRowVal(row, ['salevat', 'sale_vat_percent', 'sale_vat', 'vat', 'salevat%']);
-          const saleVatPercent = parseNumberSafe(rawSaleVat) || 7.5;
+          let parsedVat = parseNumberSafe(rawSaleVat);
+          if (parsedVat > 0 && parsedVat <= 1) {
+            parsedVat = Number((parsedVat * 100).toFixed(2));
+          }
+          const saleVatPercent = parsedVat || 7.5;
 
           const purPrice = parseNumberSafe(getFuzzyRowVal(row, ['purchaseprice', 'purchase_price', 'purprice', 'costprice', 'cpu', 'buyprice', 'tp', 'cost']));
           const mrpVal = parseNumberSafe(getFuzzyRowVal(row, ['mrp', 'salesprice', 'saleprice', 'retailprice', 'sellingprice', 'price']));
@@ -486,7 +490,11 @@ const Product = () => {
           vendor_id: vendorObj ? vendorObj.id : null,
           country_of_origin: row.country_of_origin || 'China',
           sdc_vat_code: row.sdc_vat_code || '10140445',
-          sale_vat_percent: row.sale_vat_percent || 7.5,
+          sale_vat_percent: (row.sale_vat_percent && Number(row.sale_vat_percent) > 1) 
+            ? Number(row.sale_vat_percent) 
+            : (row.sale_vat_percent && Number(row.sale_vat_percent) > 0 
+                ? Number((Number(row.sale_vat_percent) * 100).toFixed(2)) 
+                : 7.5),
           retailer_service_type: "Readymade Graments (Other's Brand) : 7.5",
           purchase_price: row.purchase_price || 0,
           mrp: row.mrp || 0,
@@ -1129,10 +1137,10 @@ const Product = () => {
                       <td style={{ padding: '12px' }}>{p.status}</td>
                       <td style={{ padding: '12px' }}>{p.entry_by}</td>
                       <td style={{ padding: '12px' }}>0</td>
-                      <td style={{ padding: '12px' }}>{p.sale_vat_percent}</td>
-                      <td style={{ padding: '12px' }}>{p.purchase_price}</td>
-                      <td style={{ padding: '12px' }}>{p.mrp}</td>
-                      <td style={{ padding: '12px' }}>{p.wsp}</td>
+                      <td style={{ padding: '12px' }}>{Number(p.sale_vat_percent || 0).toFixed(2)}</td>
+                      <td style={{ padding: '12px' }}>{Number(p.purchase_price || 0).toFixed(2)}</td>
+                      <td style={{ padding: '12px' }}>{Number(p.mrp || 0).toFixed(2)}</td>
+                      <td style={{ padding: '12px' }}>{Number(p.wsp || 0).toFixed(2)}</td>
                       {canEdit && (
                         <td style={{ padding: '12px', textAlign: 'center' }}>
                            <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
@@ -1329,7 +1337,17 @@ const Product = () => {
 
                   <div>
                     <label style={{ fontSize: '0.85rem', display: 'block', marginBottom: '5px', color: 'var(--accent-primary)' }}>Retailer Service Type</label>
-                    <CustomSelect className="input-animated" value={formData.retailer_service_type} onChange={e => setFormData({...formData, retailer_service_type: e.target.value})} disabled={isLoading}>
+                    <CustomSelect 
+                      className="input-animated" 
+                      value={formData.retailer_service_type} 
+                      onChange={e => {
+                        const val = e.target.value;
+                        const match = val.match(/:\s*([0-9.]+)/);
+                        const vat = match ? match[1] : formData.sale_vat_percent;
+                        setFormData({...formData, retailer_service_type: val, sale_vat_percent: vat});
+                      }} 
+                      disabled={isLoading}
+                    >
                       <option value="Readymade Graments (Other's Brand) : 7.5">Readymade Graments (Other's Brand) : 7.5</option>
                       <option value="Zero VAT % : 0">Zero VAT % : 0</option>
                     </CustomSelect>

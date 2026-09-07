@@ -154,21 +154,17 @@ const ShopwiseSalesAnalysisReport = () => {
         itemsBySaleId.get(key).push(it);
       });
 
-      // Filter sales by date and store
+      // Filter sales strictly by date and store
       let filteredSales = allSalesList.filter(s => {
         if (sType === 'Store' && sStore && String(s.store_id) !== String(sStore)) {
           return false;
         }
         const sDateStr = (s.created_at || s.sale_date || '').slice(0, 10);
-        if (fDate && sDateStr && sDateStr < fDate) return false;
-        if (tDate && sDateStr && sDateStr > tDate) return false;
+        if (!sDateStr) return false;
+        if (fDate && sDateStr < fDate) return false;
+        if (tDate && sDateStr > tDate) return false;
         return true;
       });
-
-      // If strict date filter returned 0 (e.g. testing dates), fallback to all sales
-      if (filteredSales.length === 0 && allSalesList.length > 0) {
-        filteredSales = allSalesList;
-      }
 
       // Extract all line items with shop metadata
       let allLineItems = [];

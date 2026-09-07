@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import toast from 'react-hot-toast';
-import { Check, X, ChevronDown, Printer, Edit } from 'lucide-react';
+import { Check, X, ChevronDown, Printer, Edit, Award, Search } from 'lucide-react';
 import { Country, City } from 'country-state-city';
 import JsBarcode from 'jsbarcode';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import CustomSelect from '../components/CustomSelect';
+import { getAllCustomersPointsMap } from '../utils/customerPoints';
 
 const initialFormState = {
   customer_type_id: '',
@@ -56,9 +57,26 @@ const CustomerEntry = () => {
   const [stores, setStores] = useState([]);
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [printingCustomer, setPrintingCustomer] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [pointPolicy, setPointPolicy] = useState({ spend_amount: 100 });
   
   const barcodeRef = useRef(null);
   const printCardRef = useRef(null);
+
+  const filteredCustomers = customers.filter(c => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    const fullName = `${c.first_name || ''} ${c.middle_name || ''} ${c.last_name || ''}`.toLowerCase();
+    return (
+      fullName.includes(term) ||
+      (c.code && String(c.code).toLowerCase().includes(term)) ||
+      (c.card_no && String(c.card_no).toLowerCase().includes(term)) ||
+      (c.contact_no && String(c.contact_no).toLowerCase().includes(term)) ||
+      (c.email && String(c.email).toLowerCase().includes(term)) ||
+      (c.city && String(c.city).toLowerCase().includes(term)) ||
+      (c.customer_type?.name && String(c.customer_type.name).toLowerCase().includes(term))
+    );
+  });
 
   useEffect(() => {
     setCountries(Country.getAllCountries());
@@ -91,7 +109,7 @@ const CustomerEntry = () => {
 
   const fetchCustomerTypes = async () => {
     try {
-      const { data, error } = await supabase.from('customer_types').select('id, name');
+      const { data, error } = await supabase.from('customer_types').select('id, name, earning_point, discount_percent');
       if (error) throw error;
       setCustomerTypes(data || []);
     } catch (err) {
@@ -111,15 +129,41 @@ const CustomerEntry = () => {
 
   const fetchCustomers = async () => {
     try {
-      const { data, error } = await supabase
-        .from('customers')
-        .select(`
-          *,
-          customer_type:customer_types(name)
-        `)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      setCustomers(data || []);
+      const [custRes, pointsRes] = await Promise.all([
+        supabase
+          .from('customers')
+          .select(`
+            *,
+            customer_type:customer_types(id, name, earning_point, discount_percent)
+          `)
+          .order('created_at', { ascending: false }),
+        getAllCustomersPointsMap()
+      ]);
+
+      if (custRes.error) throw custRes.error;
+      const pointsMap = pointsRes.pointsMap || {};
+      const globalPolicy = pointsRes.globalPolicy || { spend_amount: 100 };
+      setPointPolicy(globalPolicy);
+
+      const merged = (custRes.data || []).map(c => {
+        const pInfo = pointsMap[c.id] || {
+          total_earn_point: 0,
+          total_redeem_point: 0,
+          balance_point: 0,
+          earning_rate: c.customer_type?.earning_point || 0,
+          spend_unit: globalPolicy.spend_amount || 100
+        };
+        return {
+          ...c,
+          total_earn_point: pInfo.total_earn_point,
+          total_redeem_point: pInfo.total_redeem_point,
+          balance_point: pInfo.balance_point,
+          earning_rate: pInfo.earning_rate,
+          spend_unit: pInfo.spend_unit
+        };
+      });
+
+      setCustomers(merged);
     } catch (err) {
       console.error(err);
       toast.error('Failed to fetch Customers');
@@ -288,7 +332,9 @@ const CustomerEntry = () => {
                 <CustomSelect style={inputStyle} value={formData.customer_type_id} onChange={e => setFormData({...formData, customer_type_id: e.target.value})}>
                   <option value="">Select a Type</option>
                   {customerTypes.map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
+                    <option key={t.id} value={t.id}>
+                      {t.name} {t.earning_point ? `(${t.earning_point} pts / ${pointPolicy.spend_amount || 100} Tk)` : ''} {t.discount_percent ? `[${t.discount_percent}% Disc]` : ''}
+                    </option>
                   ))}
                 </CustomSelect>
               </div>
@@ -586,12 +632,24 @@ const CustomerEntry = () => {
       </div>
 
       <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--card-bg)' }}>
-        <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--border-color)' }}>
-          <input type="text" placeholder="Search..." style={{ padding: '8px', width: '200px', border: '1px solid var(--border-color)', borderRadius: '4px' }} />
+        <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '15px' }}>
+          <div style={{ position: 'relative', width: '280px' }}>
+            <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+            <input 
+              type="text" 
+              placeholder="Search by code, name, phone, type..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{ padding: '8px 10px 8px 34px', width: '100%', border: '1px solid var(--border-color)', borderRadius: '4px', fontSize: '0.85rem', outline: 'none' }} 
+            />
+          </div>
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+            Total Customers: <strong style={{ color: 'var(--text-primary)' }}>{filteredCustomers.length}</strong>
+          </div>
         </div>
         
         <div style={{ overflowX: 'auto', minHeight: '300px', paddingBottom: '50px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left', minWidth: '1500px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left', minWidth: '1700px' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)', backgroundColor: '#f8fafc' }}>
                 <th style={{ padding: '12px 10px' }}>SL</th>
@@ -604,6 +662,10 @@ const CustomerEntry = () => {
                 <th style={{ padding: '12px 10px' }}>Email</th>
                 <th style={{ padding: '12px 10px' }}>City</th>
                 <th style={{ padding: '12px 10px' }}>Customer Type</th>
+                <th style={{ padding: '12px 10px' }}>Earning Policy</th>
+                <th style={{ padding: '12px 10px', textAlign: 'right' }}>Earn Point</th>
+                <th style={{ padding: '12px 10px', textAlign: 'right' }}>Redeem Point</th>
+                <th style={{ padding: '12px 10px', textAlign: 'right', color: '#2e7d32' }}>Balance Point</th>
                 <th style={{ padding: '12px 10px' }}>Dis. Percent</th>
                 <th style={{ padding: '12px 10px' }}>Postal Code</th>
                 <th style={{ padding: '12px 10px' }}>Wholesale Customer</th>
@@ -615,25 +677,60 @@ const CustomerEntry = () => {
               </tr>
             </thead>
             <tbody>
-              {customers.map((c, idx) => (
+              {filteredCustomers.map((c, idx) => (
                 <tr key={c.id} style={{ borderBottom: '1px solid #eee' }}>
                   <td style={{ padding: '10px' }}>{idx + 1}</td>
-                  <td style={{ padding: '10px' }}>{c.code}</td>
+                  <td style={{ padding: '10px', fontWeight: 'bold' }}>{c.code}</td>
                   <td style={{ padding: '10px' }}>{c.card_no}</td>
                   <td style={{ padding: '10px' }}>{c.first_name}</td>
-                  <td style={{ padding: '10px' }}>{c.middle_name}</td>
-                  <td style={{ padding: '10px' }}>{c.last_name}</td>
+                  <td style={{ padding: '10px' }}>{c.middle_name || '-'}</td>
+                  <td style={{ padding: '10px' }}>{c.last_name || '-'}</td>
                   <td style={{ padding: '10px' }}>{c.contact_no}</td>
-                  <td style={{ padding: '10px' }}>{c.email}</td>
-                  <td style={{ padding: '10px' }}>{c.city}</td>
-                  <td style={{ padding: '10px' }}>{c.customer_type?.name}</td>
-                  <td style={{ padding: '10px' }}>{c.discount_percent}</td>
-                  <td style={{ padding: '10px' }}>{c.postal_code}</td>
+                  <td style={{ padding: '10px' }}>{c.email || '-'}</td>
+                  <td style={{ padding: '10px' }}>{c.city || '-'}</td>
+                  <td style={{ padding: '10px' }}>
+                    <span style={{ fontWeight: 600, color: '#0d47a1' }}>{c.customer_type?.name || '-'}</span>
+                  </td>
+                  <td style={{ padding: '10px', color: '#555' }}>
+                    {c.earning_rate ? `${c.earning_rate} pts / ${c.spend_unit || 100} Tk` : '0 pts'}
+                  </td>
+                  <td style={{ padding: '10px', textAlign: 'right', fontWeight: 'bold' }}>
+                    {c.total_earn_point || 0}
+                  </td>
+                  <td style={{ padding: '10px', textAlign: 'right', color: '#d32f2f' }}>
+                    {c.total_redeem_point || 0}
+                  </td>
+                  <td style={{ padding: '10px', textAlign: 'right' }}>
+                    <span style={{ 
+                      backgroundColor: (c.balance_point > 0) ? '#e8f5e9' : '#f5f5f5', 
+                      color: (c.balance_point > 0) ? '#2e7d32' : '#757575',
+                      padding: '4px 10px',
+                      borderRadius: '12px',
+                      fontWeight: 'bold',
+                      display: 'inline-block',
+                      border: (c.balance_point > 0) ? '1px solid #c8e6c9' : '1px solid #e0e0e0'
+                    }}>
+                      {c.balance_point || 0}
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px' }}>{c.discount_percent || 0}%</td>
+                  <td style={{ padding: '10px' }}>{c.postal_code || '-'}</td>
                   <td style={{ padding: '10px' }}><BooleanText value={c.wholesale_customer} /></td>
                   <td style={{ padding: '10px' }}><BooleanText value={c.sale_without_vat} /></td>
                   <td style={{ padding: '10px' }}><BooleanText value={c.credit_customer} /></td>
-                  <td style={{ padding: '10px' }}>{c.credit_limit}</td>
-                  <td style={{ padding: '10px' }}>{c.inactive ? 'INACTIVE' : 'ACTIVE'}</td>
+                  <td style={{ padding: '10px' }}>{c.credit_limit || 0}</td>
+                  <td style={{ padding: '10px' }}>
+                    <span style={{
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      fontSize: '0.75rem',
+                      fontWeight: 'bold',
+                      backgroundColor: c.inactive ? '#ffebee' : '#e8f5e9',
+                      color: c.inactive ? '#c62828' : '#2e7d32'
+                    }}>
+                      {c.inactive ? 'INACTIVE' : 'ACTIVE'}
+                    </span>
+                  </td>
                   
                   {/* Action dropdown on far right */}
                   <td style={{ padding: '10px', textAlign: 'right', position: 'relative' }}>
@@ -663,9 +760,9 @@ const CustomerEntry = () => {
                   </td>
                 </tr>
               ))}
-              {customers.length === 0 && (
+              {filteredCustomers.length === 0 && (
                 <tr>
-                  <td colSpan="18" style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)' }}>
+                  <td colSpan="22" style={{ textAlign: 'center', padding: '25px', color: 'var(--text-secondary)' }}>
                     No Customers Found
                   </td>
                 </tr>

@@ -179,13 +179,24 @@ const PosInvoiceSearch = () => {
 
     const finalY = doc.lastAutoTable.finalY || 60;
     doc.setFontSize(8);
-    doc.text(`Subtotal: Tk ${Number(sale.total_amount || sale.sub_total || 0).toFixed(2)}`, 75, finalY + 5, { align: 'right' });
-    doc.text(`Discount: Tk ${Number(sale.discount_amount || 0).toFixed(2)}`, 75, finalY + 10, { align: 'right' });
-    doc.text(`Net Payable: Tk ${Number(sale.net_amount || sale.net_payable || 0).toFixed(2)}`, 75, finalY + 15, { align: 'right' });
-    doc.text(`Paid: Tk ${Number(sale.paid_amount || 0).toFixed(2)}`, 75, finalY + 20, { align: 'right' });
-    doc.text(`Change: Tk ${Number(sale.change_amount || 0).toFixed(2)}`, 75, finalY + 25, { align: 'right' });
+    let curY = finalY + 5;
+    doc.text(`Gross Total: Tk ${Number(sale.total_amount || sale.sub_total || 0).toFixed(2)}`, 75, curY, { align: 'right' });
+    if (Number(sale.vat_amount || 0) > 0) {
+      curY += 4;
+      doc.text(`VAT: Tk ${Number(sale.vat_amount || 0).toFixed(2)}`, 75, curY, { align: 'right' });
+    }
+    if (Number(sale.discount_amount || 0) > 0) {
+      curY += 4;
+      doc.text(`Discount: Tk ${Number(sale.discount_amount || 0).toFixed(2)}`, 75, curY, { align: 'right' });
+    }
+    curY += 4;
+    doc.text(`Net Payable: Tk ${Number(sale.net_amount || sale.net_payable || 0).toFixed(2)}`, 75, curY, { align: 'right' });
+    curY += 4;
+    doc.text(`Paid: Tk ${Number(sale.paid_amount || 0).toFixed(2)}`, 75, curY, { align: 'right' });
+    curY += 4;
+    doc.text(`Change: Tk ${Number(sale.change_amount || 0).toFixed(2)}`, 75, curY, { align: 'right' });
 
-    doc.text('Thank you for shopping with us!', 40, finalY + 33, { align: 'center' });
+    doc.text('Thank you for shopping with us!', 40, curY + 8, { align: 'center' });
 
     doc.save(`Invoice_${sale.invoice_no}.pdf`);
     toast.success('Invoice receipt downloaded!');
@@ -550,6 +561,9 @@ const PosInvoiceSearch = () => {
 
                 <div style={{ textAlign: 'right', fontSize: '12px' }}>
                   <div>Gross Amount: <b>Tk {Number(selectedSale.total_amount || selectedSale.sub_total || 0).toFixed(2)}</b></div>
+                  {Number(selectedSale.vat_amount || 0) > 0 && (
+                    <div>VAT: <b style={{ color: '#0369a1' }}>+ Tk {Number(selectedSale.vat_amount || 0).toFixed(2)}</b></div>
+                  )}
                   <div>Discount: <b style={{ color: '#dc2626' }}>- Tk {Number(selectedSale.discount_amount || 0).toFixed(2)}</b></div>
                   <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#166534', marginTop: '4px' }}>Net Payable: Tk {Number(selectedSale.net_amount || selectedSale.net_payable || 0).toFixed(2)}</div>
                   <div>Paid: <b>Tk {Number(selectedSale.paid_amount || 0).toFixed(2)}</b> | Change: <b>Tk {Number(selectedSale.change_amount || 0).toFixed(2)}</b></div>

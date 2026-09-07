@@ -360,21 +360,17 @@ const ItemwiseSaleReport = () => {
         paymentsBySaleId.get(key).push(pm);
       });
 
-      // Filter sales by date and store
+      // Filter sales strictly by date and store
       let filteredSales = allSalesList.filter(s => {
         if (sType === 'Store' && sStore && String(s.store_id) !== String(sStore)) {
           return false;
         }
         const sDateStr = getFormattedDate(s.created_at || s.sale_date);
-        if (fDate && sDateStr && sDateStr < fDate) return false;
-        if (tDate && sDateStr && sDateStr > tDate) return false;
+        if (!sDateStr) return false;
+        if (fDate && sDateStr < fDate) return false;
+        if (tDate && sDateStr > tDate) return false;
         return true;
       });
-
-      // Fallback: If 0 sales match strict date, but allSalesList exists and user is just viewing default, fallback
-      if (filteredSales.length === 0 && allSalesList.length > 0 && !sStore && sType === 'ALL') {
-        filteredSales = allSalesList;
-      }
 
       // Extract all line items
       let allLineItems = [];

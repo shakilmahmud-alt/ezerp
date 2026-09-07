@@ -222,8 +222,8 @@ const PosPurchaseReceive = () => {
   const calculateRow = (item) => {
     const rcvQty = Number(item.rcvQty || 0);
     const purPrice = Number(item.purPrice || 0);
-    const discPercent = Number(item.discPercent || 0);
-    const vatPercent = Number(item.sale_vat_percent || 0);
+    const rawVat = Number(item.sale_vat_percent || 0);
+    const vatPercent = (rawVat > 0 && rawVat <= 1) ? Number((rawVat * 100).toFixed(2)) : rawVat;
 
     const value = purPrice * rcvQty;
     const discAmt = value * (discPercent / 100);

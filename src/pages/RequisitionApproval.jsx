@@ -148,75 +148,189 @@ const RequisitionApproval = () => {
   };
 
   const generatePDF = (req, items) => {
-    const doc = new jsPDF('portrait');
-    const pageWidth = doc.internal.pageSize.width;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
 
-    // Header
+    // 1. Top Green Banner
+    doc.setFillColor(46, 111, 64);
+    doc.rect(0, 0, pageWidth, 22, 'F');
+
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('REQUISITION CHALLAN', pageWidth - 14, 20, { align: 'right' });
-    
-    doc.setFontSize(12);
-    doc.text(req.shop_name || '', 14, 25);
-    
-    doc.setFontSize(10);
-    doc.text(`VENDOR: ${req.vendor || 'ANY'}`, 14, 35);
-    
-    doc.text(`REQUISITION NO# ${req.requisition_no}`, pageWidth - 14, 30, { align: 'right' });
-    const reqDate = new Date(req.requisition_date).toLocaleDateString('en-GB', {
-      day: '2-digit', month: 'short', year: 'numeric'
-    });
-    doc.text(`DATE# ${reqDate}`, pageWidth - 14, 38, { align: 'right' });
+    doc.setTextColor(255, 255, 255);
+    doc.text("EZ ERP MANAGEMENT INFORMATION SYSTEM (MIS)", 14, 11);
 
-    // Table
-    const headers = [
-      'CODE', 'BARCODE', 'NAME', 'STYLE', 'CATEGORY', 
-      'CARTON SIZE', 'CPU', 'MRP', 'APPROVED QTY', 'AVG DAY SALE'
-    ];
+    doc.setFontSize(9.5);
+    doc.setFont("helvetica", "normal");
+    doc.text("CENTRAL INVENTORY & POS SALES ANALYTICS", 14, 17);
 
-    const body = items
-      .filter(item => item.is_approved !== false)
-      .map(item => [
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("STORE REQUISITION CHALLAN", pageWidth - 14, 14, { align: 'right' });
+
+    // User info
+    const loggedInUser = JSON.parse(localStorage.getItem('erp_user') || '{}');
+    const preparedByName = 
+      req.prepared_by ||
+      loggedInUser?.user_metadata?.full_name || 
+      loggedInUser?.user_metadata?.name || 
+      loggedInUser?.full_name || 
+      loggedInUser?.name || 
+      loggedInUser?.username || 
+      (loggedInUser?.email ? loggedInUser.email.split('@')[0] : 'Super Admin');
+
+    const reqDate = req.requisition_date 
+      ? new Date(req.requisition_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+    // 2. Metadata Section below Banner
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(50, 50, 50);
+
+    doc.text(`Requisition No: ${req.requisition_no} | Date: ${reqDate}`, 14, 30);
+    doc.text(`Store / Branch: ${req.shop_name || 'All'} | Vendor: ${req.vendor || 'ANY'} | Status: ${req.status || 'Approved'}`, 14, 35);
+    doc.text(`Generated On: ${new Date().toLocaleString()}`, pageWidth - 14, 30, { align: 'right' });
+    doc.text(`Printed By: ${preparedByName}`, pageWidth - 14, 35, { align: 'right' });
+
+    // 3. Table
+    const headers = ['SL', 'Code', 'Barcode', 'Product Name', 'Category', 'CPU (Tk)', 'MRP (Tk)', 'Central Stock', 'Branch Stock', 'Req Qty', 'App Qty', 'Cost Value (Tk)'];
+    
+    let totalReqQty = 0;
+    let totalAppQty = 0;
+    let totalCostValue = 0;
+
+    const validItems = items.filter(item => item.is_approved !== false);
+
+    const body = validItems.map((item, idx) => {
+      const cpu = parseFloat(item.cpu || 0);
+      const mrp = parseFloat(item.mrp || 0);
+      const cs = parseFloat(item.stock_in_cs || 0);
+      const bs = parseFloat(item.bal_qty || 0);
+      const rQty = parseFloat(item.req_qty || 0);
+      const appQty = parseFloat(item.app_qty !== undefined ? item.app_qty : item.req_qty || 0);
+      const costVal = parseFloat(item.cost_value || (cpu * appQty) || 0);
+
+      totalReqQty += rQty;
+      totalAppQty += appQty;
+      totalCostValue += costVal;
+
+      return [
+        idx + 1,
         item.product_code || '',
         item.barcode || '',
         item.product_name || '',
-        item.style || '----',
         item.category || '',
-        parseFloat(item.carton_size || 1).toFixed(2),
-        item.cpu || 0,
-        item.mrp || 0,
-        parseFloat(item.app_qty || 0).toFixed(2),
-        parseFloat(item.avg_days_sale || 0).toFixed(2)
-      ]);
+        cpu.toFixed(2),
+        mrp.toFixed(2),
+        cs.toFixed(2),
+        bs.toFixed(2),
+        rQty,
+        appQty,
+        costVal.toFixed(2)
+      ];
+    });
+
+    // Total summary row
+    body.push([
+      'Total',
+      '',
+      '',
+      `${validItems.length} Items`,
+      '',
+      '',
+      '',
+      '',
+      '',
+      totalReqQty,
+      totalAppQty,
+      totalCostValue.toFixed(2)
+    ]);
 
     autoTable(doc, {
-      startY: 45,
       head: [headers],
       body: body,
-      theme: 'plain',
+      startY: 40,
+      theme: 'grid',
       styles: {
-        fontSize: 8,
-        cellPadding: 1,
-        lineWidth: 0.1,
-        lineColor: [0, 0, 0],
+        fontSize: 7.5,
+        cellPadding: 2,
+        valign: 'middle',
+        overflow: 'linebreak',
+        textColor: [50, 50, 50]
       },
       headStyles: {
+        fillColor: [46, 111, 64],
+        textColor: [255, 255, 255],
         fontStyle: 'bold',
-        fillColor: [255, 255, 255],
-        textColor: [0, 0, 0],
-        lineWidth: 0.5,
         halign: 'center'
       },
       columnStyles: {
-        5: { halign: 'right' },
-        6: { halign: 'right' },
-        7: { halign: 'right' },
-        8: { halign: 'right' },
-        9: { halign: 'right' },
-      }
+        0: { halign: 'center', cellWidth: 10 },
+        1: { halign: 'center', cellWidth: 20 },
+        2: { halign: 'center', cellWidth: 24 },
+        3: { halign: 'left', cellWidth: 'auto' },
+        4: { halign: 'left', cellWidth: 20 },
+        5: { halign: 'right', cellWidth: 20 },
+        6: { halign: 'right', cellWidth: 20 },
+        7: { halign: 'right', cellWidth: 22 },
+        8: { halign: 'right', cellWidth: 22 },
+        9: { halign: 'right', cellWidth: 18 },
+        10: { halign: 'right', fontStyle: 'bold', cellWidth: 18 },
+        11: { halign: 'right', fontStyle: 'bold', cellWidth: 26 }
+      },
+      didParseCell: function (data) {
+        if (data.section === 'head') {
+          if (data.column.index === 0) data.cell.styles.halign = 'center';
+          if (data.column.index === 1 || data.column.index === 2) data.cell.styles.halign = 'center';
+          if (data.column.index === 3 || data.column.index === 4) data.cell.styles.halign = 'left';
+          if (data.column.index >= 5) data.cell.styles.halign = 'right';
+        }
+        if (data.row.index === body.length - 1) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [240, 245, 240];
+          data.cell.styles.textColor = [10, 60, 20];
+        }
+      },
+      margin: { top: 10, left: 14, right: 14 }
     });
 
-    doc.save(`${req.requisition_no}.pdf`);
+    // 4. Bottom Signatures
+    const finalY = doc.lastAutoTable?.finalY || 100;
+    const sigY = Math.max(finalY + 22, pageHeight - 24);
+
+    doc.setDrawColor(160, 174, 192);
+
+    // Prepared By (Left)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text(preparedByName, 47.5, sigY - 2.5, { align: 'center' });
+
+    doc.line(20, sigY, 75, sigY);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Prepared By', 47.5, sigY + 5, { align: 'center' });
+
+    // Checked By (Middle)
+    doc.line(pageWidth / 2 - 27.5, sigY, pageWidth / 2 + 27.5, sigY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
+
+    // Authorized Signature (Right)
+    doc.line(pageWidth - 75, sigY, pageWidth - 20, sigY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Authorized Signature', pageWidth - 47.5, sigY + 5, { align: 'center' });
+
+    doc.save(`${req.requisition_no}_Challan.pdf`);
+    toast.success(`Downloaded ${req.requisition_no} PDF!`);
   };
 
   const filteredRequisitions = requisitions.filter(r => 

@@ -245,9 +245,9 @@ const ProductQuickSearch = () => {
       'Dhn': getStoreStock(p, 'dhanmondi'),
       'Gul 1': getStoreStock(p, 'gulshan'),
       'Uttara': getStoreStock(p, 'uttara'),
-      'VAT(%)': p.sale_vat_percent || 0,
-      CPU: p.purchase_price,
-      MRP: p.mrp,
+      'VAT(%)': Number(p.sale_vat_percent || 0).toFixed(2),
+      CPU: Number(p.purchase_price || 0).toFixed(2),
+      MRP: Number(p.mrp || 0).toFixed(2),
       'Profit(%) On TP': calculateProfitTP(p),
       'Profit(%) On MRP': calculateProfitMRP(p)
     }));
@@ -448,9 +448,9 @@ const ProductQuickSearch = () => {
                     <td style={{ padding: '12px', textAlign: 'center', fontWeight: 'bold', backgroundColor: 'rgba(46,111,64,0.03)' }}>
                       {getStoreStock(p, 'uttara')}
                     </td>
-                    <td style={{ padding: '12px' }}>{p.sale_vat_percent || 0}</td>
-                    <td style={{ padding: '12px' }}>{p.purchase_price}</td>
-                    <td style={{ padding: '12px' }}>{p.mrp}</td>
+                    <td style={{ padding: '12px' }}>{Number(p.sale_vat_percent || 0).toFixed(2)}</td>
+                    <td style={{ padding: '12px' }}>{Number(p.purchase_price || 0).toFixed(2)}</td>
+                    <td style={{ padding: '12px' }}>{Number(p.mrp || 0).toFixed(2)}</td>
                     <td style={{ padding: '12px' }}>{calculateProfitTP(p)}</td>
                     <td style={{ padding: '12px' }}>{calculateProfitMRP(p)}</td>
                   </tr>

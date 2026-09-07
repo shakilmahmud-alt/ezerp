@@ -2,84 +2,84 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import toast from 'react-hot-toast';
 import CustomSelect from '../../components/CustomSelect';
+import { ShieldCheck, CheckSquare, Square } from 'lucide-react';
 
-const PERMISSIONS = [
-  // Column 1
-  "Stock Search",
-  "Invoice Reprint",
-  "Software Settings",
-  "Global Stock Search",
-  "Daily Cash Transaction",
-  "Session Close",
-  "Day Close Session",
-  "Exchange",
-  "Stock Receive",
-  "Customer Management",
-  "Stock Requisition",
-  "Stock Transfer",
-  "Point of Sale",
-  "Void",
-  "Cash Return",
-  
-  // Column 2
-  "Customer Edit",
-  "Point Redeem",
-  "Stock Sync",
-  "Cash Flow Entry",
-  "Special Discount",
-  "Show Cost Price",
-  "Manual Data Download",
-  "Daily Declaration Posting",
-  "Hold Recall",
-  "Other Declaration Description",
-  "Issue Credit Note",
-  "Product Stock Journal",
-  "Cancel Invoice",
-  "Credit Reconciliation",
-  "Payment Type Change",
-  
-  // Column 3
-  "Remove Item",
-  "Invoice Discount",
-  "Purchase Receive",
-  "Purchase Return",
-  "Discount Report",
-  "Product Expiry",
-  "Executive Wise Sale",
-  "Terminal Brandwise Sale",
-  "Discount Circular",
-  "Vendorwise Sale",
-  "Pending Sales",
-  "Reprint Log",
-  "Stock Adjustment Report",
-  "Scan Item Update Remove Log",
-  "Cash Closing Report",
-
-  // Column 4
-  "Cash Declaration Report",
-  "MVAT Report",
-  "Product Delivery Report",
-  "Product Receive Report",
-  "Invoice Search",
-  "Sale Stock Report",
-  "Attributewise Stock Report",
-  "Stock Report",
-  "VAT Report",
-  "Brandwise Sale",
-  "Itemwise Sale",
-  "Invoicewise Sale Customer",
-  "Invoicewise Sale Counter",
-  "Invoicewise Sale",
-  "Reprint",
-
-  // Column 5
-  "Day Close Report",
-  "Inv Adjustment",
-  "Inv Report View",
-  "Inv Final Post",
-  "Inv Scan Barcode",
-  "Inv Prepare Season"
+export const POS_MODULE_GROUPS = [
+  {
+    groupName: "File Menu",
+    icon: "📁",
+    modules: [
+      "Customer Management",
+      "Day Close Session",
+      "Cash Return",
+      "Issue Credit Note",
+      "Stock Search",
+      "Invoice Payment Type Change",
+      "Manual Data Download-Upload",
+      "Change Password",
+      "Settings",
+      "Data Sync"
+    ]
+  },
+  {
+    groupName: "Inventory Menu",
+    icon: "📦",
+    modules: [
+      "Requisition",
+      "Requisition (Vendorwise)",
+      "Stock Receive",
+      "Stock Transfer",
+      "Stock Transfer By Category",
+      "Purchase Receive",
+      "Purchase Receive By PO",
+      "Purchase Return",
+      "Product Stock Journal",
+      "Global Stock Search",
+      "Discount Circular Search"
+    ]
+  },
+  {
+    groupName: "Report Menu",
+    icon: "📊",
+    modules: [
+      "Reprint",
+      "Daily Sale Report",
+      "Summary Sale Report",
+      "Itemwise Sale Report",
+      "Payment Type Sale Report",
+      "Receive Report",
+      "Transfer Report",
+      "Current Stock Report",
+      "Product Stock Journal Report",
+      "Invoice Search",
+      "Reprint Log",
+      "Discount Circular Report"
+    ]
+  },
+  {
+    groupName: "POS Operations & Actions",
+    icon: "⚡",
+    modules: [
+      "Point of Sale",
+      "Change Quantity (F2)",
+      "Exchange / Debit Note (F3)",
+      "Remove Item (F4)",
+      "Hold Invoice (F6)",
+      "Recall Invoice (F7)",
+      "Return (F8)",
+      "Cancel Invoice (F10)",
+      "Item Level Discount (F11)",
+      "Invoice Discount (F12)",
+      "Promotion Details",
+      "VOID Invoice",
+      "Reprint Invoice",
+      "Pay Now / Checkout"
+    ]
+  }
 ];
+
+// Flat list of all modules
+export const ALL_POS_MODULES = POS_MODULE_GROUPS.flatMap(g => g.modules);
 
 const PosDistribution = () => {
   const [stores, setStores] = useState([]);
@@ -89,6 +89,7 @@ const PosDistribution = () => {
   
   const [selectedPermissions, setSelectedPermissions] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [loadingPerms, setLoadingPerms] = useState(false);
 
   useEffect(() => {
     fetchStoresAndEmployees();
@@ -119,6 +120,7 @@ const PosDistribution = () => {
   };
 
   const fetchExistingPermissions = async () => {
+    setLoadingPerms(true);
     try {
       const { data, error } = await supabase
         .from('pos_user_permissions')
@@ -131,13 +133,15 @@ const PosDistribution = () => {
         throw error;
       }
       
-      if (data && data.permissions) {
+      if (data && Array.isArray(data.permissions)) {
         setSelectedPermissions(data.permissions);
       } else {
         setSelectedPermissions([]);
       }
     } catch (err) {
       console.error('Error fetching permissions:', err);
+    } finally {
+      setLoadingPerms(false);
     }
   };
 
@@ -153,13 +157,24 @@ const PosDistribution = () => {
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedPermissions(PERMISSIONS);
+      setSelectedPermissions(ALL_POS_MODULES);
     } else {
       setSelectedPermissions([]);
     }
   };
 
-  const isAllSelected = selectedPermissions.length === PERMISSIONS.length && PERMISSIONS.length > 0;
+  const handleGroupToggle = (groupModules) => {
+    const allInGroupSelected = groupModules.every(m => selectedPermissions.includes(m));
+    if (allInGroupSelected) {
+      // Unselect this group
+      setSelectedPermissions(prev => prev.filter(p => !groupModules.includes(p)));
+    } else {
+      // Select all in this group
+      setSelectedPermissions(prev => Array.from(new Set([...prev, ...groupModules])));
+    }
+  };
+
+  const isAllSelected = selectedPermissions.length === ALL_POS_MODULES.length && ALL_POS_MODULES.length > 0;
 
   const handleSave = async () => {
     if (!selectedStore || !selectedUser) {
@@ -201,7 +216,7 @@ const PosDistribution = () => {
         if (error) throw error;
       }
       
-      toast.success('Permissions saved successfully!');
+      toast.success('POS user permissions saved successfully!');
     } catch (err) {
       console.error('Error saving permissions:', err);
       toast.error('Failed to save permissions');
@@ -210,34 +225,34 @@ const PosDistribution = () => {
     }
   };
 
-  // Group permissions into 5 columns
-  const colSize = 15;
-  const columns = [
-    PERMISSIONS.slice(0, colSize),
-    PERMISSIONS.slice(colSize, colSize * 2),
-    PERMISSIONS.slice(colSize * 2, colSize * 3),
-    PERMISSIONS.slice(colSize * 3, colSize * 4),
-    PERMISSIONS.slice(colSize * 4, PERMISSIONS.length)
-  ];
-
   return (
     <div className="animate-fade-in" style={{ padding: '20px', backgroundColor: 'var(--bg-color)', minHeight: '100vh', fontSize: '13px' }}>
       
-      <div style={{ marginBottom: '20px', paddingBottom: '10px', borderBottom: '2px solid #aebac9', padding: '15px 0' }}>
-        <h2 style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#444' }}>
-          POS User Menu Distribution
-        </h2>
+      {/* Header */}
+      <div style={{ marginBottom: '20px', paddingBottom: '10px', borderBottom: '2px solid #aebac9', padding: '15px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <ShieldCheck size={22} color="var(--accent-primary, #2e6f40)" />
+            POS User Menu Distribution
+          </h2>
+          <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '12px' }}>
+            Assign menu and module authorizations for store POS users. Unchecked modules will be blocked with an authorization alert.
+          </p>
+        </div>
       </div>
 
-      <div style={{ padding: '15px 0', borderBottom: '1px solid #e5e7eb', marginBottom: '30px' }}>
+      {/* Select Store & User Filters */}
+      <div style={{ padding: '18px', backgroundColor: 'var(--card-bg, #ffffff)', borderRadius: '8px', border: '1px solid var(--border-color, #e2e8f0)', marginBottom: '25px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
         <div style={{ display: 'flex', gap: '30px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
           
-          <div style={{ minWidth: '250px', flex: '1' }}>
-            <label style={{ display: 'block', marginBottom: '5px', color: '#555' }}>Store <span style={{ color: 'red' }}>*</span></label>
+          <div style={{ minWidth: '260px', flex: '1' }}>
+            <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, color: '#334155' }}>
+              Store <span style={{ color: 'red' }}>*</span>
+            </label>
             <CustomSelect 
               value={selectedStore}
               onChange={(e) => setSelectedStore(e.target.value)}
-              style={{ width: '100%', padding: '8px 0', border: 'none', borderBottom: '1px solid #ddd', background: 'transparent', outline: 'none', color: '#333' }}
+              style={{ width: '100%', padding: '8px 10px', borderRadius: '4px', border: '1px solid #cbd5e1', background: '#fff', outline: 'none', color: '#1e293b' }}
             >
               <option value="">-- Select a Store --</option>
               {stores.map(store => (
@@ -246,69 +261,148 @@ const PosDistribution = () => {
             </CustomSelect>
           </div>
 
-          <div style={{ minWidth: '250px', flex: '1' }}>
-            <label style={{ display: 'block', marginBottom: '5px', color: '#555' }}>User Name <span style={{ color: 'red' }}>*</span></label>
+          <div style={{ minWidth: '260px', flex: '1' }}>
+            <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, color: '#334155' }}>
+              User Name <span style={{ color: 'red' }}>*</span>
+            </label>
             <CustomSelect 
               value={selectedUser}
               onChange={(e) => setSelectedUser(e.target.value)}
-              style={{ width: '100%', padding: '8px 0', border: 'none', borderBottom: '1px solid #ddd', background: 'transparent', outline: 'none', color: '#333' }}
+              style={{ width: '100%', padding: '8px 10px', borderRadius: '4px', border: '1px solid #cbd5e1', background: '#fff', outline: 'none', color: '#1e293b' }}
             >
               <option value="">-- Select a User --</option>
               {employees.map(user => (
-                <option key={user.id} value={user.id}>{user.name}</option>
+                <option key={user.id} value={user.id}>{user.name} ({user.username})</option>
               ))}
             </CustomSelect>
           </div>
 
-          <div style={{ minWidth: '150px', display: 'flex', alignItems: 'center', marginTop: '25px', gap: '8px' }}>
+          <div style={{ minWidth: '150px', display: 'flex', alignItems: 'center', marginTop: '28px', gap: '8px' }}>
             <input 
               type="checkbox" 
               id="selectAll"
               checked={isAllSelected}
               onChange={handleSelectAll}
-              style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--accent-primary)' }}
+              disabled={!selectedStore || !selectedUser}
+              style={{ width: '17px', height: '17px', cursor: 'pointer', accentColor: 'var(--accent-primary, #2e6f40)' }}
             />
-            <label htmlFor="selectAll" style={{ cursor: 'pointer', color: '#555' }}>Select All</label>
+            <label htmlFor="selectAll" style={{ cursor: (!selectedStore || !selectedUser) ? 'not-allowed' : 'pointer', fontWeight: 700, color: '#1e293b' }}>
+              Select All ({selectedPermissions.length}/{ALL_POS_MODULES.length})
+            </label>
           </div>
 
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-        {columns.map((col, colIndex) => (
-          <div key={colIndex} style={{ flex: '1', minWidth: '200px' }}>
-            {col.map((perm, index) => (
-              <div key={index} style={{ marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <input 
-                  type="checkbox" 
-                  id={`perm-${colIndex}-${index}`}
-                  checked={selectedPermissions.includes(perm)}
-                  onChange={() => handleCheckboxChange(perm)}
-                  style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: 'var(--accent-primary)' }}
-                />
-                <label htmlFor={`perm-${colIndex}-${index}`} style={{ cursor: 'pointer', color: '#555' }}>
-                  {perm}
-                </label>
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
+      {/* Permissions Grid by Groups */}
+      {loadingPerms ? (
+        <div style={{ padding: '60px 20px', textAlign: 'center', color: '#64748b' }}>
+          Loading user permissions...
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
+          {POS_MODULE_GROUPS.map((group, gIdx) => {
+            const groupSelectedCount = group.modules.filter(m => selectedPermissions.includes(m)).length;
+            const isGroupAllSelected = groupSelectedCount === group.modules.length;
 
-      <div style={{ marginTop: '40px', paddingBottom: '40px' }}>
+            return (
+              <div 
+                key={gIdx} 
+                style={{ 
+                  backgroundColor: 'var(--card-bg, #ffffff)', 
+                  border: '1px solid var(--border-color, #e2e8f0)', 
+                  borderRadius: '8px', 
+                  overflow: 'hidden',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                }}
+              >
+                {/* Group Header with toggle */}
+                <div style={{ 
+                  backgroundColor: '#f8fafc', 
+                  padding: '10px 14px', 
+                  borderBottom: '1px solid #e2e8f0', 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center' 
+                }}>
+                  <span style={{ fontWeight: 700, color: '#1e293b', fontSize: '13px' }}>
+                    {group.icon} {group.groupName}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleGroupToggle(group.modules)}
+                    disabled={!selectedStore || !selectedUser}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: isGroupAllSelected ? 'var(--accent-primary, #2e6f40)' : '#64748b',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: (!selectedStore || !selectedUser) ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    {isGroupAllSelected ? <CheckSquare size={13} /> : <Square size={13} />}
+                    {isGroupAllSelected ? 'Unselect All' : 'Select All'} ({groupSelectedCount}/{group.modules.length})
+                  </button>
+                </div>
+
+                {/* Modules Checkboxes */}
+                <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {group.modules.map((moduleName, mIdx) => {
+                    const isChecked = selectedPermissions.includes(moduleName);
+                    return (
+                      <label 
+                        key={mIdx} 
+                        style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '10px', 
+                          cursor: (!selectedStore || !selectedUser) ? 'not-allowed' : 'pointer',
+                          padding: '4px 6px',
+                          borderRadius: '4px',
+                          backgroundColor: isChecked ? '#f0fdf4' : 'transparent',
+                          transition: 'background-color 0.15s'
+                        }}
+                      >
+                        <input 
+                          type="checkbox" 
+                          checked={isChecked}
+                          onChange={() => handleCheckboxChange(moduleName)}
+                          disabled={!selectedStore || !selectedUser}
+                          style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--accent-primary, #2e6f40)' }}
+                        />
+                        <span style={{ color: isChecked ? '#166534' : '#334155', fontWeight: isChecked ? 600 : 400 }}>
+                          {moduleName}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Save Button */}
+      <div style={{ marginTop: '30px', paddingBottom: '40px' }}>
         <button 
           className="btn-theme"
           onClick={handleSave}
-          disabled={isSaving}
+          disabled={isSaving || !selectedStore || !selectedUser}
           style={{ 
-            padding: '8px 30px', 
+            padding: '10px 36px', 
             borderRadius: '4px', 
-            cursor: isSaving ? 'not-allowed' : 'pointer', 
+            cursor: (isSaving || !selectedStore || !selectedUser) ? 'not-allowed' : 'pointer', 
             fontWeight: 'bold',
-            opacity: isSaving ? 0.7 : 1
+            fontSize: '13px',
+            opacity: (isSaving || !selectedStore || !selectedUser) ? 0.6 : 1
           }}
         >
-          {isSaving ? 'Saving...' : 'Save'}
+          {isSaving ? 'Saving...' : 'Save Permissions'}
         </button>
       </div>
 

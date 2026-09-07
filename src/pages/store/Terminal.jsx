@@ -19,9 +19,39 @@ const Terminal = () => {
   const [editingId, setEditingId] = useState(null);
 
   useEffect(() => {
-    fetchStores();
-    fetchTerminals();
+    fetchStoresAndTerminals();
   }, []);
+
+  const fetchStoresAndTerminals = async () => {
+    try {
+      setLoading(true);
+      const [storesRes, terminalsRes] = await Promise.all([
+        supabase.from('stores').select('id, name').order('name'),
+        supabase.from('terminals').select('*').order('counter_id', { ascending: true })
+      ]);
+
+      const storesData = storesRes.data || [];
+      const terminalsData = terminalsRes.data || [];
+
+      setStores(storesData);
+
+      // Attach store name to each terminal for both Supabase Native and MySQL Backend
+      const mappedTerminals = terminalsData.map(t => {
+        const matchingStore = storesData.find(s => String(s.id) === String(t.store_id));
+        return {
+          ...t,
+          stores: matchingStore ? { name: matchingStore.name } : (t.stores || { name: 'Unknown Store' })
+        };
+      });
+
+      setTerminals(mappedTerminals);
+    } catch (err) {
+      console.error('Error fetching terminals and stores:', err);
+      toast.error('Failed to load terminals');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchStores = async () => {
     try {
@@ -33,30 +63,11 @@ const Terminal = () => {
       setStores(data || []);
     } catch (err) {
       console.error('Error fetching stores:', err);
-      toast.error('Failed to load stores');
     }
   };
 
   const fetchTerminals = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('terminals')
-        .select(`
-          *,
-          stores (name)
-        `)
-        .order('store_id', { ascending: true })
-        .order('counter_id', { ascending: true });
-        
-      if (error) throw error;
-      setTerminals(data || []);
-    } catch (err) {
-      console.error('Error fetching terminals:', err);
-      toast.error('Failed to load terminals');
-    } finally {
-      setLoading(false);
-    }
+    await fetchStoresAndTerminals();
   };
 
   const handleEdit = (terminal) => {
@@ -230,7 +241,9 @@ const Terminal = () => {
               ) : (
                 terminals.map((terminal) => (
                   <tr key={terminal.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                    <td style={{ padding: '12px 10px' }}>{terminal.stores?.name}</td>
+                    <td style={{ padding: '12px 10px', fontWeight: 600, color: '#1e293b' }}>
+                      {terminal.stores?.name || stores.find(s => String(s.id) === String(terminal.store_id))?.name || 'Unknown Store'}
+                    </td>
                     <td style={{ padding: '12px 10px' }}>{terminal.counter_id}</td>
                     <td style={{ padding: '12px 10px' }}>{terminal.mac_address}</td>
                     <td style={{ padding: '12px 10px' }}>{terminal.status}</td>

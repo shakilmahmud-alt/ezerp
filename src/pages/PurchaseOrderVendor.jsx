@@ -226,7 +226,8 @@ const PurchaseOrderVendor = () => {
   const calculateRow = (item) => {
     const val = Number(item.purPrice || 0) * Number(item.qty || 0);
     const discAmt = val * (Number(item.discPercent || 0) / 100);
-    const vatPercent = Number(item.sale_vat_percent || 0);
+    const rawVat = Number(item.sale_vat_percent || 0);
+    const vatPercent = (rawVat > 0 && rawVat <= 1) ? Number((rawVat * 100).toFixed(2)) : rawVat;
     const vatAmt = (val - discAmt) * (vatPercent / 100);
     const amt = val - discAmt + vatAmt;
     

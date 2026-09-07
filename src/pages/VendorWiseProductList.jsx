@@ -150,7 +150,7 @@ const VendorWiseProductList = () => {
       'User Barcode': p.barcode || '',
       'Purchase Price': p.purchase_price || 0,
       MRP: p.mrp || 0,
-      'Sale VAT(%)': p.sale_vat_percent || 0
+      'Sale VAT(%)': Number(p.sale_vat_percent || 0).toFixed(2)
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
@@ -179,7 +179,7 @@ const VendorWiseProductList = () => {
         p.code || '',
         p.purchase_price || '0',
         p.mrp || '0',
-        p.sale_vat_percent || '0'
+        Number(p.sale_vat_percent || 0).toFixed(2)
       ];
       tableRows.push(rowData);
     });

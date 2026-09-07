@@ -149,23 +149,28 @@ const Reprint = () => {
           if (!error && data) docs = data.map(d => String(d.id));
         }
         else if (selectedType === 'Store Requisition(Ecom)' || selectedType === 'Store Requisition') {
-          let query = supabase
+          let query1 = supabase
             .from('requisitions')
             .select('requisition_no')
             .gte('requisition_date', fromDate)
             .lte('requisition_date', toDate);
             
+          let query2 = supabase
+            .from('store_requisitions')
+            .select('requisition_no')
+            .gte('requisition_date', fromDate)
+            .lte('requisition_date', toDate);
+
           if (selectedStore && selectedStore !== '-- All --' && selectedStore !== '') {
             const s = stores.find(s => s.name === selectedStore);
             if (s) {
-              query = query.eq('shop_id', s.id);
-            } else {
-              query = query.eq('shop_id', '00000000-0000-0000-0000-000000000000');
+              query1 = query1.eq('shop_id', s.id);
+              query2 = query2.eq('shop_id', s.id);
             }
           }
             
-          const { data, error } = await query;
-          if (!error && data) docs = [...new Set(data.map(d => d.requisition_no).filter(Boolean))];
+          const [{ data: d1 }, { data: d2 }] = await Promise.all([query1, query2]);
+          docs = [...new Set([...(d1 || []).map(d => d.requisition_no), ...(d2 || []).map(d => d.requisition_no)].filter(Boolean))];
         }
         else if (selectedType === 'Purchase Receive Challan') {
           let query = supabase
@@ -318,7 +323,8 @@ const Reprint = () => {
           const freeQty = Number(i.free_qty || 0);
           const val = qty * purPrice;
           const discAmt = (val * disc) / 100;
-          const vatRate = Number(i.products?.sale_vat_percent || 0);
+          const rawVatRate = Number(i.products?.sale_vat_percent || 0);
+          const vatRate = (rawVatRate > 0 && rawVatRate <= 1) ? Number((rawVatRate * 100).toFixed(2)) : rawVatRate;
           const vatAmt = ((val - discAmt) * vatRate) / 100;
           const lineAmt = val - discAmt + vatAmt;
 
@@ -389,10 +395,23 @@ const Reprint = () => {
         ]));
 
       } else if (selectedType === 'Store Requisition(Ecom)' || selectedType === 'Store Requisition') {
-        const { data: req } = await supabase.from('requisitions').select('*').eq('requisition_no', selectedDocument).single();
-        const { data: reqItemsRaw } = await supabase.from('requisition_items').select('*').eq('requisition_id', req?.id);
-        const reqItems = await enrichItemsWithProducts(reqItemsRaw || []);
-        const storeName = stores.find(s => s.id === req?.shop_id)?.name || '';
+        let req = null;
+        let reqItems = [];
+        let storeName = '';
+
+        const { data: r1 } = await supabase.from('store_requisitions').select('*').eq('requisition_no', selectedDocument).limit(1);
+        if (r1 && r1.length > 0) {
+          req = r1[0];
+          storeName = req.shop_name || stores.find(s => s.id === req.shop_id)?.name || '';
+          const { data: itemsRaw } = await supabase.from('store_requisition_items').select('*').eq('requisition_id', req.id);
+          reqItems = itemsRaw || [];
+        } else {
+          const { data: r2 } = await supabase.from('requisitions').select('*').eq('requisition_no', selectedDocument).single();
+          req = r2;
+          storeName = stores.find(s => s.id === req?.shop_id)?.name || '';
+          const { data: reqItemsRaw } = await supabase.from('requisition_items').select('*').eq('requisition_id', req?.id);
+          reqItems = await enrichItemsWithProducts(reqItemsRaw || []);
+        }
 
         headerInfo = {
           title: selectedType.toUpperCase(),
@@ -407,13 +426,13 @@ const Reprint = () => {
         items = (reqItems || []).map((i, idx) => ([
           idx + 1,
           i.products?.barcode || i.barcode || '',
-          i.products?.item_name || i.item_name || '',
-          Number(i.req_qty || 0).toFixed(2) + ' PCS',
+          i.products?.item_name || i.product_name || i.item_name || '',
+          Number(i.req_qty || i.app_qty || 0).toFixed(2) + ' PCS',
           '0.00',
-          '0.00',
+          Number(i.cpu || 0).toFixed(2),
           Number(i.products?.mrp || i.mrp || 0).toFixed(2),
           '0.00',
-          '0.00' // amount 0 for requisition
+          Number(i.cost_value || (Number(i.cpu || 0) * Number(i.req_qty || i.app_qty || 0))).toFixed(2)
         ]));
 
       } else if (selectedType === 'Purchase Receive Challan') {
@@ -470,7 +489,8 @@ const Reprint = () => {
           const freeQty = Number(i.free_qty || 0);
           const val = rcvQty * purPrice;
           const discAmt = (val * disc) / 100;
-          const vatRate = Number(i.products?.sale_vat_percent || 0);
+          const rawVatRate = Number(i.products?.sale_vat_percent || 0);
+          const vatRate = (rawVatRate > 0 && rawVatRate <= 1) ? Number((rawVatRate * 100).toFixed(2)) : rawVatRate;
           const vatAmt = ((val - discAmt) * vatRate) / 100;
           const lineAmt = Number(i.line_amount) || (val - discAmt + vatAmt);
 
@@ -645,7 +665,9 @@ const Reprint = () => {
         selectedType === 'Store Delivery Challan' ||
         selectedType === 'Store Delivery Receive Challan' ||
         selectedType === 'Store Delivery Challan Summary' ||
-        selectedType === 'Receive from Shop Challan'
+        selectedType === 'Receive from Shop Challan' ||
+        selectedType === 'Store Requisition' ||
+        selectedType === 'Store Requisition(Ecom)'
       );
       const doc = new jsPDF(isLandscape ? 'landscape' : 'portrait', 'mm', 'a4');
       const pageWidth = doc.internal.pageSize.getWidth();

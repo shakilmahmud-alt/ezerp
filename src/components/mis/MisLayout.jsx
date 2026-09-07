@@ -159,7 +159,7 @@ const MisLayout = () => {
       icon: <Briefcase size={18} />,
       subItems: [
         { name: 'Purchase Receive Report', path: '/mis/purchase-reports/receive' },
-        { name: 'Vendor Purchase Report', path: '/mis/purchase-reports/vendor' },
+        { name: 'Item wise Purchase Receive Report', path: '/mis/purchase-reports/item-wise' },
       ]
     },
     { 
