@@ -84,6 +84,7 @@ import CategorySubcategoryItemwiseStockReport from './pages/mis/reports/Category
 import PurchaseOrderReport from './pages/mis/reports/PurchaseOrderReport';
 import PurchaseReceiveReport from './pages/mis/reports/PurchaseReceiveReport';
 import ItemwisePurchaseReceiveReport from './pages/mis/reports/ItemwisePurchaseReceiveReport';
+import StoreRequisitionReport from './pages/mis/reports/StoreRequisitionReport';
 
 function App() {
   return (
@@ -159,8 +160,9 @@ function App() {
             <Route path="purchase-reports/item-wise" element={<ItemwisePurchaseReceiveReport />} />
             <Route path="purchase-reports/vendor" element={<ItemwisePurchaseReceiveReport />} />
             <Route path="purchase-reports/*" element={<PurchaseReceiveReport />} />
-            <Route path="requisition-reports" element={<MisReportPlaceholder title="Requisition Reports" />} />
-            <Route path="requisition-reports/*" element={<MisReportPlaceholder />} />
+            <Route path="requisition-reports" element={<StoreRequisitionReport />} />
+            <Route path="requisition-reports/store" element={<StoreRequisitionReport />} />
+            <Route path="requisition-reports/*" element={<StoreRequisitionReport />} />
             <Route path="delivery-reports" element={<MisReportPlaceholder title="Delivery Reports" />} />
             <Route path="delivery-reports/*" element={<MisReportPlaceholder />} />
             <Route path="purchase-return-reports" element={<MisReportPlaceholder title="Purchase Return Reports" />} />

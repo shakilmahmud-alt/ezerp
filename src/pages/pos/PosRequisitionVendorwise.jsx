@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
@@ -23,9 +23,13 @@ const PosRequisitionVendorwise = () => {
   // Product Search & Selection
   const [productSearchInput, setProductSearchInput] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [dropdownIndex, setDropdownIndex] = useState(-1);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [reqQty, setReqQty] = useState(1);
   const [stockInfo, setStockInfo] = useState({ central: 0, local: 0 });
+
+  const searchInputRef = useRef(null);
+  const reqQtyInputRef = useRef(null);
 
   // Requisition List Items
   const [reqItems, setReqItems] = useState([]);
@@ -154,11 +158,13 @@ const PosRequisitionVendorwise = () => {
   useEffect(() => {
     if (!productSearchInput.trim()) {
       setSearchResults([]);
+      setDropdownIndex(-1);
       return;
     }
 
     const searchProducts = async () => {
       try {
+        const queryTerm = productSearchInput.trim();
         let query = supabase
           .from('products')
           .select(`
@@ -166,7 +172,7 @@ const PosRequisitionVendorwise = () => {
             vendor:vendor_id (name),
             store_stocks(store_id, stock_qty)
           `)
-          .or(`item_name.ilike.%${productSearchInput.trim()}%,barcode.ilike.%${productSearchInput.trim()}%,code.ilike.%${productSearchInput.trim()}%`)
+          .or(`barcode.eq.${queryTerm},user_define_barcode.eq.${queryTerm},code.eq.${queryTerm},item_name.ilike.%${queryTerm}%`)
           .limit(10);
 
         if (selectedVendorId) {
@@ -175,17 +181,19 @@ const PosRequisitionVendorwise = () => {
 
         const { data } = await query;
         setSearchResults(data || []);
+        setDropdownIndex(-1);
       } catch (err) {
         console.error("Search error:", err);
       }
     };
 
-    const timer = setTimeout(searchProducts, 250);
+    const timer = setTimeout(searchProducts, 200);
     return () => clearTimeout(timer);
   }, [productSearchInput, selectedVendorId, storeDetails, centralStoreId]);
 
   // Select Product and calculate Central Stock & Local Stock
   const handleSelectProduct = (prod) => {
+    if (!prod) return;
     setSelectedProduct(prod);
     setSearchResults([]);
     setProductSearchInput(prod.item_name);
@@ -197,24 +205,128 @@ const PosRequisitionVendorwise = () => {
       central: centralStock,
       local: localStock
     });
+
+    // Focus req qty input
+    setTimeout(() => {
+      reqQtyInputRef.current?.focus();
+      reqQtyInputRef.current?.select();
+    }, 50);
+  };
+
+  // Handle Search Input KeyDown
+  const handleSearchKeyDown = async (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (searchResults.length > 0) {
+        setDropdownIndex(prev => (prev < searchResults.length - 1 ? prev + 1 : 0));
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (searchResults.length > 0) {
+        setDropdownIndex(prev => (prev > 0 ? prev - 1 : searchResults.length - 1));
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const queryTerm = productSearchInput.trim();
+      if (!queryTerm) return;
+
+      // Dropdown selected
+      if (dropdownIndex >= 0 && searchResults[dropdownIndex]) {
+        handleSelectProduct(searchResults[dropdownIndex]);
+        return;
+      }
+
+      // First search result match
+      if (searchResults.length > 0) {
+        handleSelectProduct(searchResults[0]);
+        return;
+      }
+
+      // Query database directly
+      try {
+        let query = supabase
+          .from('products')
+          .select(`
+            *,
+            vendor:vendor_id (name),
+            store_stocks(store_id, stock_qty)
+          `)
+          .or(`barcode.eq.${queryTerm},user_define_barcode.eq.${queryTerm},code.eq.${queryTerm},item_name.ilike.%${queryTerm}%`)
+          .limit(1);
+
+        if (selectedVendorId) {
+          query = query.eq('vendor_id', selectedVendorId);
+        }
+
+        const { data } = await query;
+        if (data && data.length > 0) {
+          handleSelectProduct(data[0]);
+        } else {
+          toast.error(`No product found for "${queryTerm}"`);
+        }
+      } catch (err) {
+        console.error("Barcode lookup error:", err);
+      }
+    }
   };
 
   // Add Item to Requisition Table
-  const handleAddItemToReq = () => {
-    if (!selectedProduct) {
-      toast.error('Please select a product first');
-      return;
+  const handleAddItemToReq = async () => {
+    let prod = selectedProduct;
+    if (!prod) {
+      const queryTerm = productSearchInput.trim();
+      if (!queryTerm) {
+        toast.error('Please scan or search a product first');
+        searchInputRef.current?.focus();
+        return;
+      }
+
+      // Auto resolve typed barcode
+      try {
+        let query = supabase
+          .from('products')
+          .select(`
+            *,
+            vendor:vendor_id (name),
+            store_stocks(store_id, stock_qty)
+          `)
+          .or(`barcode.eq.${queryTerm},user_define_barcode.eq.${queryTerm},code.eq.${queryTerm},item_name.ilike.%${queryTerm}%`)
+          .limit(1);
+
+        if (selectedVendorId) {
+          query = query.eq('vendor_id', selectedVendorId);
+        }
+
+        const { data } = await query;
+        if (data && data.length > 0) {
+          prod = data[0];
+          const centralStock = prod.store_stocks?.find(s => s.store_id === centralStoreId)?.stock_qty || prod.wh_stock || 0;
+          const localStock = prod.store_stocks?.find(s => s.store_id === storeDetails.id)?.stock_qty || 0;
+          setStockInfo({ central: centralStock, local: localStock });
+        } else {
+          toast.error(`No product found for "${queryTerm}"`);
+          searchInputRef.current?.focus();
+          return;
+        }
+      } catch (err) {
+        console.error("Lookup error:", err);
+        return;
+      }
     }
+
     const qty = Number(reqQty);
     if (isNaN(qty) || qty <= 0) {
       toast.error('Enter valid requisition quantity');
+      reqQtyInputRef.current?.focus();
       return;
     }
 
-    const cpu = Number(selectedProduct.purchase_price || 0);
-    const mrp = Number(selectedProduct.mrp || 0);
+    const cpu = Number(prod.purchase_price || 0);
+    const mrp = Number(prod.mrp || 0);
+    const centralStock = prod.store_stocks?.find(s => s.store_id === centralStoreId)?.stock_qty || prod.wh_stock || 0;
+    const localStock = prod.store_stocks?.find(s => s.store_id === storeDetails.id)?.stock_qty || 0;
 
-    const existingIdx = reqItems.findIndex(i => i.product_id === selectedProduct.id);
+    const existingIdx = reqItems.findIndex(i => i.product_id === prod.id);
     if (existingIdx > -1) {
       const updated = [...reqItems];
       const newQ = updated[existingIdx].req_qty + qty;
@@ -226,15 +338,15 @@ const PosRequisitionVendorwise = () => {
       setReqItems(updated);
     } else {
       const newItem = {
-        product_id: selectedProduct.id,
-        barcode: selectedProduct.barcode || selectedProduct.code,
-        product_code: selectedProduct.code || selectedProduct.barcode,
-        product_name: selectedProduct.item_name,
-        vendor_name: selectedProduct.vendor?.name || selectedVendor?.name || 'N/A',
+        product_id: prod.id,
+        barcode: prod.barcode || prod.code,
+        product_code: prod.code || prod.barcode,
+        product_name: prod.item_name,
+        vendor_name: prod.vendor?.name || selectedVendor?.name || 'N/A',
         cpu: cpu,
         mrp: mrp,
-        central_stock: stockInfo.central,
-        local_stock: stockInfo.local,
+        central_stock: centralStock,
+        local_stock: localStock,
         req_qty: qty,
         cost_value: cpu * qty
       };
@@ -246,6 +358,10 @@ const PosRequisitionVendorwise = () => {
     setReqQty(1);
     setStockInfo({ central: 0, local: 0 });
     toast.success('Item added');
+
+    setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 50);
   };
 
   // Remove Item
@@ -605,13 +721,15 @@ const PosRequisitionVendorwise = () => {
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', marginBottom: '4px' }}>Product Name / Barcode :</label>
             <div style={{ position: 'relative' }}>
               <input 
+                ref={searchInputRef}
                 type="text" 
                 value={productSearchInput}
                 onChange={(e) => {
                   setProductSearchInput(e.target.value);
                   setSelectedProduct(null);
                 }}
-                placeholder={selectedVendor ? `Search items for ${selectedVendor.name}...` : "Type product name or barcode..."}
+                onKeyDown={handleSearchKeyDown}
+                placeholder={selectedVendor ? `Search items for ${selectedVendor.name}... (Press Enter to Add)` : "Type product name or barcode... (Press Enter to Add)"}
                 style={{ width: '100%', padding: '8px 12px 8px 32px', border: '1px solid #ccc', borderRadius: '4px', fontWeight: 'bold' }}
               />
               <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
@@ -620,14 +738,21 @@ const PosRequisitionVendorwise = () => {
             {/* Dropdown Results */}
             {searchResults.length > 0 && (
               <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: '#fff', border: '1px solid #ccc', borderRadius: '4px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 100, maxHeight: '200px', overflowY: 'auto' }}>
-                {searchResults.map(prod => (
+                {searchResults.map((prod, idx) => (
                   <div 
                     key={prod.id}
                     onClick={() => handleSelectProduct(prod)}
-                    style={{ padding: '8px 12px', borderBottom: '1px solid #eee', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}
+                    style={{ 
+                      padding: '8px 12px', 
+                      borderBottom: '1px solid #eee', 
+                      cursor: 'pointer', 
+                      display: 'flex', 
+                      justifyContent: 'space-between',
+                      backgroundColor: idx === dropdownIndex ? '#e2e8f0' : 'transparent'
+                    }}
                     className="req-search-item"
                   >
-                    <span style={{ fontWeight: 'bold' }}>{prod.item_name} ({prod.barcode})</span>
+                    <span style={{ fontWeight: 'bold' }}>{prod.item_name} ({prod.barcode || prod.code})</span>
                     <span style={{ color: 'var(--accent-primary, #2e6f40)' }}>MRP: Tk {prod.mrp}</span>
                   </div>
                 ))}
@@ -639,10 +764,17 @@ const PosRequisitionVendorwise = () => {
           <div>
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', marginBottom: '4px' }}>Req Qty :</label>
             <input 
+              ref={reqQtyInputRef}
               type="number" 
               min="1"
               value={reqQty}
               onChange={(e) => setReqQty(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAddItemToReq();
+                }
+              }}
               style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', textAlign: 'center', fontWeight: 'bold' }}
             />
           </div>

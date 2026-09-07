@@ -208,21 +208,8 @@ const PosRequisition = () => {
         const queryTerm = productSearchInput.trim();
         const { data } = await supabase
           .from('products')
-          .select(`
-            id,
-            item_name,
-            barcode,
-            code,
-            user_define_barcode,
-            purchase_price,
-            mrp,
-            wh_stock,
-            str_stock,
-            category_id,
-            category:category_id(name),
-            store_stocks(store_id, stock_qty)
-          `)
-          .or(`item_name.ilike.%${queryTerm}%,barcode.ilike.%${queryTerm}%,code.ilike.%${queryTerm}%,user_define_barcode.ilike.%${queryTerm}%`)
+          .select('*')
+          .or(`barcode.eq.${queryTerm},user_define_barcode.eq.${queryTerm},code.eq.${queryTerm},item_name.ilike.%${queryTerm}%`)
           .limit(12);
 
         setSearchResults(data || []);
@@ -232,12 +219,13 @@ const PosRequisition = () => {
       }
     };
 
-    const timer = setTimeout(searchProducts, 200);
+    const timer = setTimeout(searchProducts, 150);
     return () => clearTimeout(timer);
   }, [productSearchInput, storeDetails, centralStoreId]);
 
   // Select Product from search dropdown or exact barcode
   const handleSelectProduct = (prod) => {
+    if (!prod) return;
     setSelectedProduct(prod);
     setSearchResults([]);
     setProductSearchInput(prod.item_name);
@@ -285,26 +273,13 @@ const PosRequisition = () => {
         return;
       }
 
-      // Case 4: Query exact barcode or name from database
+      // Case 4: Query exact barcode, user_define_barcode, code or name from database
       try {
         const queryTerm = productSearchInput.trim();
         const { data } = await supabase
           .from('products')
-          .select(`
-            id,
-            item_name,
-            barcode,
-            code,
-            user_define_barcode,
-            purchase_price,
-            mrp,
-            wh_stock,
-            str_stock,
-            category_id,
-            category:category_id(name),
-            store_stocks(store_id, stock_qty)
-          `)
-          .or(`barcode.eq.${queryTerm},code.eq.${queryTerm},item_name.ilike.%${queryTerm}%`)
+          .select('*')
+          .or(`barcode.eq.${queryTerm},user_define_barcode.eq.${queryTerm},code.eq.${queryTerm},item_name.ilike.%${queryTerm}%`)
           .limit(1);
 
         if (data && data.length > 0) {
@@ -434,12 +409,40 @@ const PosRequisition = () => {
   };
 
   // Add Item to Requisition Table from Search Box
-  const handleAddItemToReq = () => {
-    if (!selectedProduct) {
-      toast.error('Please select a product first');
-      searchInputRef.current?.focus();
-      return;
+  const handleAddItemToReq = async () => {
+    let prod = selectedProduct;
+    if (!prod) {
+      const queryTerm = productSearchInput.trim();
+      if (!queryTerm) {
+        toast.error('Please scan or search a product first');
+        searchInputRef.current?.focus();
+        return;
+      }
+
+      // Try looking up the typed barcode/code/name directly
+      try {
+        const { data } = await supabase
+          .from('products')
+          .select('*')
+          .or(`barcode.eq.${queryTerm},user_define_barcode.eq.${queryTerm},code.eq.${queryTerm},item_name.ilike.%${queryTerm}%`)
+          .limit(1);
+
+        if (data && data.length > 0) {
+          prod = data[0];
+          const stocks = calculateStock(prod);
+          setStockInfo(stocks);
+        } else {
+          toast.error(`No product found for "${queryTerm}"`);
+          searchInputRef.current?.focus();
+          return;
+        }
+      } catch (err) {
+        console.error("Lookup error:", err);
+        toast.error(`Error searching product "${queryTerm}"`);
+        return;
+      }
     }
+
     const qty = Number(reqQty);
     if (isNaN(qty) || qty <= 0) {
       toast.error('Enter valid requisition quantity');
@@ -447,10 +450,11 @@ const PosRequisition = () => {
       return;
     }
 
-    const cpu = Number(selectedProduct.purchase_price || 0);
-    const mrp = Number(selectedProduct.mrp || 0);
+    const cpu = Number(prod.purchase_price || 0);
+    const mrp = Number(prod.mrp || 0);
+    const stocks = calculateStock(prod);
 
-    const existingIdx = reqItems.findIndex(i => i.product_id === selectedProduct.id);
+    const existingIdx = reqItems.findIndex(i => i.product_id === prod.id);
     if (existingIdx > -1) {
       const updated = [...reqItems];
       const newQ = updated[existingIdx].req_qty + qty;
@@ -462,15 +466,15 @@ const PosRequisition = () => {
       setReqItems(updated);
     } else {
       const newItem = {
-        product_id: selectedProduct.id,
-        barcode: selectedProduct.barcode || selectedProduct.code,
-        product_code: selectedProduct.code || selectedProduct.barcode,
-        product_name: selectedProduct.item_name,
-        category: selectedProduct.category?.name || '',
+        product_id: prod.id,
+        barcode: prod.barcode || prod.user_define_barcode || prod.code,
+        product_code: prod.code || prod.barcode,
+        product_name: prod.item_name,
+        category: prod.category?.name || '',
         cpu: cpu,
         mrp: mrp,
-        central_stock: stockInfo.central,
-        local_stock: stockInfo.local,
+        central_stock: stocks.central,
+        local_stock: stocks.local,
         req_qty: qty,
         cost_value: cpu * qty
       };
@@ -482,7 +486,7 @@ const PosRequisition = () => {
     setProductSearchInput('');
     setReqQty(1);
     setStockInfo({ central: 0, local: 0 });
-    toast.success('Item added to requisition list');
+    toast.success(`Added ${qty}x ${prod.item_name} to Requisition!`);
     searchInputRef.current?.focus();
   };
 

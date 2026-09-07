@@ -167,8 +167,7 @@ const MisLayout = () => {
       path: '/mis/requisition-reports', 
       icon: <CheckSquare size={18} />,
       subItems: [
-        { name: 'Store Requisition Report', path: '/mis/requisition-reports/store' },
-        { name: 'Requisition Approval Report', path: '/mis/requisition-reports/approval' },
+        { name: 'Store Requisition Report', path: '/mis/requisition-reports/store' }
       ]
     },
     { 

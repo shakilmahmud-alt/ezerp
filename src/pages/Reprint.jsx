@@ -673,54 +673,98 @@ const Reprint = () => {
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
 
-      // 1. Company Header (Center)
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(16);
-      doc.setTextColor(46, 111, 64);
-      doc.text("EZ ERP", pageWidth / 2, 13, { align: 'center' });
-      
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8.5);
-      doc.setTextColor(70, 70, 70);
-      doc.text("House: 352, Lane: 05, 2nd floor, Baridhara DOHS, Dhaka-1212, Bangladesh", pageWidth / 2, 18, { align: 'center' });
-
-      // 2. Top Right details
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.setTextColor(46, 111, 64);
-      doc.text(headerInfo.title || 'CHALLAN', pageWidth - 14, 13, { align: 'right' });
-      
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8.5);
-      doc.setTextColor(30, 30, 30);
-      doc.text(`Challan No: ${headerInfo.docNo || ''}`, pageWidth - 14, 18.5, { align: 'right' });
-      if (headerInfo.date) doc.text(`Date: ${headerInfo.date}`, pageWidth - 14, 23, { align: 'right' });
-      if (headerInfo.deliveryTo) doc.text(`Delivery To: ${headerInfo.deliveryTo}`, pageWidth - 14, 27.5, { align: 'right' });
-      
-      // Duplicate badge right below Delivery To
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(220, 38, 38);
-      doc.text(`[DUPLICATE]`, pageWidth - 14, 32, { align: 'right' });
-
-      // 3. Top Left details
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8.5);
-      doc.setTextColor(30, 30, 30);
-      if (headerInfo.vendorName) {
-        doc.text(`Vendor Name:`, 14, 18.5);
-        doc.setFont("helvetica", "normal");
-        doc.text(`${headerInfo.vendorName}`, 42, 18.5);
-      }
-      if (headerInfo.remarks) {
-        doc.setFont("helvetica", "bold");
-        doc.text(`Reference No:`, 14, 23);
-        doc.setFont("helvetica", "normal");
-        doc.text(`${headerInfo.remarks}`, 42, 23);
-      }
-
-      // 4. Table Layout
       let startY = 36;
+      const currentUserName = user?.name || user?.username || (localStorage.getItem('erp_user') ? JSON.parse(localStorage.getItem('erp_user'))?.name || JSON.parse(localStorage.getItem('erp_user'))?.username : '') || 'Admin';
+      const displayName = (currentUserName === 'msmraqeeb@gmail.com' || currentUserName === 'admin@email.com') ? 'Admin' : currentUserName;
+
+      if (isLandscape) {
+        // 1. Top Green Banner
+        doc.setFillColor(46, 111, 64);
+        doc.rect(0, 0, pageWidth, 22, 'F');
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(14);
+        doc.setTextColor(255, 255, 255);
+        doc.text("EZ ERP MANAGEMENT INFORMATION SYSTEM (MIS)", 14, 11);
+
+        doc.setFontSize(9.5);
+        doc.setFont("helvetica", "normal");
+        doc.text("CENTRAL INVENTORY & POS SALES ANALYTICS", 14, 17);
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.text(headerInfo.title || 'CHALLAN', pageWidth - 14, 14, { align: 'right' });
+
+        // 2. Metadata Section below Banner
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8.5);
+        doc.setTextColor(50, 50, 50);
+
+        let line1Left = `Challan No: ${headerInfo.docNo || 'N/A'}`;
+        if (headerInfo.date) line1Left += ` | Date: ${headerInfo.date}`;
+        if (headerInfo.deliveryTo) line1Left += ` | Store: ${headerInfo.deliveryTo}`;
+
+        let line2Left = '';
+        if (headerInfo.vendorName && headerInfo.vendorName !== 'N/A') line2Left += `Vendor: ${headerInfo.vendorName}`;
+        if (headerInfo.remarks && headerInfo.remarks !== 'N/A') line2Left += (line2Left ? ' | ' : '') + `Ref: ${headerInfo.remarks}`;
+        if (headerInfo.orderNo && headerInfo.orderNo !== 'N/A') line2Left += (line2Left ? ' | ' : '') + `PO: ${headerInfo.orderNo}`;
+        if (!line2Left) line2Left = `Source: Central Store`;
+
+        doc.text(line1Left, 14, 30);
+        doc.text(line2Left, 14, 35);
+
+        doc.text(`Generated On: ${new Date().toLocaleString()}`, pageWidth - 14, 30, { align: 'right' });
+        doc.text(`Printed By: ${displayName} [DUPLICATE]`, pageWidth - 14, 35, { align: 'right' });
+
+        startY = 40;
+      } else {
+        // Portrait fallback
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(16);
+        doc.setTextColor(46, 111, 64);
+        doc.text("EZ ERP", pageWidth / 2, 13, { align: 'center' });
+        
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8.5);
+        doc.setTextColor(70, 70, 70);
+        doc.text("House: 352, Lane: 05, 2nd floor, Baridhara DOHS, Dhaka-1212, Bangladesh", pageWidth / 2, 18, { align: 'center' });
+
+        // Top Right details
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(46, 111, 64);
+        doc.text(headerInfo.title || 'CHALLAN', pageWidth - 14, 13, { align: 'right' });
+        
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8.5);
+        doc.setTextColor(30, 30, 30);
+        doc.text(`Challan No: ${headerInfo.docNo || ''}`, pageWidth - 14, 18.5, { align: 'right' });
+        if (headerInfo.date) doc.text(`Date: ${headerInfo.date}`, pageWidth - 14, 23, { align: 'right' });
+        if (headerInfo.deliveryTo) doc.text(`Delivery To: ${headerInfo.deliveryTo}`, pageWidth - 14, 27.5, { align: 'right' });
+        
+        // Duplicate badge right below Delivery To
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(220, 38, 38);
+        doc.text(`[DUPLICATE]`, pageWidth - 14, 32, { align: 'right' });
+
+        // Top Left details
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8.5);
+        doc.setTextColor(30, 30, 30);
+        if (headerInfo.vendorName) {
+          doc.text(`Vendor Name:`, 14, 18.5);
+          doc.setFont("helvetica", "normal");
+          doc.text(`${headerInfo.vendorName}`, 42, 18.5);
+        }
+        if (headerInfo.remarks) {
+          doc.setFont("helvetica", "bold");
+          doc.text(`Reference No:`, 14, 23);
+          doc.setFont("helvetica", "normal");
+          doc.text(`${headerInfo.remarks}`, 42, 23);
+        }
+        startY = 36;
+      }
       let tableHead = [['SL', 'Barcode', 'Item Name', 'Pur. Price', 'MRP', 'Qty', 'Disc(%)', 'Free Qty', 'Value', 'Dis.Amt', 'VAT', 'Amount']];
 
       if (selectedType === 'Purchase Order') {
@@ -778,8 +822,6 @@ const Reprint = () => {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8.5);
       doc.setLineWidth(0.4);
-      const currentUserName = user?.name || user?.username || (localStorage.getItem('erp_user') ? JSON.parse(localStorage.getItem('erp_user'))?.name || JSON.parse(localStorage.getItem('erp_user'))?.username : '') || 'Admin';
-      const displayName = (currentUserName === 'msmraqeeb@gmail.com' || currentUserName === 'admin@email.com') ? 'Admin' : currentUserName;
 
       // Posted By
       doc.line(20, sigY, 70, sigY);

@@ -172,57 +172,51 @@ const PosStockReceive = () => {
       return;
     }
     
-    const doc = new jsPDF('landscape', 'mm', 'a4');
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     
-    // 1. Top Middle Header
+    // 1. Top Green Banner
+    doc.setFillColor(46, 111, 64);
+    doc.rect(0, 0, pageWidth, 22, 'F');
+
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.setTextColor(46, 111, 64);
-    doc.text('EZ ERP', pageWidth / 2, 13, { align: 'center' });
-    
+    doc.setFontSize(14);
+    doc.setTextColor(255, 255, 255);
+    doc.text("EZ ERP MANAGEMENT INFORMATION SYSTEM (MIS)", 14, 11);
+
+    doc.setFontSize(9.5);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.setTextColor(70, 70, 70);
-    doc.text('House: 352, Lane: 05, 2nd floor, Baridhara DOHS, Dhaka-1212, Bangladesh', pageWidth / 2, 18, { align: 'center' });
-    
-    // 2. Right Side Info
+    doc.text("CENTRAL INVENTORY & POS SALES ANALYTICS", 14, 17);
+
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
-    doc.setTextColor(46, 111, 64);
-    doc.text('STORE RECEIVE CHALLAN', pageWidth - 14, 13, { align: 'right' });
+    doc.text(preview ? "STORE RECEIVE CHALLAN [PREVIEW]" : "STORE RECEIVE CHALLAN", pageWidth - 14, 14, { align: 'right' });
     
     const selectedChallanObj = deliveries.find(c => c.id === selectedChallan);
     const refText = selectedChallanObj ? (selectedChallanObj.challan_no || selectedChallanObj.requisition_no) : 'N/A';
     
+    const currentUserName = user?.name || user?.username || (localStorage.getItem('erp_user') ? JSON.parse(localStorage.getItem('erp_user'))?.name || JSON.parse(localStorage.getItem('erp_user'))?.username : '') || 'Super Admin';
+    const displayName = (currentUserName === 'msmraqeeb@gmail.com' || currentUserName === 'admin@email.com') ? 'Super Admin' : currentUserName;
+
+    // 2. Metadata Section below Banner
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
-    doc.setTextColor(30, 30, 30);
-    doc.text(`Challan No: #${receiveChallan}`, pageWidth - 14, 18.5, { align: 'right' });
-    doc.text(`Ref Challan: #${refText}`, pageWidth - 14, 23, { align: 'right' });
-    doc.text(`Receive Date: ${date}`, pageWidth - 14, 27.5, { align: 'right' });
-    doc.text(`Receive From: Central Store`, pageWidth - 14, 32, { align: 'right' });
-    
-    // 3. Left Side Info
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(30, 30, 30);
-    doc.text('Store Name:', 14, 18.5);
-    doc.setFont("helvetica", "normal");
-    doc.text(`${posTerminal?.store_name || 'N/A'}`, 42, 18.5);
-    
-    doc.setFont("helvetica", "bold");
-    doc.text('Print Date:', 14, 23);
-    doc.setFont("helvetica", "normal");
-    doc.text(`${new Date().toLocaleString()}`, 42, 23);
+    doc.setTextColor(50, 50, 50);
+
+    const receiveDateStr = date ? new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+    doc.text(`Store Name: ${posTerminal?.store_name || 'N/A'} | Challan No: #${receiveChallan} | Receive Date: ${receiveDateStr}`, 14, 30);
+    doc.text(`Ref Challan: #${refText} | Receive From: Central Store`, 14, 35);
+    doc.text(`Generated On: ${new Date().toLocaleString()}`, pageWidth - 14, 30, { align: 'right' });
+    doc.text(`Printed By: ${displayName}`, pageWidth - 14, 35, { align: 'right' });
     
     let totalChallanQty = 0;
     let totalRcvQty = 0;
     let totalRemainQty = 0;
     let totalSaleVal = 0;
     
-    const tableCols = ["SL", "Barcode", "Item Name", "UOM", "MRP", "Challan Qty", "Rcv Qty", "Remain Qty", "Total Value"];
+    const tableCols = ["SL", "Barcode", "Item Name", "UOM", "MRP (Tk)", "Challan Qty", "Rcv Qty", "Remain Qty", "Total Value (Tk)"];
     
     const tableData = items.map((i, index) => {
       const chQty = Number(i.challanQty) || 0;
@@ -249,17 +243,27 @@ const PosStockReceive = () => {
       ];
     });
     
-    tableData.push(['Total', '', '', '', '', totalChallanQty, totalRcvQty, totalRemainQty, totalSaleVal.toFixed(2)]);
+    tableData.push([
+      'Total',
+      '',
+      `${items.length} Items`,
+      '',
+      '',
+      totalChallanQty,
+      totalRcvQty,
+      totalRemainQty,
+      totalSaleVal.toFixed(2)
+    ]);
     
     autoTable(doc, {
-      startY: 36,
+      startY: 40,
       head: [tableCols],
       body: tableData,
       theme: 'grid',
-      styles: { fontSize: 7.5, cellPadding: 1.8, textColor: [30, 30, 30] },
+      styles: { fontSize: 7.5, cellPadding: 2, textColor: [30, 30, 30], valign: 'middle' },
       headStyles: { fillColor: [46, 111, 64], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'right' },
       columnStyles: {
-        0: { halign: 'center', cellWidth: 10 },
+        0: { halign: 'center', cellWidth: 12 },
         1: { halign: 'left', cellWidth: 32 },
         2: { halign: 'left', cellWidth: 'auto' },
         3: { halign: 'center', cellWidth: 16 },
@@ -278,6 +282,7 @@ const PosStockReceive = () => {
         if (data.row.index === tableData.length - 1) {
           data.cell.styles.fontStyle = 'bold';
           data.cell.styles.fillColor = [240, 245, 240];
+          data.cell.styles.textColor = [10, 60, 20];
         }
       },
       margin: { top: 10, left: 14, right: 14 }
@@ -286,16 +291,13 @@ const PosStockReceive = () => {
     const finalY = doc.lastAutoTable.finalY || 80;
     const sigY = Math.max(finalY + 26, pageHeight - 20);
     
-    const currentUserName = user?.name || user?.username || (localStorage.getItem('erp_user') ? JSON.parse(localStorage.getItem('erp_user'))?.name || JSON.parse(localStorage.getItem('erp_user'))?.username : '') || 'Admin';
-    const displayName = (currentUserName === 'msmraqeeb@gmail.com' || currentUserName === 'admin@email.com') ? 'Admin' : currentUserName;
-    
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
     doc.setLineWidth(0.4);
     doc.setDrawColor(120, 120, 120);
     doc.setTextColor(40, 40, 40);
     
-    // Posted By
+    // Prepared / Posted By
     doc.line(20, sigY, 70, sigY);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
@@ -304,7 +306,7 @@ const PosStockReceive = () => {
     
     doc.setFont("helvetica", "bold");
     doc.setTextColor(40, 40, 40);
-    doc.text('Posted By', 45, sigY + 5, { align: 'center' });
+    doc.text('Prepared By', 45, sigY + 5, { align: 'center' });
     
     // Checked By
     doc.setFont("helvetica", "bold");
@@ -316,9 +318,16 @@ const PosStockReceive = () => {
     doc.line(pageWidth - 70, sigY, pageWidth - 20, sigY);
     doc.text('Authorized Signature', pageWidth - 45, sigY + 5, { align: 'center' });
     
-    const cleanFilename = String(receiveChallan).replace(/[^a-zA-Z0-9_-]/g, '_');
-    doc.save(`StoreReceive_${cleanFilename}.pdf`);
-    toast.success('Store Receive PDF downloaded');
+    if (preview) {
+      const blob = doc.output('blob');
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+      toast.success('Store Receive Preview opened in new tab');
+    } else {
+      const cleanFilename = String(receiveChallan).replace(/[^a-zA-Z0-9_-]/g, '_');
+      doc.save(`StoreReceive_${cleanFilename}.pdf`);
+      toast.success('Store Receive PDF downloaded');
+    }
   };
 
   const handleSave = async () => {
