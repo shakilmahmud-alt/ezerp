@@ -7,7 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 import CustomSelect from '../../components/CustomSelect';
 
 const PosStockTransfer = () => {
-  const { posTerminal } = useAuth();
+  const { posTerminal, user } = useAuth();
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   
   // Auto-generate transfer challan number
@@ -240,11 +240,11 @@ const PosStockTransfer = () => {
             if (field === 'isSelected') return { ...item, isSelected: value };
             if (field === 'transferQty') {
               let qty = Number(value);
-              if (qty > item.receivedQty) {
+              if (qty > item.receivedQty && item.receivedQty > 0) {
                 toast.error(`Transfer qty cannot exceed store stock (${item.receivedQty})!`);
                 qty = item.receivedQty;
               }
-              return { ...item, transferQty: qty };
+              return { ...item, transferQty: qty, isSelected: qty > 0 ? true : item.isSelected };
             }
           }
           return item;
@@ -253,125 +253,196 @@ const PosStockTransfer = () => {
     }
   };
 
-  const generatePDF = () => {
-    const transferredItems = items.filter(i => i.isSelected && Number(i.transferQty) > 0);
-    if (transferredItems.length === 0) return;
+  const generatePDF = (preview = false) => {
+    // 1. Gather all transferable items
+    let transferredItems = items.filter(i => (i.isSelected || Number(i.transferQty) > 0) && Number(i.transferQty) > 0);
     
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    
-    // Header
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.text('EG ERP', pageWidth / 2, 15, { align: 'center' });
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.text('House:352,Lane:05,2nd floor,Baridhara DOHS,', pageWidth / 2, 20, { align: 'center' });
-    doc.text('Dhaka , Dhaka-1212 Bangladesh', pageWidth / 2, 24, { align: 'center' });
-    
-    // Right Side Info
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.text('STOCK TRANSFER CHALLAN', pageWidth - 14, 15, { align: 'right' });
-    
-    doc.text(`CHALLAN NO # ${transferChallan}`, pageWidth - 14, 20, { align: 'right' });
-    doc.text(`DATE: ${date}`, pageWidth - 14, 25, { align: 'right' });
-    
-    let destName = 'Central Store';
-    if (transferTo !== 'central_store') {
-      const st = stores.find(s => s.id === transferTo);
-      if (st) destName = st.name;
+    // Fallback: If items exist in list but user hasn't typed transferQty yet, take all items with stock
+    if (transferredItems.length === 0 && items.length > 0) {
+      transferredItems = items.map(i => ({
+        ...i,
+        transferQty: Number(i.transferQty) > 0 ? Number(i.transferQty) : (Number(i.receivedQty) > 0 ? Number(i.receivedQty) : 1)
+      }));
     }
-    doc.text(`TRANSFER TO: ${destName}`, pageWidth - 14, 30, { align: 'right' });
+
+    if (transferredItems.length === 0) {
+      toast.error('Please add or scan products to the transfer list to preview/print');
+      return;
+    }
     
-    // Left Side Info
-    doc.text(`FROM STORE: ${posTerminal?.store_name || 'N/A'}`, 14, 45);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    
-    const printDate = new Date().toLocaleString();
-    doc.text(`PRINT DATE: ${printDate}`, pageWidth - 14, 50, { align: 'right' });
-    
-    const tableData = transferredItems.map((i, index) => {
-      const trnQty = Number(i.transferQty) || 0;
-      const mrp = Number(i.mrp) || 0;
-      const saleValue = trnQty * mrp;
-      return [
-        index + 1,
-        i.barcode,
-        i.name,
-        `${trnQty.toFixed(2)}`,
-        i.uom,
-        mrp.toFixed(2),
-        saleValue.toFixed(2)
-      ];
-    });
-    
-    autoTable(doc, {
-      startY: 55,
-      head: [['S/L', 'BARCODE', 'DISPLAY_NAME', 'TRN QTY', 'UOM', 'MRP', 'SALE VALUE']],
-      body: tableData,
-      theme: 'plain',
-      headStyles: { fontStyle: 'bold', lineWidth: { top: 0.5, bottom: 0.5 }, lineColor: [0, 0, 0], fontSize: 8, halign: 'right' },
-      bodyStyles: { fontSize: 8, halign: 'right' },
-      columnStyles: { 0: { halign: 'center' }, 1: { halign: 'left' }, 2: { halign: 'left' }, 4: { halign: 'center' } },
-      didParseCell: function (data) {
-        if (data.section === 'head') {
-          if (data.column.index === 0) data.cell.styles.halign = 'center';
-          if (data.column.index === 1 || data.column.index === 2) data.cell.styles.halign = 'left';
-          if (data.column.index === 4) data.cell.styles.halign = 'center';
+    try {
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      
+      // 1. Top Green Banner (#2e6f40)
+      doc.setFillColor(46, 111, 64);
+      doc.rect(0, 0, pageWidth, 22, 'F');
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(255, 255, 255);
+      doc.text("EZ ERP MANAGEMENT INFORMATION SYSTEM (MIS)", 14, 11);
+
+      doc.setFontSize(9.5);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(230, 245, 235);
+      doc.text("CENTRAL INVENTORY & POS SALES ANALYTICS", 14, 17);
+
+      // Right Header Title
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(255, 255, 255);
+      const challanTitle = preview 
+        ? "STOCK TRANSFER CHALLAN [PREVIEW]" 
+        : "STOCK TRANSFER CHALLAN";
+      doc.text(challanTitle, pageWidth - 14, 14, { align: 'right' });
+      
+      let destName = 'Central Store';
+      if (transferTo !== 'central_store') {
+        const st = stores.find(s => s.id === transferTo);
+        if (st) destName = st.name;
+      }
+
+      const currentUserName = user?.name || user?.username || (localStorage.getItem('erp_user') ? JSON.parse(localStorage.getItem('erp_user'))?.name || JSON.parse(localStorage.getItem('erp_user'))?.username : '') || 'Super Admin';
+      const displayName = (currentUserName === 'msmraqeeb@gmail.com' || currentUserName === 'admin@email.com') ? 'Super Admin' : currentUserName;
+
+      // 2. Metadata Section below Banner
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(50, 50, 50);
+
+      const transferDateStr = date ? new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+      doc.text(`From Store: ${posTerminal?.store_name || 'Store'}    |    Transfer To: ${destName}    |    Challan No: #${transferChallan}`, 14, 30);
+      doc.text(`Transfer Date: ${transferDateStr}${isChallanwise && selectedChallan ? `    |    Ref Challan: #${selectedChallan}` : ''}`, 14, 35);
+      doc.text(`Generated On: ${new Date().toLocaleString('en-GB')}`, pageWidth - 14, 30, { align: 'right' });
+      doc.text(`Printed By: ${displayName}`, pageWidth - 14, 35, { align: 'right' });
+      
+      let totalTrnQty = 0;
+      let totalSaleVal = 0;
+      
+      const tableCols = ["SL", "Barcode", "Item Name", "Category", "Sub Category", "TRN Qty", "UOM", "MRP (Tk)", "Sale Value (Tk)"];
+      
+      const tableData = transferredItems.map((i, index) => {
+        const trnQty = Number(i.transferQty) || 0;
+        const mrp = Number(i.mrp) || 0;
+        const saleValue = trnQty * mrp;
+        
+        totalTrnQty += trnQty;
+        totalSaleVal += saleValue;
+
+        const catName = typeof i.category === 'object' ? (i.category?.name || '-') : (i.category || '-');
+        const subCatName = typeof i.subCategory === 'object' ? (i.subCategory?.name || '-') : (i.subCategory || '-');
+        
+        return [
+          index + 1,
+          i.barcode || i.code || '-',
+          i.name || 'Product Item',
+          catName,
+          subCatName,
+          trnQty,
+          i.uom || 'Pcs',
+          mrp.toFixed(2),
+          saleValue.toFixed(2)
+        ];
+      });
+      
+      tableData.push([
+        'Total',
+        '',
+        `${transferredItems.length} Items`,
+        '',
+        '',
+        totalTrnQty,
+        'Pcs',
+        '',
+        totalSaleVal.toFixed(2)
+      ]);
+      
+      autoTable(doc, {
+        startY: 40,
+        head: [tableCols],
+        body: tableData,
+        theme: 'grid',
+        styles: { fontSize: 7.5, cellPadding: 2, textColor: [30, 30, 30], valign: 'middle' },
+        headStyles: { fillColor: [46, 111, 64], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'right' },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 12 },
+          1: { halign: 'left', cellWidth: 28 },
+          2: { halign: 'left', cellWidth: 'auto' },
+          3: { halign: 'left', cellWidth: 28 },
+          4: { halign: 'left', cellWidth: 28 },
+          5: { halign: 'right', cellWidth: 22 },
+          6: { halign: 'center', cellWidth: 16 },
+          7: { halign: 'right', cellWidth: 24 },
+          8: { halign: 'right', cellWidth: 28 }
+        },
+        didParseCell: function (data) {
+          if (data.section === 'head') {
+            if (data.column.index === 0) data.cell.styles.halign = 'center';
+            if (data.column.index >= 1 && data.column.index <= 4) data.cell.styles.halign = 'left';
+            if (data.column.index === 6) data.cell.styles.halign = 'center';
+          }
+          if (data.row.index === tableData.length - 1) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = [240, 245, 240];
+            data.cell.styles.textColor = [10, 60, 20];
+          }
+        },
+        margin: { top: 10, left: 14, right: 14 }
+      });
+      
+      const finalY = doc.lastAutoTable.finalY || 80;
+      const sigY = Math.max(finalY + 26, pageHeight - 20);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setLineWidth(0.4);
+      doc.setDrawColor(120, 120, 120);
+      doc.setTextColor(40, 40, 40);
+      
+      // Prepared / Posted By
+      doc.line(20, sigY, 70, sigY);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(2, 132, 199);
+      doc.text(displayName, 45, sigY - 2, { align: 'center' });
+      
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(40, 40, 40);
+      doc.text('Prepared By', 45, sigY + 5, { align: 'center' });
+      
+      // Checked By
+      doc.setFont("helvetica", "bold");
+      doc.line(pageWidth / 2 - 25, sigY, pageWidth / 2 + 25, sigY);
+      doc.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
+      
+      // Authorized Signature
+      doc.setFont("helvetica", "bold");
+      doc.line(pageWidth - 70, sigY, pageWidth - 20, sigY);
+      doc.text('Authorized Signature', pageWidth - 45, sigY + 5, { align: 'center' });
+      
+      const cleanFilename = String(transferChallan || 'Transfer').replace(/[^a-zA-Z0-9_-]/g, '_');
+
+      if (preview) {
+        const blob = doc.output('blob');
+        const blobUrl = URL.createObjectURL(blob);
+        const win = window.open(blobUrl, '_blank');
+        if (!win) {
+          doc.save(`Stock_Transfer_Preview_${cleanFilename}.pdf`);
+          toast.success('Preview PDF downloaded');
+        } else {
+          toast.success('Stock Transfer Preview opened in new tab');
         }
-      },
-      margin: { top: 10, left: 14, right: 14 }
-    });
-    
-    const finalY = doc.lastAutoTable.finalY || 55;
-    
-    // Totals
-    const totalTrnQty = transferredItems.reduce((sum, i) => sum + (Number(i.transferQty) || 0), 0);
-    const totalSaleValue = transferredItems.reduce((sum, i) => sum + ((Number(i.transferQty) || 0) * (Number(i.mrp) || 0)), 0);
-    
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    // Draw line above totals
-    doc.line(pageWidth / 2, finalY + 2, pageWidth - 14, finalY + 2);
-    doc.text('SUB TOTAL:', pageWidth / 2, finalY + 7, { align: 'right' });
-    doc.text(`${totalTrnQty.toFixed(2)}`, pageWidth / 2 + 20, finalY + 7, { align: 'right' });
-    doc.text(`${totalSaleValue.toFixed(2)}`, pageWidth - 14, finalY + 7, { align: 'right' });
-    
-    doc.line(pageWidth / 2, finalY + 12, pageWidth - 14, finalY + 12);
-    doc.text('NET AMOUNT:', pageWidth / 2, finalY + 17, { align: 'right' });
-    doc.text(`${totalSaleValue.toFixed(2)}`, pageWidth - 14, finalY + 17, { align: 'right' });
-    
-    // Signatures
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const sigY = pageHeight - 30;
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setLineWidth(0.5);
-    
-    // Posted By
-    doc.line(20, sigY, 70, sigY);
-    doc.text('Admin', 45, sigY - 2, { align: 'center' });
-    doc.setFont("helvetica", "bold");
-    doc.text('Posted By', 45, sigY + 5, { align: 'center' });
-    
-    // Checked By
-    doc.setFont("helvetica", "normal");
-    doc.line(pageWidth / 2 - 25, sigY, pageWidth / 2 + 25, sigY);
-    doc.setFont("helvetica", "bold");
-    doc.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
-    
-    // Authorized Signatory
-    doc.setFont("helvetica", "normal");
-    doc.line(pageWidth - 70, sigY, pageWidth - 20, sigY);
-    doc.setFont("helvetica", "bold");
-    doc.text('Authorized Signatory', pageWidth - 45, sigY + 5, { align: 'center' });
-    const blob = doc.output('blob');
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
+      } else {
+        doc.save(`Stock_Transfer_${cleanFilename}.pdf`);
+        toast.success('Stock Transfer PDF downloaded');
+      }
+    } catch (pdfErr) {
+      console.error('Error generating PDF:', pdfErr);
+      toast.error('Failed to generate PDF: ' + pdfErr.message);
+    }
   };
 
   const handleSave = async () => {
@@ -480,7 +551,7 @@ const PosStockTransfer = () => {
       }
 
       toast.success('Stock Transferred successfully!');
-      generatePDF();
+      generatePDF(false);
       
       // Generate a new transfer challan number for next entry
       const prefix = "TRN";
@@ -702,33 +773,42 @@ const PosStockTransfer = () => {
           </div>
 
           {/* Footer Totals & Buttons */}
-          <div style={{ padding: '10px', borderTop: '1px solid #ccc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ padding: '10px 15px', borderTop: '1px solid #ccc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc' }}>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
               <button 
-                onClick={generatePDF}
-                style={{ padding: '5px 15px', backgroundColor: '#e9ecef', border: '1px solid #ccc', cursor: 'pointer', fontWeight: 'bold' }}
+                type="button"
+                className="btn-info"
+                onClick={() => generatePDF(true)}
+                style={{ padding: '6px 20px', fontSize: '13px', fontWeight: 'bold' }}
               >
                 Preview
               </button>
               <button 
+                type="button"
+                className="btn-theme"
                 onClick={handleSave}
-                style={{ padding: '5px 15px', backgroundColor: '#e9ecef', border: '1px solid #ccc', cursor: 'pointer', fontWeight: 'bold' }}
                 disabled={isLoading}
+                style={{ padding: '6px 24px', fontSize: '13px', fontWeight: 'bold' }}
               >
                 {isLoading ? 'Saving...' : 'Save'}
               </button>
               <button 
+                type="button"
+                className="btn-secondary"
                 onClick={() => {
                   setItems([]);
                   setSelectedChallan('');
+                  toast.success('Cleared item list');
                 }}
-                style={{ padding: '5px 15px', backgroundColor: '#e9ecef', border: '1px solid #ccc', cursor: 'pointer', fontWeight: 'bold' }}
+                style={{ padding: '6px 20px', fontSize: '13px', fontWeight: 'bold' }}
               >
                 Clear
               </button>
               <button 
+                type="button"
+                className="btn-danger"
                 onClick={() => window.history.back()}
-                style={{ padding: '5px 15px', backgroundColor: '#e9ecef', border: '1px solid #ccc', cursor: 'pointer', fontWeight: 'bold' }}
+                style={{ padding: '6px 20px', fontSize: '13px', fontWeight: 'bold' }}
               >
                 Close
               </button>

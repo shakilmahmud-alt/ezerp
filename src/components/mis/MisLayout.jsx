@@ -193,8 +193,8 @@ const MisLayout = () => {
       path: '/mis/damage-lost-reports', 
       icon: <Trash2 size={18} />,
       subItems: [
-        { name: 'Damage Loss Summary', path: '/mis/damage-lost-reports/summary' },
-        { name: 'Scrap & Lost Log', path: '/mis/damage-lost-reports/scrap' },
+        { name: 'Store Damage & Lost Report', path: '/mis/damage-lost-reports/store-damage-lost-report' },
+        { name: 'Itemwise Damage Report', path: '/mis/damage-lost-reports/itemwise-damage-report' },
       ]
     },
     { 

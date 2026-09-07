@@ -89,6 +89,7 @@ import StoreDeliveryReport from './pages/mis/reports/StoreDeliveryReport';
 import ItemWiseDeliveryReport from './pages/mis/reports/ItemWiseDeliveryReport';
 import PurchaseReturnReport from './pages/mis/reports/PurchaseReturnReport';
 import ItemwisePurchaseReturnReport from './pages/mis/reports/ItemwisePurchaseReturnReport';
+import StoreDamageAndLostReport from './pages/mis/reports/StoreDamageAndLostReport';
 
 function App() {
   return (
@@ -178,8 +179,11 @@ function App() {
             <Route path="purchase-return-reports/itemwise-purchase-return-report" element={<ItemwisePurchaseReturnReport />} />
             <Route path="purchase-return-reports/summary" element={<PurchaseReturnReport />} />
             <Route path="purchase-return-reports/*" element={<PurchaseReturnReport />} />
-            <Route path="damage-lost-reports" element={<MisReportPlaceholder title="Damage and Lost Reports" />} />
-            <Route path="damage-lost-reports/*" element={<MisReportPlaceholder />} />
+            <Route path="damage-lost-reports" element={<StoreDamageAndLostReport />} />
+            <Route path="damage-lost-reports/store-damage-lost-report" element={<StoreDamageAndLostReport />} />
+            <Route path="damage-lost-reports/store" element={<StoreDamageAndLostReport />} />
+            <Route path="damage-lost-reports/itemwise-damage-report" element={<MisReportPlaceholder title="Itemwise Damage Report" />} />
+            <Route path="damage-lost-reports/*" element={<StoreDamageAndLostReport />} />
             <Route path="promotional-reports" element={<PromotionWiseSalesReport />} />
             <Route path="promotional-reports/promotion-wise-sales" element={<PromotionWiseSalesReport />} />
             <Route path="promotional-reports/*" element={<MisReportPlaceholder />} />
