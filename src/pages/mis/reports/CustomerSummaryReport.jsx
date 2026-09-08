@@ -659,16 +659,11 @@ const CustomerSummaryReport = () => {
 
   return (
     <div className="animate-fade-in" style={{ padding: '24px', backgroundColor: '#f8fafc', minHeight: '100vh' }}>
-      {/* Header & Breadcrumb */}
+      {/* Page Title */}
       <div style={{ marginBottom: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#64748b', marginBottom: '6px' }}>
-          <span>CRM Reports</span>
-          <ChevronRight size={14} />
-          <span style={{ color: '#166534', fontWeight: 600 }}>Customer Summary Report</span>
-        </div>
-        <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 700, color: '#1e293b' }}>
+        <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#0f172a', margin: 0, letterSpacing: '-0.3px' }}>
           Customer Summary Report
-        </h1>
+        </h2>
       </div>
 
       {/* Main Filter Panel (Exact 3rd Image Layout) */}

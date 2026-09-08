@@ -851,27 +851,26 @@ const StoreDamageAndLostReport = () => {
           }}>
             Print Type
           </div>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
             
-            {/* Show Button (btn-theme) */}
+            {/* Show Button (btn-info) */}
             <button
               type="button"
-              className="btn-theme"
+              className="btn-info"
               onClick={handleShowReport}
               disabled={loading}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                justifyContent: 'center',
                 gap: '6px',
                 padding: '6px 20px',
-                fontSize: '0.875rem',
-                fontWeight: '600',
-                minWidth: '90px'
+                fontSize: '13px',
+                fontWeight: 600,
+                borderRadius: '4px'
               }}
             >
-              {loading ? <RefreshCw size={14} className="animate-spin" /> : null}
-              {loading ? 'Loading...' : 'Show'}
+              {loading ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
+              Show
             </button>
 
             {/* Reload Button (btn-danger) */}
@@ -879,66 +878,58 @@ const StoreDamageAndLostReport = () => {
               type="button"
               className="btn-danger"
               onClick={handleReload}
+              disabled={loading}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                justifyContent: 'center',
                 gap: '6px',
-                padding: '6px 20px',
-                fontSize: '0.875rem',
-                fontWeight: '600',
-                minWidth: '90px'
+                padding: '6px 18px',
+                fontSize: '13px',
+                fontWeight: 600,
+                borderRadius: '4px'
               }}
             >
               <RotateCcw size={14} />
               Reload
             </button>
 
-            {/* Conditional PDF & Excel Download Buttons when report data is loaded */}
-            {reportData && reportData.rows.length > 0 && (
-              <>
-                <button
-                  type="button"
-                  className="btn-theme"
-                  onClick={handleExportPDF}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    padding: '6px 18px',
-                    fontSize: '0.875rem',
-                    fontWeight: '600'
-                  }}
-                >
-                  <Download size={14} />
-                  Download PDF
-                </button>
+            {/* Download PDF Button (.btn-theme) */}
+            <button
+              type="button"
+              className="btn-theme"
+              onClick={handleExportPDF}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 18px',
+                fontSize: '13px',
+                fontWeight: 600,
+                borderRadius: '4px'
+              }}
+            >
+              <Download size={14} />
+              Download PDF
+            </button>
 
-                <button
-                  type="button"
-                  onClick={handleExportExcel}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    padding: '6px 18px',
-                    fontSize: '0.875rem',
-                    fontWeight: '600',
-                    backgroundColor: '#fff',
-                    color: '#2e6f40',
-                    border: '1px solid #2e6f40',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  <FileSpreadsheet size={14} color="#2e6f40" />
-                  Download Excel
-                </button>
-              </>
-            )}
+            {/* Show Excel Button (.btn-info) */}
+            <button
+              type="button"
+              className="btn-info"
+              onClick={handleExportExcel}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 18px',
+                fontSize: '13px',
+                fontWeight: 600,
+                borderRadius: '4px'
+              }}
+            >
+              <FileSpreadsheet size={14} />
+              Show Excel
+            </button>
 
           </div>
         </div>

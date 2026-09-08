@@ -111,30 +111,7 @@ const ItemwiseSaleReport = () => {
       setSubSubcategories(ssctList);
       setPaymentMethods(pmList);
       setProductsList(prList);
-
-      // Auto-load initial sales report so page is not empty on initial mount
-      executeReportQuery({
-        fDate: fromDate,
-        tDate: toDate,
-        sType: storeType,
-        sStore: selectedStore,
-        pMethod: paymentMethod,
-        sVendor: selectedVendor,
-        sBrand: selectedBrand,
-        sCategory: selectedCategory,
-        sSubCategory: selectedSubCategory,
-        sSubSubcategory: selectedSubSubcategory,
-        sOrigin: countryOfOrigin,
-        iName: itemNameInput,
-        bCode: barcodeInput,
-        rType: reportType,
-        masterStores: stList,
-        masterVendors: vdList,
-        masterBrands: brList,
-        masterCategories: ctList,
-        masterSubcategories: sctList,
-        masterProducts: prList
-      });
+      // Strictly NO auto-load on mount - user must click Show
     } catch (err) {
       console.error('Error fetching master data:', err);
     }
@@ -1087,7 +1064,10 @@ const ItemwiseSaleReport = () => {
                 <input 
                   type="date"
                   value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
+                  onChange={(e) => {
+                    setFromDate(e.target.value);
+                    setReportData(null);
+                  }}
                   style={{
                     width: '100%',
                     padding: '6px 10px',
@@ -1110,6 +1090,7 @@ const ItemwiseSaleReport = () => {
                 onChange={(e) => {
                   setStoreType(e.target.value);
                   if (e.target.value === 'ALL') setSelectedStore('');
+                  setReportData(null);
                 }}
                 style={{
                   width: '100%',
@@ -1132,7 +1113,10 @@ const ItemwiseSaleReport = () => {
               <label style={{ fontSize: '12.5px', color: '#334155', fontWeight: 600 }}>Payment Method</label>
               <select 
                 value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
+                onChange={(e) => {
+                  setPaymentMethod(e.target.value);
+                  setReportData(null);
+                }}
                 style={{
                   width: '100%',
                   padding: '6px 10px',
@@ -1156,7 +1140,10 @@ const ItemwiseSaleReport = () => {
               <label style={{ fontSize: '12.5px', color: '#334155', fontWeight: 600 }}>Brand</label>
               <select 
                 value={selectedBrand}
-                onChange={(e) => setSelectedBrand(e.target.value)}
+                onChange={(e) => {
+                  setSelectedBrand(e.target.value);
+                  setReportData(null);
+                }}
                 style={{
                   width: '100%',
                   padding: '6px 10px',
@@ -1180,7 +1167,10 @@ const ItemwiseSaleReport = () => {
               <label style={{ fontSize: '12.5px', color: '#334155', fontWeight: 600 }}>Sub Category</label>
               <select 
                 value={selectedSubCategory}
-                onChange={(e) => setSelectedSubCategory(e.target.value)}
+                onChange={(e) => {
+                  setSelectedSubCategory(e.target.value);
+                  setReportData(null);
+                }}
                 style={{
                   width: '100%',
                   padding: '6px 10px',
@@ -1205,7 +1195,10 @@ const ItemwiseSaleReport = () => {
               <input 
                 type="text"
                 value={itemNameInput}
-                onChange={(e) => setItemNameInput(e.target.value)}
+                onChange={(e) => {
+                  setItemNameInput(e.target.value);
+                  setReportData(null);
+                }}
                 onFocus={() => { if (itemNameInput === 'ALL') setItemNameInput(''); }}
                 onBlur={() => { if (!itemNameInput.trim()) setItemNameInput('ALL'); }}
                 placeholder="ALL"
@@ -1228,7 +1221,10 @@ const ItemwiseSaleReport = () => {
               <input 
                 type="text"
                 value={barcodeInput}
-                onChange={(e) => setBarcodeInput(e.target.value)}
+                onChange={(e) => {
+                  setBarcodeInput(e.target.value);
+                  setReportData(null);
+                }}
                 onFocus={() => { if (barcodeInput === 'ALL') setBarcodeInput(''); }}
                 onBlur={() => { if (!barcodeInput.trim()) setBarcodeInput('ALL'); }}
                 placeholder="ALL"
@@ -1257,7 +1253,10 @@ const ItemwiseSaleReport = () => {
                 <input 
                   type="date"
                   value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
+                  onChange={(e) => {
+                    setToDate(e.target.value);
+                    setReportData(null);
+                  }}
                   style={{
                     width: '100%',
                     padding: '6px 10px',
@@ -1277,7 +1276,10 @@ const ItemwiseSaleReport = () => {
               <label style={{ fontSize: '12.5px', color: '#334155', fontWeight: 600 }}>Store</label>
               <select 
                 value={selectedStore}
-                onChange={(e) => setSelectedStore(e.target.value)}
+                onChange={(e) => {
+                  setSelectedStore(e.target.value);
+                  setReportData(null);
+                }}
                 disabled={storeType === 'ALL'}
                 style={{
                   width: '100%',
@@ -1303,7 +1305,10 @@ const ItemwiseSaleReport = () => {
               <label style={{ fontSize: '12.5px', color: '#334155', fontWeight: 600 }}>Vendor</label>
               <select 
                 value={selectedVendor}
-                onChange={(e) => setSelectedVendor(e.target.value)}
+                onChange={(e) => {
+                  setSelectedVendor(e.target.value);
+                  setReportData(null);
+                }}
                 style={{
                   width: '100%',
                   padding: '6px 10px',
@@ -1331,6 +1336,7 @@ const ItemwiseSaleReport = () => {
                   setSelectedCategory(e.target.value);
                   setSelectedSubCategory('ALL');
                   setSelectedSubSubcategory('ALL');
+                  setReportData(null);
                 }}
                 style={{
                   width: '100%',
@@ -1355,7 +1361,10 @@ const ItemwiseSaleReport = () => {
               <label style={{ fontSize: '12.5px', color: '#334155', fontWeight: 600 }}>Sub Subcategory</label>
               <select 
                 value={selectedSubSubcategory}
-                onChange={(e) => setSelectedSubSubcategory(e.target.value)}
+                onChange={(e) => {
+                  setSelectedSubSubcategory(e.target.value);
+                  setReportData(null);
+                }}
                 style={{
                   width: '100%',
                   padding: '6px 10px',
@@ -1379,7 +1388,10 @@ const ItemwiseSaleReport = () => {
               <label style={{ fontSize: '12.5px', color: '#334155', fontWeight: 600 }}>Country Of Origin</label>
               <select 
                 value={countryOfOrigin}
-                onChange={(e) => setCountryOfOrigin(e.target.value)}
+                onChange={(e) => {
+                  setCountryOfOrigin(e.target.value);
+                  setReportData(null);
+                }}
                 style={{
                   width: '100%',
                   padding: '6px 10px',
@@ -1420,6 +1432,7 @@ const ItemwiseSaleReport = () => {
                   key={type.id}
                   onClick={() => {
                     setReportType(type.id);
+                    setReportData(null);
                   }}
                   style={{
                     display: 'flex',
@@ -1477,11 +1490,50 @@ const ItemwiseSaleReport = () => {
                 padding: '6px 20px',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px'
+                gap: '6px',
+                fontSize: '13px',
+                fontWeight: 600,
+                borderRadius: '4px'
               }}
             >
               {loading ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
               Show
+            </button>
+
+            {/* Reload Button (Glossy Red .btn-danger) */}
+            <button
+              onClick={handleReload}
+              className="btn-danger"
+              style={{
+                padding: '6px 18px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '13px',
+                fontWeight: 600,
+                borderRadius: '4px'
+              }}
+            >
+              <RefreshCw size={14} />
+              Reload
+            </button>
+
+            {/* Download PDF Button (Glossy Green .btn-theme) */}
+            <button
+              onClick={handleDownloadPDF}
+              className="btn-theme"
+              style={{
+                padding: '6px 18px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '13px',
+                fontWeight: 600,
+                borderRadius: '4px'
+              }}
+            >
+              <Download size={14} />
+              Download PDF
             </button>
 
             {/* Show Excel Button (.btn-info) */}
@@ -1492,7 +1544,10 @@ const ItemwiseSaleReport = () => {
                 padding: '6px 18px',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px'
+                gap: '6px',
+                fontSize: '13px',
+                fontWeight: 600,
+                borderRadius: '4px'
               }}
             >
               <FileSpreadsheet size={14} />
@@ -1507,41 +1562,14 @@ const ItemwiseSaleReport = () => {
                 padding: '6px 18px',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px'
+                gap: '6px',
+                fontSize: '13px',
+                fontWeight: 600,
+                borderRadius: '4px'
               }}
             >
               <Layers size={14} />
               Show Excel 2
-            </button>
-
-            {/* Download PDF Button (Glossy Green .btn-theme) */}
-            <button
-              onClick={handleDownloadPDF}
-              className="btn-theme"
-              style={{
-                padding: '6px 18px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              <Download size={14} />
-              Download PDF
-            </button>
-
-            {/* Reload Button (Glossy Red .btn-danger) */}
-            <button
-              onClick={handleReload}
-              className="btn-danger"
-              style={{
-                padding: '6px 18px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              <RefreshCw size={14} />
-              Reload
             </button>
           </div>
         </div>

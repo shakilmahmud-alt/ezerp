@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
 import { useAuth } from '../../../context/AuthContext';
-import { Download, RefreshCw, Printer, Search, FileText, TrendingUp, ShoppingBag, BarChart3, Layers, Clock, AlertCircle } from 'lucide-react';
+import { Download, RefreshCw, Printer, Search, FileText, TrendingUp, ShoppingBag, BarChart3, Layers, Clock, AlertCircle, FileSpreadsheet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 
 const MultipleReportsSale = () => {
   const { user } = useAuth();
@@ -584,6 +585,24 @@ const MultipleReportsSale = () => {
     setReportData(null);
     setTableSearch('');
     toast.success('Form reloaded to default');
+  };
+
+  // Export to Excel
+  const handleExportExcel = () => {
+    if (!reportData || !reportData.rows || reportData.rows.length === 0) {
+      toast.error('Please generate report first before exporting Excel');
+      return;
+    }
+    try {
+      const ws = XLSX.utils.json_to_sheet(reportData.rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Report');
+      XLSX.writeFile(wb, `${(reportData.type || 'Sales_Report').replace(/\s+/g, '_')}_${fromDate}_to_${toDate}.xlsx`);
+      toast.success('Excel exported successfully');
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to export Excel');
+    }
   };
 
   // Filtered rows for live table search
@@ -1276,73 +1295,79 @@ const MultipleReportsSale = () => {
             Print Type
           </h3>
 
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+            {/* Show Button */}
             <button
               onClick={handleShow}
               disabled={loading}
-              className="btn-theme"
+              className="btn-info"
               style={{
                 padding: '6px 20px',
-                borderRadius: '4px',
-                fontSize: '0.85rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px'
+                gap: '6px',
+                fontSize: '13px',
+                fontWeight: 600,
+                borderRadius: '4px'
               }}
             >
-              {loading ? 'Processing...' : 'Show'}
+              {loading ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
+              Show
             </button>
 
+            {/* Reload Button */}
             <button
               onClick={handleReload}
+              className="btn-danger"
               style={{
                 padding: '6px 18px',
-                backgroundColor: '#ffffff',
-                border: '1px solid #cbd5e1',
-                color: '#475569',
-                borderRadius: '4px',
-                fontSize: '0.85rem',
-                fontWeight: 500,
-                cursor: 'pointer',
-                transition: 'all 0.15s'
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '13px',
+                fontWeight: 600,
+                borderRadius: '4px'
               }}
-              onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-              onMouseLeave={e => e.currentTarget.style.backgroundColor = '#ffffff'}
             >
+              <RefreshCw size={14} />
               Reload
             </button>
 
-            {reportData && (
-              <button
-                onClick={handleDownloadPDF}
-                style={{
-                  padding: '6px 18px',
-                  backgroundColor: '#ffffff',
-                  border: '1px solid #2e6f40',
-                  color: '#2e6f40',
-                  borderRadius: '4px',
-                  fontSize: '0.85rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  transition: 'all 0.15s'
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.backgroundColor = '#2e6f40';
-                  e.currentTarget.style.color = '#ffffff';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.backgroundColor = '#ffffff';
-                  e.currentTarget.style.color = '#2e6f40';
-                }}
-              >
-                <Download size={15} /> Download PDF
-              </button>
-            )}
+            {/* Download PDF Button */}
+            <button
+              onClick={handleDownloadPDF}
+              className="btn-theme"
+              style={{
+                padding: '6px 18px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '13px',
+                fontWeight: 600,
+                borderRadius: '4px'
+              }}
+            >
+              <Download size={14} />
+              Download PDF
+            </button>
+
+            {/* Show Excel Button */}
+            <button
+              onClick={handleExportExcel}
+              className="btn-info"
+              style={{
+                padding: '6px 18px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '13px',
+                fontWeight: 600,
+                borderRadius: '4px'
+              }}
+            >
+              <FileSpreadsheet size={14} />
+              Show Excel
+            </button>
           </div>
         </div>
 

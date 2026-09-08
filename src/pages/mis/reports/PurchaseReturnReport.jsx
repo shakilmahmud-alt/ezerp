@@ -880,13 +880,13 @@ const PurchaseReturnReport = () => {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             
-            {/* Show Button (.btn-theme Emerald Green Glossy) */}
+            {/* Show Button (.btn-info) */}
             <button
               onClick={handleShowReport}
               disabled={loading}
-              className="btn-theme"
+              className="btn-info"
               style={{
-                padding: '6px 22px',
+                padding: '6px 20px',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
@@ -896,11 +896,11 @@ const PurchaseReturnReport = () => {
                 cursor: 'pointer'
               }}
             >
-              {loading ? <RefreshCw size={14} className="animate-spin" /> : null}
+              {loading ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
               Show
             </button>
 
-            {/* Reload Button (Glossy Aero Ruby Red .btn-danger) */}
+            {/* Reload Button (.btn-danger) */}
             <button
               onClick={handleReload}
               disabled={loading}
@@ -920,52 +920,43 @@ const PurchaseReturnReport = () => {
               Reload
             </button>
 
-            {/* Download PDF Button (.btn-theme Emerald Green Glossy) */}
-            {reportData && (
-              <>
-                <button
-                  onClick={handleExportPDF}
-                  className="btn-theme"
-                  style={{
-                    padding: '6px 18px',
-                    borderRadius: '4px',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <Printer size={14} />
-                  Download PDF
-                </button>
+            {/* Download PDF Button (.btn-theme) */}
+            <button
+              onClick={handleExportPDF}
+              className="btn-theme"
+              style={{
+                padding: '6px 18px',
+                borderRadius: '4px',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <Download size={14} />
+              Download PDF
+            </button>
 
-                {/* Download Excel Button (White with green outline) */}
-                <button
-                  onClick={handleExportExcel}
-                  style={{
-                    padding: '6px 18px',
-                    backgroundColor: '#ffffff',
-                    border: '1px solid #16a34a',
-                    color: '#16a34a',
-                    borderRadius: '4px',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#f0fdf4'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#ffffff'; }}
-                >
-                  <FileSpreadsheet size={14} />
-                  Download Excel
-                </button>
-              </>
-            )}
+            {/* Show Excel Button (.btn-info) */}
+            <button
+              onClick={handleExportExcel}
+              className="btn-info"
+              style={{
+                padding: '6px 18px',
+                borderRadius: '4px',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <FileSpreadsheet size={14} />
+              Show Excel
+            </button>
 
           </div>
         </div>
