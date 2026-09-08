@@ -167,63 +167,59 @@ const CustomerTypeTagModal = ({ promotion, onClose }) => {
 };
 
 // ================= STANDARDIZED PROMOTION PDF GENERATOR =================
+// ================= STANDARDIZED PROMOTION PDF GENERATOR =================
 const generatePromotionPDF = (promoData, itemsDataBuy = [], itemsDataGet = [], circularItems = [], couponItems = [], currentUser = null) => {
   const doc = new jsPDF('landscape', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
 
-  // 1. Company Header (Center)
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.setTextColor(46, 111, 64);
-  doc.text("EZ ERP", pageWidth / 2, 13, { align: 'center' });
-  
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
-  doc.setTextColor(70, 70, 70);
-  doc.text("House: 352, Lane: 05, 2nd floor, Baridhara DOHS, Dhaka-1212, Bangladesh", pageWidth / 2, 18, { align: 'center' });
+  // 1. Top Green Banner (#2e6f40)
+  doc.setFillColor(46, 111, 64);
+  doc.rect(0, 0, pageWidth, 22, 'F');
 
-  // 2. Top Right Details
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.setTextColor(255, 255, 255);
+  doc.text("EZ ERP MANAGEMENT INFORMATION SYSTEM (MIS)", 14, 11);
+
+  doc.setFontSize(9.5);
+  doc.setFont("helvetica", "normal");
+  doc.text("CENTRAL INVENTORY & POS SALES ANALYTICS", 14, 17);
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.setTextColor(46, 111, 64);
-  doc.text("PROMOTION CIRCULAR", pageWidth - 14, 13, { align: 'right' });
-  
+  doc.text("PROMOTION CIRCULAR (DETAILS)", pageWidth - 14, 14, { align: 'right' });
+
+  // 2. Metadata Section below Banner
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
-  doc.setTextColor(30, 30, 30);
-  const code = promoData.circular_code ? (promoData.circular_code.startsWith('#') ? promoData.circular_code : `#${promoData.circular_code}`) : '';
-  doc.text(`Circular No: ${code}`, pageWidth - 14, 18.5, { align: 'right' });
-  
+  doc.setTextColor(50, 50, 50);
+
+  const code = promoData.circular_code ? (promoData.circular_code.startsWith('#') ? promoData.circular_code : `#${promoData.circular_code}`) : '-';
   const from = promoData.valid_from ? String(promoData.valid_from).split('T')[0] : '';
   const to = promoData.valid_to ? String(promoData.valid_to).split('T')[0] : '';
   const dateStr = from && to ? `${from} to ${to}` : (from || to || new Date().toISOString().split('T')[0]);
-  doc.text(`Validity: ${dateStr}`, pageWidth - 14, 23, { align: 'right' });
+  const storesText = promoData.stores || 'Central Store, Shop';
 
-  const storesText = promoData.stores || 'ALL';
-  doc.text(`Stores: ${storesText.length > 40 ? storesText.substring(0, 40) + '...' : storesText}`, pageWidth - 14, 27.5, { align: 'right' });
+  const line1Left = `Promotion Name: ${promoData.circular_name || '-'} | Promotion Type: ${promoData.promotion_type || 'Circular Discount'} | Circular Type: ${promoData.circular_type || promoData.remarks || 'Standard'}`;
+  const line2Left = `Circular No: ${code} | Validity: ${dateStr} | Store Scope: ${storesText}`;
 
-  // 3. Top Left Details
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.setTextColor(30, 30, 30);
-  
-  doc.text(`Promotion Name:`, 14, 18.5);
-  doc.setFont("helvetica", "normal");
-  doc.text(`${promoData.circular_name || ''}`, 45, 18.5);
+  const printDateStr = new Date().toLocaleString('en-US', {
+    year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: true
+  });
 
-  doc.setFont("helvetica", "bold");
-  doc.text(`Promotion Type:`, 14, 23);
-  doc.setFont("helvetica", "normal");
-  doc.text(`${promoData.promotion_type || 'Circular Discount'}`, 45, 23);
+  const currentUserName = currentUser?.name || currentUser?.username || (localStorage.getItem('erp_user') ? JSON.parse(localStorage.getItem('erp_user'))?.name || JSON.parse(localStorage.getItem('erp_user'))?.username : '') || 'Super Admin';
+  const displayName = (currentUserName === 'msmraqeeb@gmail.com' || currentUserName === 'admin@email.com') ? 'Super Admin' : currentUserName;
 
-  doc.setFont("helvetica", "bold");
-  doc.text(`Circular Type:`, 14, 27.5);
-  doc.setFont("helvetica", "normal");
-  doc.text(`${promoData.circular_type || promoData.remarks || 'Standard'}`, 45, 27.5);
+  doc.text(line1Left, 14, 30);
+  doc.text(line2Left, 14, 35);
 
-  // 4. Tables according to promo type
-  let startY = 33;
+  doc.text(`Generated On: ${printDateStr}`, pageWidth - 14, 30, { align: 'right' });
+  doc.text(`Printed By: ${displayName}`, pageWidth - 14, 35, { align: 'right' });
+
+  // 3. Tables according to promo type
+  let startY = 40;
   let tableHead = [];
   let tableBody = [];
   let colStyles = {};
@@ -232,29 +228,51 @@ const generatePromotionPDF = (promoData, itemsDataBuy = [], itemsDataGet = [], c
   if (promoData.promotion_type === 'Buy Get') {
     tableHead = [['SL', 'Type', 'Barcode / Code', 'Item Name', 'Price (MRP)', 'Quantity']];
     let sl = 1;
+    let totalMrp = 0;
+    let totalQty = 0;
     (itemsDataBuy || []).forEach(i => {
+      const mrp = Number(i.mrp || 0);
+      const qty = Number(i.quantity || 1);
+      totalMrp += mrp;
+      totalQty += qty;
       tableBody.push([
         sl++,
         'BUY',
         i.barcode || i.code || '-',
         i.name || i.item || '',
-        Number(i.mrp || 0).toFixed(2),
-        i.quantity || 1
+        mrp.toFixed(2),
+        qty
       ]);
     });
     (itemsDataGet || []).forEach(i => {
+      const mrp = Number(i.mrp || 0);
+      const qty = Number(i.quantity || 1);
+      totalMrp += mrp;
+      totalQty += qty;
       tableBody.push([
         sl++,
         'GET',
         i.barcode || i.code || '-',
         i.name || i.item || '',
-        Number(i.mrp || 0).toFixed(2),
-        i.quantity || 1
+        mrp.toFixed(2),
+        qty
       ]);
     });
 
+    if (tableBody.length > 0) {
+      hasSummaryRow = true;
+      tableBody.push([
+        'Total',
+        '',
+        `${tableBody.length} Items`,
+        '',
+        totalMrp.toFixed(2),
+        totalQty
+      ]);
+    }
+
     colStyles = {
-      0: { halign: 'center', cellWidth: 12 },
+      0: { halign: 'center', cellWidth: 14 },
       1: { halign: 'center', cellWidth: 20 },
       2: { halign: 'left', cellWidth: 35 },
       3: { halign: 'left' },
@@ -288,7 +306,7 @@ const generatePromotionPDF = (promoData, itemsDataBuy = [], itemsDataGet = [], c
     }
 
     colStyles = {
-      0: { halign: 'center', cellWidth: 12 },
+      0: { halign: 'center', cellWidth: 14 },
       1: { halign: 'left', cellWidth: 40 },
       2: { halign: 'left', cellWidth: 35 },
       3: { halign: 'right', cellWidth: 30 },
@@ -305,7 +323,7 @@ const generatePromotionPDF = (promoData, itemsDataBuy = [], itemsDataGet = [], c
     (circularItems || []).forEach((it, idx) => {
       const mrp = Number(it.mrp || it.sale_price || 0);
       const dPct = Number(it.discountPct || it.discount_percent || 0);
-      const dAmt = Number(it.discAmt || it.discount_amount || 0);
+      const dAmt = Number(it.discAmt || it.discount_amount || (dPct > 0 ? (mrp * dPct) / 100 : 0));
       const vPct = Number(it.vendorContriPct || it.vendor_contribution_percent || 0);
 
       totalMrp += mrp;
@@ -340,7 +358,7 @@ const generatePromotionPDF = (promoData, itemsDataBuy = [], itemsDataGet = [], c
     }
 
     colStyles = {
-      0: { halign: 'center', cellWidth: 12 },
+      0: { halign: 'center', cellWidth: 14 },
       1: { halign: 'left', cellWidth: 28 },
       2: { halign: 'left' },
       3: { halign: 'left', cellWidth: 32 },
@@ -358,7 +376,7 @@ const generatePromotionPDF = (promoData, itemsDataBuy = [], itemsDataGet = [], c
     body: tableBody,
     theme: 'grid',
     styles: { fontSize: 7.5, cellPadding: 1.8, textColor: [30, 30, 30] },
-    headStyles: { fillColor: [46, 111, 64], fontStyle: 'bold', textColor: [255, 255, 255] },
+    headStyles: { fillColor: [46, 111, 64], fontStyle: 'bold', textColor: [255, 255, 255], halign: 'center' },
     alternateRowStyles: { fillColor: [250, 250, 250] },
     columnStyles: colStyles,
     didParseCell: function (data) {
@@ -374,37 +392,37 @@ const generatePromotionPDF = (promoData, itemsDataBuy = [], itemsDataGet = [], c
     margin: { top: 10, left: 14, right: 14 }
   });
 
-  const finalY = doc.lastAutoTable.finalY || startY + 50;
+  const finalY = doc.lastAutoTable?.finalY || startY + 50;
 
-  // 5. Signatures (Exact Match to Image 3)
-  const sigY = Math.max(finalY + 24, pageHeight - 18);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
+  // 4. Signatures (Matching MIS Standard)
+  const sigY = Math.max(finalY + 24, pageHeight - 24);
+  doc.setDrawColor(160, 174, 192);
   doc.setLineWidth(0.4);
 
-  const currentUserName = currentUser?.name || currentUser?.username || (localStorage.getItem('erp_user') ? JSON.parse(localStorage.getItem('erp_user'))?.name || JSON.parse(localStorage.getItem('erp_user'))?.username : '') || 'Admin';
-  const displayName = (currentUserName === 'msmraqeeb@gmail.com' || currentUserName === 'admin@email.com') ? 'Admin' : currentUserName;
-
-  // Posted By
-  doc.line(20, sigY, 70, sigY);
-  doc.setFont("helvetica", "normal");
+  // Prepared By / Posted By (Left)
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(8.5);
-  doc.setTextColor(2, 132, 199);
-  doc.text(displayName, 45, sigY - 2, { align: 'center' });
+  doc.setTextColor(30, 41, 59);
+  doc.text(displayName, 47.5, sigY - 2.5, { align: 'center' });
+  doc.line(20, sigY, 75, sigY);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Prepared By', 47.5, sigY + 5, { align: 'center' });
 
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(40, 40, 40);
-  doc.text('Posted By', 45, sigY + 5, { align: 'center' });
-
-  // Checked By
-  doc.setFont("helvetica", "bold");
-  doc.line(pageWidth / 2 - 25, sigY, pageWidth / 2 + 25, sigY);
+  // Checked By (Middle)
+  doc.line(pageWidth / 2 - 27.5, sigY, pageWidth / 2 + 27.5, sigY);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
   doc.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
 
-  // Authorized Signature
-  doc.setFont("helvetica", "bold");
-  doc.line(pageWidth - 70, sigY, pageWidth - 20, sigY);
-  doc.text('Authorized Signature', pageWidth - 45, sigY + 5, { align: 'center' });
+  // Authorized Signature (Right)
+  doc.line(pageWidth - 75, sigY, pageWidth - 20, sigY);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Authorized Signature', pageWidth - 47.5, sigY + 5, { align: 'center' });
 
   doc.save(`Promotion_${String(promoData.circular_code || 'Circular').replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`);
 };

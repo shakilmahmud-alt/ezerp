@@ -19,6 +19,23 @@ const SectionWrapper = ({ title, children, rightContent }) => (
   </div>
 );
 
+// Helper to extract value with fuzzy key matching
+const getFuzzyRowVal = (row, fieldKeys) => {
+  if (!row || typeof row !== 'object') return '';
+  const rowKeys = Object.keys(row);
+  for (const fk of fieldKeys) {
+    if (row[fk] !== undefined && row[fk] !== null && String(row[fk]).trim() !== '') {
+      return row[fk];
+    }
+    const normFk = fk.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const foundKey = rowKeys.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, '') === normFk);
+    if (foundKey && row[foundKey] !== undefined && row[foundKey] !== null && String(row[foundKey]).trim() !== '') {
+      return row[foundKey];
+    }
+  }
+  return '';
+};
+
 const PriceChangeExcel = () => {
   const [circularName, setCircularName] = useState('');
   const [effectiveDate, setEffectiveDate] = useState('');
@@ -26,17 +43,32 @@ const PriceChangeExcel = () => {
   const [selectedStores, setSelectedStores] = useState([]);
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false);
   const [storesList, setStoresList] = useState([]);
+  const [productsList, setProductsList] = useState([]);
 
   useEffect(() => {
-    const fetchStores = async () => {
+    const fetchInitialData = async () => {
       try {
-        const { data, error } = await supabase.from('stores').select('name').eq('status', 'ACTIVE').order('name');
-        if (data) setStoresList(['Central Store', ...data.map(s => s.name)]);
+        const { data: storesData } = await supabase
+          .from('stores')
+          .select('name')
+          .eq('status', 'ACTIVE')
+          .order('name');
+        if (storesData) {
+          setStoresList(['Central Store', ...storesData.map(s => s.name)]);
+        }
+
+        const { data: prodsData } = await supabase
+          .from('products')
+          .select('id, code, barcode, user_define_barcode, item_name, purchase_price, mrp')
+          .order('item_name');
+        if (prodsData) {
+          setProductsList(prodsData);
+        }
       } catch (err) {
-        console.error("Failed to load stores");
+        console.error("Failed to load initial data", err);
       }
     };
-    fetchStores();
+    fetchInitialData();
   }, []);
 
   const [excelFile, setExcelFile] = useState(null);
@@ -52,8 +84,8 @@ const PriceChangeExcel = () => {
   const handleExport = () => {
     const ws_data = [
       ['BARCODE', 'CPU', 'PRV_MRP', 'MRP', 'IS_USR_BARCODE'],
-      ['A00014802', '', '6000', '7000', 'N'],
-      ['6292358068588', '', '3850', '5000', 'Y']
+      ['A000001', '370.5', '591', '600', 'N'],
+      ['1001100001', '370.5', '591', '600', 'Y']
     ];
     const ws = XLSX.utils.aoa_to_sheet(ws_data);
     const wb = XLSX.utils.book_new();
@@ -68,7 +100,37 @@ const PriceChangeExcel = () => {
     }
   };
 
-  const handleUpload = () => {
+  const findProduct = (allProds, searchVal) => {
+    if (!searchVal) return null;
+    const term = String(searchVal).trim();
+    if (!term) return null;
+    const lower = term.toLowerCase();
+
+    // 1. Exact match by code, barcode, user_define_barcode, or id
+    let found = allProds.find(p => 
+      String(p.code || '').trim() === term ||
+      String(p.barcode || '').trim() === term ||
+      String(p.user_define_barcode || '').trim() === term ||
+      String(p.id || '').trim() === term
+    );
+    if (found) return found;
+
+    // 2. Case-insensitive match
+    found = allProds.find(p => 
+      String(p.code || '').trim().toLowerCase() === lower ||
+      String(p.barcode || '').trim().toLowerCase() === lower ||
+      String(p.user_define_barcode || '').trim().toLowerCase() === lower
+    );
+    if (found) return found;
+
+    // 3. Match by item_name
+    found = allProds.find(p => 
+      String(p.item_name || '').trim().toLowerCase() === lower
+    );
+    return found || null;
+  };
+
+  const handleUpload = async () => {
     if (!excelFile) {
       toast.error("Please choose a file first");
       return;
@@ -78,6 +140,17 @@ const PriceChangeExcel = () => {
     reader.onload = async (e) => {
       try {
         setIsLoading(true);
+
+        // Fetch fresh products list from database to ensure up-to-date mapping
+        let currentProducts = productsList;
+        const { data: freshProds, error: pErr } = await supabase
+          .from('products')
+          .select('id, code, barcode, user_define_barcode, item_name, purchase_price, mrp');
+        if (!pErr && freshProds && freshProds.length > 0) {
+          currentProducts = freshProds;
+          setProductsList(freshProds);
+        }
+
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
@@ -85,38 +158,51 @@ const PriceChangeExcel = () => {
         
         const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
         
-        const barcodes = json.map(row => String(row.BARCODE)).filter(Boolean);
-        
-        const { data: dbProducts, error } = await supabase
-          .from('products')
-          .select('barcode, item_name, purchase_price, mrp')
-          .in('barcode', barcodes);
-
-        if (error) throw error;
-
-        const productMap = {};
-        if (dbProducts) {
-          dbProducts.forEach(p => {
-            productMap[p.barcode] = p;
-          });
+        if (!json || json.length === 0) {
+          toast.error("The uploaded Excel file contains no data");
+          return;
         }
 
         const mappedItems = json.map((row, index) => {
-          const barcode = String(row.BARCODE);
-          const dbProd = productMap[barcode];
+          // Identify barcode/code from various possible headers
+          const rawCode = String(
+            getFuzzyRowVal(row, [
+              'BARCODE', 'Barcode', 'barcode',
+              'CODE', 'Code', 'code',
+              'ITEM_CODE', 'Item_Code', 'Item Code', 'ItemCode',
+              'USER_BARCODE', 'User Barcode', 'user_define_barcode', 'UserBarcode',
+              'ITEM', 'Item'
+            ]) || Object.values(row)[0] || ''
+          ).trim();
+
+          const dbProd = findProduct(currentProducts, rawCode);
+
+          const currentCpu = dbProd ? Number(dbProd.purchase_price || 0) : 0;
+          const dbMrp = dbProd ? Number(dbProd.mrp || 0) : 0;
+
+          const rawPrvMrp = getFuzzyRowVal(row, ['PRV_MRP', 'PRV MRP', 'CURRENT_MRP', 'Current MRP', 'PREV_MRP', 'OLD_MRP', 'Previous MRP']);
+          const currentMrp = (rawPrvMrp !== '' && !isNaN(Number(rawPrvMrp))) ? Number(rawPrvMrp) : dbMrp;
+
+          const rawCpu = getFuzzyRowVal(row, ['CPU', 'Cpu', 'cpu', 'NEW_CPU', 'New CPU', 'Purchase Price', 'PURCHASE_PRICE', 'Cost']);
+          const newCpu = (rawCpu !== '' && !isNaN(Number(rawCpu))) ? Number(rawCpu) : currentCpu;
+
+          const rawMrp = getFuzzyRowVal(row, ['MRP', 'Mrp', 'mrp', 'NEW_MRP', 'New MRP', 'Sale Price', 'Price']);
+          const newMrp = (rawMrp !== '' && !isNaN(Number(rawMrp))) ? Number(rawMrp) : currentMrp;
+
           return {
             sl: index + 1,
-            code: barcode,
+            code: rawCode || (dbProd?.code || dbProd?.barcode || '-'),
             name: dbProd ? dbProd.item_name : 'Not Found',
-            currentCpu: dbProd ? dbProd.purchase_price : 0,
-            newCpu: row.CPU !== "" ? row.CPU : (dbProd ? dbProd.purchase_price : 0),
-            currentMrp: dbProd ? dbProd.mrp : (row.PRV_MRP || 0),
-            newMrp: row.MRP !== "" ? row.MRP : (row.PRV_MRP || 0)
+            currentCpu: currentCpu,
+            newCpu: newCpu,
+            currentMrp: currentMrp,
+            newMrp: newMrp,
+            productId: dbProd ? dbProd.id : null
           };
         });
 
         setItems(mappedItems);
-        toast.success("Excel uploaded successfully");
+        toast.success(`Successfully uploaded ${mappedItems.length} items`);
       } catch (err) {
         console.error(err);
         toast.error("Error reading Excel file");
@@ -127,88 +213,167 @@ const PriceChangeExcel = () => {
     reader.readAsArrayBuffer(excelFile);
   };
 
-  const generatePDF = () => {
-    const doc = new jsPDF();
+  const generatePDF = (customData = null) => {
+    const dataToUse = customData || {
+      circularName: circularName || 'Price Change Circular',
+      effectiveDate: effectiveDate || new Date().toISOString().split('T')[0],
+      selectedStores: selectedStores.length ? selectedStores : ['Central Store'],
+      items: items
+    };
+
+    const doc = new jsPDF('landscape', 'mm', 'a4');
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
 
-    // Company Header
+    // 1. Top Green Banner (#2e6f40)
+    doc.setFillColor(46, 111, 64);
+    doc.rect(0, 0, pageWidth, 22, 'F');
+
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text("EG ERP", pageWidth / 2, 15, { align: 'center' });
-    
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.text("House:352,Lane:05,2nd floor,Baridhara DOHS,", pageWidth / 2, 20, { align: 'center' });
-    doc.text("Dhaka , Dhaka-1212 Bangladesh", pageWidth / 2, 24, { align: 'center' });
+    doc.setTextColor(255, 255, 255);
+    doc.text("EZ ERP MANAGEMENT INFORMATION SYSTEM (MIS)", 14, 11);
 
-    // Top Right details
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text('PRICE CHANGE CIRCULAR', pageWidth - 14, 15, { align: 'right' });
-    
-    doc.setFontSize(8);
-    doc.text(`CIRCULAR NAME: ${circularName}`, pageWidth - 14, 20, { align: 'right' });
-    doc.text(`EFFECTIVE DATE: ${effectiveDate}`, pageWidth - 14, 25, { align: 'right' });
-    doc.text(`STORES: ${selectedStores.join(', ')}`, pageWidth - 14, 30, { align: 'right' });
-    
-    // Print Date
-    const printDate = new Date().toLocaleString('en-US');
-    doc.setFontSize(7);
-    doc.text(`PRINT DATE: ${printDate}`, pageWidth - 14, 40, { align: 'right' });
+    doc.setFontSize(9.5);
+    doc.setFont("helvetica", "normal");
+    doc.text("CENTRAL INVENTORY & POS SALES ANALYTICS", 14, 17);
 
-    // Table
-    let startY = 45;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("CIRCULAR PRICE CHANGE REPORT (DETAILS)", pageWidth - 14, 14, { align: 'right' });
 
-    const tableCols = [['S/L', 'BARCODE', 'DISPLAY_NAME', 'CURRENT CPU', 'NEW CPU', 'CURRENT MRP', 'NEW MRP']];
-    const tableBody = items.map(item => [
-      item.sl,
-      item.code,
-      item.name,
-      Number(item.currentCpu).toFixed(2),
-      Number(item.newCpu).toFixed(2),
-      Number(item.currentMrp).toFixed(2),
-      Number(item.newMrp).toFixed(2)
+    // 2. Metadata Section below Banner
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(50, 50, 50);
+
+    const line1Left = `Circular Name: ${dataToUse.circularName} | Effective Date: ${dataToUse.effectiveDate}`;
+    const line2Left = `Store Scope: ${Array.isArray(dataToUse.selectedStores) ? dataToUse.selectedStores.join(', ') : dataToUse.selectedStores}`;
+
+    const printDateStr = new Date().toLocaleString('en-US', {
+      year: 'numeric', month: 'numeric', day: 'numeric',
+      hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: true
+    });
+
+    const currentUserName = (localStorage.getItem('erp_user') ? JSON.parse(localStorage.getItem('erp_user'))?.name || JSON.parse(localStorage.getItem('erp_user'))?.username : '') || 'Super Admin';
+    const displayName = (currentUserName === 'msmraqeeb@gmail.com' || currentUserName === 'admin@email.com') ? 'Super Admin' : currentUserName;
+
+    doc.text(line1Left, 14, 30);
+    doc.text(line2Left, 14, 35);
+
+    doc.text(`Generated On: ${printDateStr}`, pageWidth - 14, 30, { align: 'right' });
+    doc.text(`Printed By: ${displayName}`, pageWidth - 14, 35, { align: 'right' });
+
+    // 3. Table Header & Body
+    const tableCols = [
+      ['SL', 'CODE / BARCODE', 'ITEM NAME', 'CURRENT CPU', 'NEW CPU', 'CURRENT MRP', 'NEW MRP', 'DIFF (MRP)', 'CHANGE (%)']
+    ];
+
+    let totalCurrCpu = 0;
+    let totalNewCpu = 0;
+    let totalCurrMrp = 0;
+    let totalNewMrp = 0;
+
+    const tableBody = (dataToUse.items || []).map((item, idx) => {
+      const cCpu = Number(item.currentCpu || 0);
+      const nCpu = Number(item.newCpu || 0);
+      const cMrp = Number(item.currentMrp || 0);
+      const nMrp = Number(item.newMrp || 0);
+      const diffMrp = nMrp - cMrp;
+      const pctChange = cMrp > 0 ? ((diffMrp / cMrp) * 100).toFixed(2) + '%' : '-';
+
+      totalCurrCpu += cCpu;
+      totalNewCpu += nCpu;
+      totalCurrMrp += cMrp;
+      totalNewMrp += nMrp;
+
+      return [
+        item.sl || idx + 1,
+        item.code || '-',
+        item.name || 'Not Found',
+        cCpu.toFixed(2),
+        nCpu.toFixed(2),
+        cMrp.toFixed(2),
+        nMrp.toFixed(2),
+        (diffMrp >= 0 ? '+' : '') + diffMrp.toFixed(2),
+        pctChange
+      ];
+    });
+
+    const totalDiff = totalNewMrp - totalCurrMrp;
+
+    // Total Row
+    tableBody.push([
+      'Total',
+      '',
+      `${(dataToUse.items || []).length} Items`,
+      totalCurrCpu.toFixed(2),
+      totalNewCpu.toFixed(2),
+      totalCurrMrp.toFixed(2),
+      totalNewMrp.toFixed(2),
+      (totalDiff >= 0 ? '+' : '') + totalDiff.toFixed(2),
+      ''
     ]);
 
     autoTable(doc, {
-      startY: startY,
+      startY: 40,
       head: tableCols,
       body: tableBody,
-      theme: 'plain',
-      styles: { fontSize: 7, cellPadding: 1, textColor: [0, 0, 0] },
-      headStyles: { fontStyle: 'bold', lineWidth: { top: 0.5, bottom: 0.5 }, lineColor: 0, textColor: [0, 0, 0] },
-      columnStyles: {
-        0: { halign: 'center', cellWidth: 10 },
-        3: { halign: 'right' },
-        4: { halign: 'right' },
-        5: { halign: 'right' },
-        6: { halign: 'right' }
+      theme: 'grid',
+      styles: { fontSize: 7.5, cellPadding: 2, valign: 'middle', textColor: [30, 30, 30] },
+      headStyles: { fillColor: [46, 111, 64], fontStyle: 'bold', textColor: [255, 255, 255], halign: 'center' },
+      didParseCell: function (data) {
+        if (data.section === 'head') {
+          if (data.column.index === 0) data.cell.styles.halign = 'center';
+          else if (data.column.index === 1 || data.column.index === 2) data.cell.styles.halign = 'left';
+          else data.cell.styles.halign = 'right';
+        } else if (data.section === 'body') {
+          if (data.column.index === 0) data.cell.styles.halign = 'center';
+          else if (data.column.index === 1 || data.column.index === 2) data.cell.styles.halign = 'left';
+          else data.cell.styles.halign = 'right';
+        }
+        if (data.row.index === tableBody.length - 1) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [240, 245, 240];
+          data.cell.styles.textColor = [10, 60, 20];
+        }
       },
       margin: { left: 14, right: 14 }
     });
 
-    const finalY = doc.lastAutoTable.finalY + 5;
-    
-    // Summary
+    const finalY = doc.lastAutoTable?.finalY || 100;
+
+    // 4. Signatures
+    const sigY = Math.max(finalY + 24, pageHeight - 24);
+    doc.setDrawColor(160, 174, 192);
+    doc.setLineWidth(0.4);
+
+    // Prepared By (Left)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text(displayName, 47.5, sigY - 2.5, { align: 'center' });
+    doc.line(20, sigY, 75, sigY);
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`TOTAL ITEMS: ${items.length}`, pageWidth - 14, finalY, { align: 'right' });
+    doc.setTextColor(100, 116, 139);
+    doc.text('Prepared By', 47.5, sigY + 5, { align: 'center' });
 
-    // Signatures
-    const sigY = finalY + 30;
-    doc.setLineWidth(0.5);
-    
-    doc.text('Admin', 30, sigY - 2, { align: 'center' });
-    doc.line(14, sigY, 46, sigY);
-    doc.text('Posted By', 30, sigY + 4, { align: 'center' });
+    // Checked By (Middle)
+    doc.line(pageWidth / 2 - 27.5, sigY, pageWidth / 2 + 27.5, sigY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
 
-    doc.line(80, sigY, 130, sigY);
-    doc.text('Checked By', 105, sigY + 4, { align: 'center' });
+    // Authorized Signature (Right)
+    doc.line(pageWidth - 75, sigY, pageWidth - 20, sigY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Authorized Signature', pageWidth - 47.5, sigY + 5, { align: 'center' });
 
-    doc.line(160, sigY, pageWidth - 14, sigY);
-    doc.text('Authorized Signatory', 178, sigY + 4, { align: 'center' });
-
-    doc.save(`Price_Change_${circularName}.pdf`);
+    doc.save(`Price_Change_${String(dataToUse.circularName).replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`);
   };
 
   const handleSave = async () => {
@@ -219,43 +384,100 @@ const PriceChangeExcel = () => {
 
     setIsLoading(true);
     try {
-      // 1. Try to save to circular table (fail gracefully if table does not exist)
-      const { data: circularData, error: circularError } = await supabase
-        .from('price_change_circulars')
-        .insert({
-          circular_name: circularName,
-          effective_date: effectiveDate,
-          stores: selectedStores.join(', ')
-        }).select().single();
-      
-      if (circularData && !circularError) {
-        const payload = items.map(item => ({
-          circular_id: circularData.id,
-          barcode: item.code,
-          current_cpu: item.currentCpu,
-          new_cpu: item.newCpu,
-          current_mrp: item.currentMrp,
-          new_mrp: item.newMrp
-        }));
-        await supabase.from('price_change_circular_items').insert(payload);
-      } else if (circularError) {
-        console.error("Circular insert error:", circularError);
+      const generatedCode = `CPC${new Date().toISOString().slice(2, 10).replace(/-/g, '')}${Math.floor(100 + Math.random() * 900)}`;
+
+      // 1. Save to promotions table for reprint history
+      try {
+        const { data: promoData, error: promoError } = await supabase
+          .from('promotions')
+          .insert({
+            circular_name: circularName,
+            circular_code: generatedCode,
+            promotion_type: 'Circular Price Change',
+            valid_from: effectiveDate,
+            valid_to: effectiveDate,
+            stores: selectedStores.join(', ')
+          })
+          .select()
+          .single();
+
+        if (promoData && !promoError) {
+          const promoItems = items.map(item => ({
+            promotion_id: promoData.id,
+            barcode: item.code,
+            user_barcode: item.code,
+            description: item.name,
+            item: JSON.stringify({
+              currentCpu: Number(item.currentCpu || 0),
+              newCpu: Number(item.newCpu || 0),
+              currentMrp: Number(item.currentMrp || 0),
+              newMrp: Number(item.newMrp || 0),
+              diffMrp: Number(item.newMrp || 0) - Number(item.currentMrp || 0),
+              changePercent: item.currentMrp > 0 ? Number((((Number(item.newMrp) - Number(item.currentMrp)) / Number(item.currentMrp)) * 100).toFixed(2)) : 0
+            }),
+            vendor_contribution_amount: Number(item.currentMrp || 0),
+            discount_amount: Number(item.newMrp || 0),
+            vendor_contribution_percent: Number(item.currentCpu || 0),
+            discount_percent: Number(item.newCpu || 0)
+          }));
+          await supabase.from('promotion_items').insert(promoItems);
+        }
+      } catch (pErr) {
+        console.warn("Promotion insert error:", pErr);
       }
 
-      // 2. Update products table
+      // 2. Try to save to price_change_circulars if accessible
+      try {
+        const { data: circularData, error: circularError } = await supabase
+          .from('price_change_circulars')
+          .insert({
+            circular_name: circularName,
+            effective_date: effectiveDate,
+            stores: selectedStores.join(', ')
+          }).select().single();
+        
+        if (circularData && !circularError) {
+          const payload = items.map(item => ({
+            circular_id: circularData.id,
+            barcode: item.code,
+            current_cpu: item.currentCpu,
+            new_cpu: item.newCpu,
+            current_mrp: item.currentMrp,
+            new_mrp: item.newMrp
+          }));
+          await supabase.from('price_change_circular_items').insert(payload);
+        }
+      } catch (cErr) {
+        console.warn("Circular insert skipped:", cErr);
+      }
+
+      // 3. Update products table
+      let updateCount = 0;
       for (const item of items) {
         if (item.name !== 'Not Found') {
-          await supabase
-            .from('products')
-            .update({
-              purchase_price: Number(item.newCpu),
-              mrp: Number(item.newMrp)
-            })
-            .eq('barcode', item.code);
+          if (item.productId) {
+            await supabase
+              .from('products')
+              .update({
+                purchase_price: Number(item.newCpu),
+                mrp: Number(item.newMrp)
+              })
+              .eq('id', item.productId);
+            updateCount++;
+          } else {
+            await supabase
+              .from('products')
+              .update({
+                purchase_price: Number(item.newCpu),
+                mrp: Number(item.newMrp)
+              })
+              .or(`code.eq.${item.code},barcode.eq.${item.code},user_define_barcode.eq.${item.code}`);
+            updateCount++;
+          }
         }
       }
       
-      toast.success("Price changes applied successfully");
+      toast.success(`Price changes applied to ${updateCount} products successfully`);
       generatePDF();
       handleReset();
     } catch (err) {
@@ -350,16 +572,17 @@ const PriceChangeExcel = () => {
 
       <SectionWrapper title="Product Details">
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '30px', flexWrap: 'wrap' }}>
-          <button className="btn-theme" 
+          <button 
+            className="btn-theme" 
             onClick={handleExport}
-            style={{ padding: '8px 40px', backgroundColor: '#38bdf8', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+            style={{ padding: '7px 28px', minWidth: '100px' }}
           >
             Export
           </button>
           
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: '40px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: '20px' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontSize: '0.75rem', color: 'red', marginBottom: '4px' }}>Select XLS File *</span>
+              <span style={{ fontSize: '0.75rem', color: 'red', marginBottom: '4px', fontWeight: 600 }}>Select XLS File *</span>
               <input 
                 type="file" 
                 id="excelFileInput"
@@ -372,10 +595,11 @@ const PriceChangeExcel = () => {
 
           <div style={{ flex: 1 }}></div>
 
-          <button className="btn-theme" 
+          <button 
+            className="btn-theme" 
             onClick={handleUpload}
             disabled={isLoading}
-            style={{ padding: '8px 50px', backgroundColor: '#0ea5e9', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+            style={{ padding: '7px 32px', minWidth: '120px' }}
           >
             {isLoading ? 'Wait...' : 'Upload!'}
           </button>
@@ -403,12 +627,14 @@ const PriceChangeExcel = () => {
                 items.map(item => (
                   <tr key={item.sl} style={{ borderBottom: '1px solid #eee' }}>
                     <td style={{ padding: '10px 8px' }}>{item.sl}</td>
-                    <td style={{ padding: '10px 8px' }}>{item.code}</td>
-                    <td style={{ padding: '10px 8px', color: item.name === 'Not Found' ? 'red' : 'inherit' }}>{item.name}</td>
+                    <td style={{ padding: '10px 8px', fontWeight: 500 }}>{item.code}</td>
+                    <td style={{ padding: '10px 8px', color: item.name === 'Not Found' ? '#dc2626' : 'inherit', fontWeight: item.name === 'Not Found' ? 600 : 400 }}>
+                      {item.name}
+                    </td>
                     <td style={{ padding: '10px 8px' }}>{item.currentCpu}</td>
                     <td style={{ padding: '10px 8px' }}>{item.newCpu}</td>
                     <td style={{ padding: '10px 8px' }}>{item.currentMrp}</td>
-                    <td style={{ padding: '10px 8px' }}>{item.newMrp}</td>
+                    <td style={{ padding: '10px 8px', fontWeight: 600, color: '#166534' }}>{item.newMrp}</td>
                   </tr>
                 ))
               )}
@@ -416,33 +642,19 @@ const PriceChangeExcel = () => {
           </table>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginTop: '40px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '40px' }}>
           <button 
             onClick={handleSave}
             disabled={isLoading}
-            style={{ 
-              padding: '8px 25px', 
-              backgroundColor: '#e5e7eb', 
-              color: '#4b5563', 
-              border: 'none', 
-              borderRadius: '4px', 
-              cursor: 'pointer', 
-              fontWeight: 'bold'
-            }}
-           className="btn-theme">
+            className="btn-theme"
+            style={{ padding: '8px 30px', minWidth: '100px' }}
+          >
             Save
           </button>
-          <button className="btn-danger" 
+          <button 
+            className="btn-danger" 
             onClick={handleReset}
-            style={{ 
-              padding: '8px 25px', 
-              backgroundColor: '#f3f4f6', 
-              color: '#9ca3af', 
-              border: 'none', 
-              borderRadius: '4px', 
-              cursor: 'pointer', 
-              fontWeight: 'bold'
-            }}
+            style={{ padding: '8px 30px', minWidth: '100px' }}
           >
             Reset
           </button>

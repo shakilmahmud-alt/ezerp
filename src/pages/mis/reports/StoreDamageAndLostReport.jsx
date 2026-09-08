@@ -445,6 +445,7 @@ const StoreDamageAndLostReport = () => {
   };
 
   // PDF EXPORT
+  // PDF EXPORT
   const handleExportPDF = () => {
     if (!reportData || displayedRows.length === 0) {
       toast.error('No data available to print');
@@ -463,42 +464,45 @@ const StoreDamageAndLostReport = () => {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(14);
       doc.setTextColor(255, 255, 255);
-      doc.text('EZ ERP', 14, 9);
+      doc.text("EZ ERP MANAGEMENT INFORMATION SYSTEM (MIS)", 14, 11);
 
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(7.5);
-      doc.setTextColor(230, 245, 235);
-      doc.text('House: 352, Lane: 05, 2nd floor, Baridhara DOHS, Dhaka-1212, Bangladesh', 14, 15);
+      doc.setFontSize(9.5);
+      doc.text("CENTRAL INVENTORY & POS SALES ANALYTICS", 14, 17);
 
       // Report Title on Right
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(11);
       const repTitle = `STORE DAMAGE & LOST REPORT (${reportData.reportType.toUpperCase()})`;
-      doc.text(repTitle, pageWidth - 14, 11, { align: 'right' });
+      doc.text(repTitle, pageWidth - 14, 14, { align: 'right' });
 
+      // 2. Metadata Section below Banner
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(220, 240, 225);
-      doc.text(`Period: ${fromDate} to ${toDate}`, pageWidth - 14, 17, { align: 'right' });
+      doc.setFontSize(8.5);
+      doc.setTextColor(50, 50, 50);
 
-      // 2. Metadata Bar
-      doc.setFillColor(248, 250, 252);
-      doc.rect(14, 25, pageWidth - 28, 7, 'F');
-      doc.setDrawColor(226, 232, 240);
-      doc.rect(14, 25, pageWidth - 28, 7, 'S');
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7.5);
-      doc.setTextColor(51, 65, 85);
-      
-      const storeLabel = selectedStore !== 'ALL' ? selectedStore : (storeType !== 'ALL' ? `Type: ${storeType}` : 'All Stores');
+      const storeLabel = selectedStore !== 'ALL' ? selectedStore : (storeType !== 'ALL' ? `Type: ${storeType}` : 'ALL (All Stores)');
       const circularLabel = circularNoInput && circularNoInput !== 'ALL' ? circularNoInput : 'All';
       const statusLabel = statusInput && statusInput !== '-- ALL --' ? statusInput : 'All Status';
-      const currentUser = user?.name || user?.username || 'Admin';
-      const preparedByName = (currentUser === 'msmraqeeb@gmail.com' || currentUser === 'admin@email.com') ? 'Admin' : currentUser;
 
-      doc.text(`Store: ${storeLabel}    |    Circular No: ${circularLabel}    |    Status: ${statusLabel}    |    Printed By: ${preparedByName}    |    Print Time: ${new Date().toLocaleString('en-GB')}`, 16, 29.5);
+      const printDateStr = new Date().toLocaleString('en-GB', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+      });
+
+      const loggedInUser = user || JSON.parse(localStorage.getItem('erp_user') || '{}');
+      const rawUser = loggedInUser?.user_metadata?.full_name || 
+        loggedInUser?.user_metadata?.name || 
+        loggedInUser?.full_name || 
+        loggedInUser?.name || 
+        loggedInUser?.username || 
+        'Super Admin';
+      const preparedByName = (rawUser === 'msmraqeeb@gmail.com' || rawUser === 'admin@email.com') ? 'Super Admin' : rawUser;
+
+      doc.text(`Date Range: ${fromDate} to ${toDate}`, 14, 30);
+      doc.text(`Store Scope: ${storeLabel} | Circular/Ref: ${circularLabel} | Status: ${statusLabel}`, 14, 35);
+      doc.text(`Generated On: ${printDateStr}`, pageWidth - 14, 30, { align: 'right' });
+      doc.text(`Printed By: ${preparedByName}`, pageWidth - 14, 35, { align: 'right' });
 
       // 3. Table Headers & Body
       let headers = [];
@@ -519,11 +523,11 @@ const StoreDamageAndLostReport = () => {
         ]);
 
         body.push([
-          '',
-          'TOTAL SUMMARY',
-          '',
+          'Total',
           `${reportData.totals.total_docs} Docs`,
-          reportData.totals.total_items,
+          '',
+          '',
+          `${reportData.totals.total_items} Items`,
           reportData.totals.total_qty,
           Number(reportData.totals.total_loss_amount || 0).toFixed(2),
           Number(reportData.totals.total_sale_amount || 0).toFixed(2),
@@ -550,8 +554,8 @@ const StoreDamageAndLostReport = () => {
         ]);
 
         body.push([
+          'Total',
           '',
-          'TOTAL SUMMARY',
           '',
           '',
           '',
@@ -571,9 +575,9 @@ const StoreDamageAndLostReport = () => {
       autoTable(doc, {
         head: headers,
         body: body,
-        startY: 35,
+        startY: 40,
         theme: 'grid',
-        styles: { fontSize: 7, cellPadding: 1.6, textColor: [30, 30, 30] },
+        styles: { fontSize: 7.5, cellPadding: 2, valign: 'middle', textColor: [30, 30, 30] },
         headStyles: { fillColor: [46, 111, 64], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
         didParseCell: function (data) {
           if (data.section === 'head') {
@@ -604,9 +608,9 @@ const StoreDamageAndLostReport = () => {
         margin: { top: 10, left: 14, right: 14 }
       });
 
-      // 4. Signatures at Bottom
-      const finalY = doc.lastAutoTable.finalY || 160;
-      const sigY = Math.max(finalY + 24, pageHeight - 20);
+      // 4. Signatures at Bottom (Matching Image 2)
+      const finalY = doc.lastAutoTable?.finalY || 140;
+      const sigY = Math.max(finalY + 24, pageHeight - 24);
 
       doc.setDrawColor(160, 174, 192);
       doc.setLineWidth(0.4);
@@ -617,18 +621,27 @@ const StoreDamageAndLostReport = () => {
       doc.setTextColor(30, 41, 59);
       doc.text(preparedByName, 47.5, sigY - 2.5, { align: 'center' });
       doc.line(20, sigY, 75, sigY);
-      doc.text('Prepared By', 47.5, sigY + 4.5, { align: 'center' });
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Prepared By', 47.5, sigY + 5, { align: 'center' });
 
       // Checked By (Middle)
       doc.line(pageWidth / 2 - 27.5, sigY, pageWidth / 2 + 27.5, sigY);
-      doc.text('Checked By', pageWidth / 2, sigY + 4.5, { align: 'center' });
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
 
-      // Authorized By (Right)
+      // Authorized Signature (Right)
       doc.line(pageWidth - 75, sigY, pageWidth - 20, sigY);
-      doc.text('Authorized By', pageWidth - 47.5, sigY + 4.5, { align: 'center' });
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Authorized Signature', pageWidth - 47.5, sigY + 5, { align: 'center' });
 
       doc.save(`Store_Damage_And_Lost_Report_${fromDate}_to_${toDate}.pdf`);
-      toast.success('PDF generated successfully');
+      toast.success('PDF downloaded successfully');
     } catch (err) {
       console.error('PDF generation error:', err);
       toast.error('Failed to generate PDF');

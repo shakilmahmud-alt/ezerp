@@ -202,9 +202,8 @@ const MisLayout = () => {
       path: '/mis/promotional-reports', 
       icon: <Gift size={18} />,
       subItems: [
-        { name: 'Promotion wise Sales Report', path: '/mis/promotional-reports/promotion-wise-sales' },
-        { name: 'Active Promo Report', path: '/mis/promotional-reports/active' },
-        { name: 'Discount Circular Report', path: '/mis/promotional-reports/discount' },
+        { name: 'Circular Price Changed Report', path: '/mis/promotional-reports/circular-price-changed-report' },
+        { name: 'Discount Circular Report', path: '/mis/promotional-reports/discount-circular-report' },
       ]
     },
     { 
@@ -212,8 +211,7 @@ const MisLayout = () => {
       path: '/mis/crm-reports', 
       icon: <Users size={18} />,
       subItems: [
-        { name: 'Customer Report', path: '/mis/crm-reports/customer' },
-        { name: 'Point Earn Report', path: '/mis/crm-reports/points' },
+        { name: 'Customer Summary Report', path: '/mis/crm-reports/customer-summary-report' },
       ]
     },
   ];

@@ -90,6 +90,10 @@ import ItemWiseDeliveryReport from './pages/mis/reports/ItemWiseDeliveryReport';
 import PurchaseReturnReport from './pages/mis/reports/PurchaseReturnReport';
 import ItemwisePurchaseReturnReport from './pages/mis/reports/ItemwisePurchaseReturnReport';
 import StoreDamageAndLostReport from './pages/mis/reports/StoreDamageAndLostReport';
+import ItemwiseDamageReport from './pages/mis/reports/ItemwiseDamageReport';
+import CircularPriceChangedReport from './pages/mis/reports/CircularPriceChangedReport';
+import DiscountCircularReport from './pages/mis/reports/DiscountCircularReport';
+import CustomerSummaryReport from './pages/mis/reports/CustomerSummaryReport';
 
 function App() {
   return (
@@ -182,13 +186,20 @@ function App() {
             <Route path="damage-lost-reports" element={<StoreDamageAndLostReport />} />
             <Route path="damage-lost-reports/store-damage-lost-report" element={<StoreDamageAndLostReport />} />
             <Route path="damage-lost-reports/store" element={<StoreDamageAndLostReport />} />
-            <Route path="damage-lost-reports/itemwise-damage-report" element={<MisReportPlaceholder title="Itemwise Damage Report" />} />
+            <Route path="damage-lost-reports/itemwise-damage-report" element={<ItemwiseDamageReport />} />
             <Route path="damage-lost-reports/*" element={<StoreDamageAndLostReport />} />
-            <Route path="promotional-reports" element={<PromotionWiseSalesReport />} />
-            <Route path="promotional-reports/promotion-wise-sales" element={<PromotionWiseSalesReport />} />
-            <Route path="promotional-reports/*" element={<MisReportPlaceholder />} />
-            <Route path="crm-reports" element={<MisReportPlaceholder title="CRM Reports" />} />
-            <Route path="crm-reports/*" element={<MisReportPlaceholder />} />
+            <Route path="promotional-reports" element={<DiscountCircularReport />} />
+            <Route path="promotional-reports/discount-circular-report" element={<DiscountCircularReport />} />
+            <Route path="promotional-reports/discount-circular" element={<DiscountCircularReport />} />
+            <Route path="promotional-reports/discount" element={<DiscountCircularReport />} />
+            <Route path="promotional-reports/circular-price-changed-report" element={<CircularPriceChangedReport />} />
+            <Route path="promotional-reports/circular-price-change-report" element={<CircularPriceChangedReport />} />
+            <Route path="promotional-reports/*" element={<DiscountCircularReport />} />
+            <Route path="crm-reports" element={<CustomerSummaryReport />} />
+            <Route path="crm-reports/customer-summary-report" element={<CustomerSummaryReport />} />
+            <Route path="crm-reports/customer-summary" element={<CustomerSummaryReport />} />
+            <Route path="crm-reports/customer" element={<CustomerSummaryReport />} />
+            <Route path="crm-reports/*" element={<CustomerSummaryReport />} />
           </Route>
           
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>

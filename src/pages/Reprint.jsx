@@ -139,14 +139,17 @@ const Reprint = () => {
             docs = [...new Set(filtered.map(d => d.po_number).filter(Boolean))];
           }
         } 
-        else if (selectedType === 'DML Challan') {
+        else if (selectedType === 'DML Challan' || selectedType === 'Damage and Lost' || selectedType === 'Damage & Lost') {
           const { data, error } = await supabase
             .from('damage_and_lost')
-            .select('id')
+            .select('id, reference_no, dml_date')
             .gte('dml_date', fromDate)
             .lte('dml_date', toDate);
             
-          if (!error && data) docs = data.map(d => String(d.id));
+          if (!error && data) {
+            const arr = data.map(d => d.reference_no || String(d.id)).filter(Boolean);
+            docs = [...new Set(arr)];
+          }
         }
         else if (selectedType === 'Store Requisition(Ecom)' || selectedType === 'Store Requisition') {
           let query1 = supabase
@@ -246,6 +249,32 @@ const Reprint = () => {
             .gte('return_date', fromDate)
             .lte('return_date', toDate);
           if (!error && data) docs = data.map(d => d.challan_no).filter(Boolean);
+        }
+        else if (selectedType === 'Circular Price Change') {
+          let query = supabase
+            .from('promotions')
+            .select('circular_code, circular_name, valid_from, created_at')
+            .gte('valid_from', fromDate)
+            .lte('valid_from', toDate);
+
+          const { data, error } = await query;
+          let arr = [];
+          if (!error && data) {
+            arr = data.map(d => d.circular_code || d.circular_name).filter(Boolean);
+          }
+
+          try {
+            const { data: cData } = await supabase
+              .from('price_change_circulars')
+              .select('circular_name, effective_date')
+              .gte('effective_date', fromDate)
+              .lte('effective_date', toDate);
+            if (cData) {
+              arr = [...arr, ...cData.map(c => c.circular_name).filter(Boolean)];
+            }
+          } catch (e) {}
+
+          docs = [...new Set(arr)];
         }
         else {
           docs = [];
@@ -367,32 +396,73 @@ const Reprint = () => {
           totalAmount.toFixed(2)
         ]);
 
-      } else if (selectedType === 'DML Challan') {
-        const { data: dml } = await supabase.from('damage_and_lost').select('*').eq('id', selectedDocument).single();
+      } else if (selectedType === 'DML Challan' || selectedType === 'Damage and Lost' || selectedType === 'Damage & Lost') {
+        let dml = null;
+        const { data: d1 } = await supabase.from('damage_and_lost').select('*').eq('reference_no', selectedDocument).limit(1);
+        if (d1 && d1.length > 0) {
+          dml = d1[0];
+        } else {
+          const { data: d2 } = await supabase.from('damage_and_lost').select('*').eq('id', selectedDocument).limit(1);
+          if (d2 && d2.length > 0) dml = d2[0];
+        }
+
         const { data: dmlItemsRaw } = await supabase.from('damage_and_lost_items').select('*').eq('damage_and_lost_id', dml?.id);
         const dmlItems = await enrichItemsWithProducts(dmlItemsRaw || []);
 
+        let docNumber = dml?.reference_no ? String(dml.reference_no) : `#DML-${dml?.id?.slice(0, 8)}`;
+        if (!docNumber.startsWith('#') && !docNumber.startsWith('REF-')) {
+          docNumber = `#${docNumber}`;
+        }
+
         headerInfo = {
-          title: selectedType.toUpperCase(),
-          docNo: dml?.id,
+          title: 'DAMAGE AND LOST CHALLAN',
+          docNo: docNumber,
           date: dml?.dml_date,
           orderNo: '',
-          deliveryTo: '',
+          deliveryTo: 'Central Store',
           vendorName: '',
-          remarks: dml?.reference_no
+          remarks: dml?.reference_no || 'N/A'
         };
 
-        items = (dmlItems || []).map((i, idx) => ([
-          idx + 1,
-          i.products?.barcode || i.barcode || '',
-          i.products?.item_name || i.item_name || '',
-          Number(i.dml_qty || 0).toFixed(2) + ' PCS',
-          '0.00',
-          Number(i.cpu || 0).toFixed(2),
-          Number(i.sale_price || 0).toFixed(2),
-          '0.00',
-          Number(i.amount || 0).toFixed(2)
-        ]));
+        let totalQty = 0;
+        let totalAmount = 0;
+
+        items = (dmlItems || []).map((i, idx) => {
+          const qty = Number(i.dml_qty || 0);
+          const cpu = Number(i.cpu || 0);
+          const salePrice = Number(i.sale_price || i.products?.mrp || 0);
+          const amt = Number(i.amount || (cpu * qty));
+
+          totalQty += qty;
+          totalAmount += amt;
+
+          return [
+            idx + 1,
+            dml?.reference_no || '-',
+            i.products?.barcode || i.products?.user_define_barcode || i.products?.code || i.barcode || '-',
+            i.products?.item_name || i.item_name || '',
+            cpu.toFixed(2),
+            salePrice.toFixed(2),
+            qty,
+            'PCS',
+            amt.toFixed(2),
+            i.reason || ''
+          ];
+        });
+
+        // Add Summary Row matching Image 2
+        items.push([
+          'Total',
+          '',
+          '',
+          `${dmlItems.length} Items`,
+          '',
+          '',
+          totalQty,
+          'PCS',
+          totalAmount.toFixed(2),
+          ''
+        ]);
 
       } else if (selectedType === 'Store Requisition(Ecom)' || selectedType === 'Store Requisition') {
         let req = null;
@@ -643,6 +713,162 @@ const Reprint = () => {
           ];
         });
 
+      } else if (selectedType === 'Circular Price Change') {
+        let promo = null;
+        const { data: pList } = await supabase
+          .from('promotions')
+          .select('*')
+          .or(`circular_code.eq.${selectedDocument},circular_name.eq.${selectedDocument}`)
+          .limit(1);
+
+        if (pList && pList.length > 0) {
+          promo = pList[0];
+        }
+
+        let promoItems = [];
+        if (promo) {
+          const { data: pi } = await supabase
+            .from('promotion_items')
+            .select('*')
+            .eq('promotion_id', promo.id);
+          promoItems = pi || [];
+        }
+
+        // Fetch products for enriched data
+        const { data: prods } = await supabase
+          .from('products')
+          .select('id, item_name, barcode, user_define_barcode, code, purchase_price, mrp');
+
+        const pMap = {};
+        if (prods) {
+          prods.forEach(p => {
+            if (p.barcode) pMap[p.barcode] = p;
+            if (p.code) pMap[p.code] = p;
+            if (p.user_define_barcode) pMap[p.user_define_barcode] = p;
+          });
+        }
+
+        headerInfo = {
+          title: 'CIRCULAR PRICE CHANGE REPORT (DETAILS)',
+          docNo: promo?.circular_code || selectedDocument,
+          date: promo?.valid_from ? promo.valid_from.split('T')[0] : (promo?.created_at ? promo.created_at.split('T')[0] : fromDate),
+          orderNo: '',
+          deliveryTo: promo?.stores || selectedStore || 'Central Store',
+          vendorName: 'N/A',
+          remarks: promo?.circular_name || selectedDocument
+        };
+
+        // Helper to accurately extract current & new CPU and MRP
+        const extractPriceDetails = (item, prod) => {
+          let currentCpu = Number(item.current_cpu || prod?.purchase_price || 0);
+          let newCpu = Number(item.new_cpu || currentCpu);
+          let currentMrp = Number(item.current_mrp || 0);
+          let newMrp = Number(item.new_mrp || 0);
+          let diffMrp = 0;
+          let changePercent = 0;
+
+          let parsedJson = null;
+          if (typeof item.item === 'string' && item.item.trim().startsWith('{')) {
+            try { parsedJson = JSON.parse(item.item); } catch (e) {}
+          }
+
+          if (parsedJson && (parsedJson.currentMrp !== undefined || parsedJson.newMrp !== undefined)) {
+            currentCpu = Number(parsedJson.currentCpu ?? (prod?.purchase_price || 0));
+            newCpu = Number(parsedJson.newCpu ?? currentCpu);
+            currentMrp = Number(parsedJson.currentMrp ?? (prod?.mrp || 0));
+            newMrp = Number(parsedJson.newMrp ?? currentMrp);
+            diffMrp = Number(parsedJson.diffMrp ?? (newMrp - currentMrp));
+            changePercent = parsedJson.changePercent !== undefined
+              ? Number(parsedJson.changePercent)
+              : (currentMrp > 0 ? Number(((diffMrp / currentMrp) * 100).toFixed(2)) : 0);
+            return { currentCpu, newCpu, currentMrp, newMrp, diffMrp, changePercent };
+          }
+
+          if (typeof item.item === 'string' && item.item.includes('|')) {
+            const parts = item.item.split('|').map(s => Number(s.trim()));
+            if (parts.length >= 4 && !isNaN(parts[2]) && !isNaN(parts[3])) {
+              currentCpu = !isNaN(parts[0]) && parts[0] > 0 ? parts[0] : Number(prod?.purchase_price || 0);
+              newCpu = !isNaN(parts[1]) && parts[1] > 0 ? parts[1] : currentCpu;
+              currentMrp = parts[2];
+              newMrp = parts[3];
+              diffMrp = newMrp - currentMrp;
+              changePercent = currentMrp > 0 ? Number(((diffMrp / currentMrp) * 100).toFixed(2)) : 0;
+              return { currentCpu, newCpu, currentMrp, newMrp, diffMrp, changePercent };
+            }
+          }
+
+          const vendorContrAmt = Number(item.vendor_contribution_amount || 0);
+          const discAmt = Number(item.discount_amount || 0);
+          const vendorContrPct = Number(item.vendor_contribution_percent || 0);
+          const discPct = Number(item.discount_percent || 0);
+
+          if (vendorContrAmt > 0 && discAmt > 0 && vendorContrAmt !== discAmt) {
+            currentMrp = vendorContrAmt;
+            newMrp = discAmt;
+            if (vendorContrPct > 0) currentCpu = vendorContrPct;
+            if (discPct > 0) newCpu = discPct;
+            diffMrp = newMrp - currentMrp;
+            changePercent = currentMrp > 0 ? Number(((diffMrp / currentMrp) * 100).toFixed(2)) : 0;
+            return { currentCpu, newCpu, currentMrp, newMrp, diffMrp, changePercent };
+          }
+
+          if (discAmt !== 0) {
+            newMrp = Number(prod?.mrp || 0);
+            currentMrp = newMrp - discAmt;
+            diffMrp = discAmt;
+            changePercent = discPct > 0 ? discPct : (currentMrp > 0 ? Number(((diffMrp / currentMrp) * 100).toFixed(2)) : 0);
+            return { currentCpu, newCpu, currentMrp, newMrp, diffMrp, changePercent };
+          }
+
+          currentMrp = Number(prod?.mrp || 0);
+          newMrp = currentMrp;
+          return { currentCpu, newCpu, currentMrp, newMrp, diffMrp: 0, changePercent: 0 };
+        };
+
+        let totalCurrCpu = 0;
+        let totalNewCpu = 0;
+        let totalCurrMrp = 0;
+        let totalNewMrp = 0;
+
+        items = promoItems.map((i, idx) => {
+          const bc = i.barcode || i.user_barcode || '';
+          const p = pMap[bc] || null;
+          const name = i.description || p?.item_name || 'Product';
+          const pDetails = extractPriceDetails(i, p);
+
+          totalCurrCpu += pDetails.currentCpu;
+          totalNewCpu += pDetails.newCpu;
+          totalCurrMrp += pDetails.currentMrp;
+          totalNewMrp += pDetails.newMrp;
+
+          const pctChange = (pDetails.changePercent >= 0 ? '+' : '') + Number(pDetails.changePercent).toFixed(2) + '%';
+
+          return [
+            idx + 1,
+            bc || '-',
+            name,
+            pDetails.currentCpu.toFixed(2),
+            pDetails.newCpu.toFixed(2),
+            pDetails.currentMrp.toFixed(2),
+            pDetails.newMrp.toFixed(2),
+            (pDetails.diffMrp >= 0 ? '+' : '') + pDetails.diffMrp.toFixed(2),
+            pctChange
+          ];
+        });
+
+        const totalDiff = totalNewMrp - totalCurrMrp;
+        items.push([
+          'Total',
+          '',
+          `${promoItems.length} Items`,
+          totalCurrCpu.toFixed(2),
+          totalNewCpu.toFixed(2),
+          totalCurrMrp.toFixed(2),
+          totalNewMrp.toFixed(2),
+          (totalDiff >= 0 ? '+' : '') + totalDiff.toFixed(2),
+          ''
+        ]);
+
       } else {
         // Mock fallback for types not built yet
         headerInfo = {
@@ -667,18 +893,22 @@ const Reprint = () => {
         selectedType === 'Store Delivery Challan Summary' ||
         selectedType === 'Receive from Shop Challan' ||
         selectedType === 'Store Requisition' ||
-        selectedType === 'Store Requisition(Ecom)'
+        selectedType === 'Store Requisition(Ecom)' ||
+        selectedType === 'DML Challan' ||
+        selectedType === 'Damage and Lost' ||
+        selectedType === 'Damage & Lost' ||
+        selectedType === 'Circular Price Change'
       );
       const doc = new jsPDF(isLandscape ? 'landscape' : 'portrait', 'mm', 'a4');
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
 
       let startY = 36;
-      const currentUserName = user?.name || user?.username || (localStorage.getItem('erp_user') ? JSON.parse(localStorage.getItem('erp_user'))?.name || JSON.parse(localStorage.getItem('erp_user'))?.username : '') || 'Admin';
-      const displayName = (currentUserName === 'msmraqeeb@gmail.com' || currentUserName === 'admin@email.com') ? 'Admin' : currentUserName;
+      const currentUserName = user?.name || user?.username || (localStorage.getItem('erp_user') ? JSON.parse(localStorage.getItem('erp_user'))?.name || JSON.parse(localStorage.getItem('erp_user'))?.username : '') || 'Super Admin';
+      const displayName = (currentUserName === 'msmraqeeb@gmail.com' || currentUserName === 'admin@email.com') ? 'Super Admin' : currentUserName;
 
       if (isLandscape) {
-        // 1. Top Green Banner
+        // 1. Top Green Banner (#2e6f40)
         doc.setFillColor(46, 111, 64);
         doc.rect(0, 0, pageWidth, 22, 'F');
 
@@ -693,28 +923,41 @@ const Reprint = () => {
 
         doc.setFont("helvetica", "bold");
         doc.setFontSize(11);
-        doc.text(headerInfo.title || 'CHALLAN', pageWidth - 14, 14, { align: 'right' });
+        const titleText = `${headerInfo.title || selectedType.toUpperCase()} (DUPLICATE)`;
+        doc.text(titleText, pageWidth - 14, 14, { align: 'right' });
 
         // 2. Metadata Section below Banner
         doc.setFont("helvetica", "normal");
         doc.setFontSize(8.5);
         doc.setTextColor(50, 50, 50);
 
-        let line1Left = `Challan No: ${headerInfo.docNo || 'N/A'}`;
-        if (headerInfo.date) line1Left += ` | Date: ${headerInfo.date}`;
-        if (headerInfo.deliveryTo) line1Left += ` | Store: ${headerInfo.deliveryTo}`;
-
+        let line1Left = '';
         let line2Left = '';
-        if (headerInfo.vendorName && headerInfo.vendorName !== 'N/A') line2Left += `Vendor: ${headerInfo.vendorName}`;
-        if (headerInfo.remarks && headerInfo.remarks !== 'N/A') line2Left += (line2Left ? ' | ' : '') + `Ref: ${headerInfo.remarks}`;
-        if (headerInfo.orderNo && headerInfo.orderNo !== 'N/A') line2Left += (line2Left ? ' | ' : '') + `PO: ${headerInfo.orderNo}`;
-        if (!line2Left) line2Left = `Source: Central Store`;
+
+        if (selectedType === 'Circular Price Change') {
+          line1Left = `Circular Name: ${headerInfo.remarks || headerInfo.docNo || 'N/A'} | Effective Date: ${headerInfo.date || 'N/A'}`;
+          line2Left = `Store Scope: ${headerInfo.deliveryTo || 'Central Store'}`;
+        } else {
+          line1Left = `Challan No: ${headerInfo.docNo || 'N/A'}`;
+          if (headerInfo.date) line1Left += ` | Date: ${headerInfo.date}`;
+          if (headerInfo.deliveryTo) line1Left += ` | Store: ${headerInfo.deliveryTo}`;
+
+          if (headerInfo.vendorName && headerInfo.vendorName !== 'N/A') line2Left += `Vendor: ${headerInfo.vendorName}`;
+          if (headerInfo.remarks && headerInfo.remarks !== 'N/A') line2Left += (line2Left ? ' | ' : '') + `Reference No: ${headerInfo.remarks}`;
+          if (headerInfo.orderNo && headerInfo.orderNo !== 'N/A') line2Left += (line2Left ? ' | ' : '') + `PO: ${headerInfo.orderNo}`;
+          if (!line2Left) line2Left = `Store Scope: Central Store`;
+        }
+
+        const printDateStr = new Date().toLocaleString('en-GB', {
+          day: '2-digit', month: 'short', year: 'numeric',
+          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+        });
 
         doc.text(line1Left, 14, 30);
         doc.text(line2Left, 14, 35);
 
-        doc.text(`Generated On: ${new Date().toLocaleString()}`, pageWidth - 14, 30, { align: 'right' });
-        doc.text(`Printed By: ${displayName} [DUPLICATE]`, pageWidth - 14, 35, { align: 'right' });
+        doc.text(`Generated On: ${printDateStr}`, pageWidth - 14, 30, { align: 'right' });
+        doc.text(`Printed By: ${displayName}`, pageWidth - 14, 35, { align: 'right' });
 
         startY = 40;
       } else {
@@ -775,8 +1018,10 @@ const Reprint = () => {
         tableHead = [['SL', 'Barcode', 'Item Name', 'Return Qty', 'Cost Price', 'Sale Price', 'Disc(%)', 'VAT', 'Amount']];
       } else if (selectedType === 'Store Delivery Receive Challan' || selectedType === 'Store Delivery Challan' || selectedType === 'Store Delivery Challan Summary') {
         tableHead = [['SL', 'Barcode', 'Item Name', 'Del Qty', 'C. Stock', 'CPU', 'Sale Price', 'Cost Value', 'Sale Value']];
-      } else if (selectedType === 'DML Challan') {
-        tableHead = [['SL', 'Barcode', 'Item Name', 'DML Qty', 'UOM', 'CPU', 'Sale Price', 'VAT', 'Amount']];
+      } else if (selectedType === 'DML Challan' || selectedType === 'Damage and Lost' || selectedType === 'Damage & Lost') {
+        tableHead = [['SL', 'Reference No', 'Barcode', 'Item Name', 'CPU (Tk)', 'Sale Price (Tk)', 'DML Qty', 'Unit', 'Amount (Tk)', 'Reason']];
+      } else if (selectedType === 'Circular Price Change') {
+        tableHead = [['SL', 'CODE / BARCODE', 'ITEM NAME', 'CURRENT CPU', 'NEW CPU', 'CURRENT MRP', 'NEW MRP', 'DIFF (MRP)', 'CHANGE (%)']];
       }
 
       autoTable(doc, {
@@ -784,27 +1029,29 @@ const Reprint = () => {
         head: tableHead,
         body: items,
         theme: 'grid',
-        styles: { fontSize: 7.5, cellPadding: 1.8, textColor: [30, 30, 30] },
-        headStyles: { fillColor: [46, 111, 64], fontStyle: 'bold', textColor: [255, 255, 255], halign: 'right' },
-        columnStyles: {
-          0: { halign: 'center', cellWidth: 10 },
-          1: { halign: 'left', cellWidth: isLandscape ? 24 : 22 },
-          2: { halign: 'left', cellWidth: 'auto' },
-          3: { halign: 'right', cellWidth: isLandscape ? 16 : 18 },
-          4: { halign: 'right', cellWidth: isLandscape ? 16 : 18 },
-          5: { halign: 'right', cellWidth: isLandscape ? 18 : 14 },
-          6: { halign: 'right', cellWidth: isLandscape ? 18 : 14 },
-          7: { halign: 'right', cellWidth: isLandscape ? 14 : 14 },
-          8: { halign: 'right', cellWidth: isLandscape ? 14 : 14 },
-          9: { halign: 'right', cellWidth: isLandscape ? 20 : 18 },
-          10: { halign: 'right', cellWidth: isLandscape ? 16 : 16 },
-          11: { halign: 'right', cellWidth: isLandscape ? 16 : 16 },
-          12: { halign: 'right', cellWidth: isLandscape ? 22 : 18 }
-        },
+        styles: { fontSize: 7.5, cellPadding: 2, valign: 'middle', textColor: [30, 30, 30] },
+        headStyles: { fillColor: [46, 111, 64], fontStyle: 'bold', textColor: [255, 255, 255], halign: 'center' },
         didParseCell: function (data) {
           if (data.section === 'head') {
             if (data.column.index === 0) data.cell.styles.halign = 'center';
-            if (data.column.index === 1 || data.column.index === 2) data.cell.styles.halign = 'left';
+            else if (selectedType === 'DML Challan' || selectedType === 'Damage and Lost' || selectedType === 'Damage & Lost') {
+              if (data.column.index === 1 || data.column.index === 2 || data.column.index === 3 || data.column.index === 9) data.cell.styles.halign = 'left';
+              else if (data.column.index === 7) data.cell.styles.halign = 'center';
+              else data.cell.styles.halign = 'right';
+            } else {
+              if (data.column.index === 1 || data.column.index === 2) data.cell.styles.halign = 'left';
+              else data.cell.styles.halign = 'right';
+            }
+          } else if (data.section === 'body') {
+            if (data.column.index === 0) data.cell.styles.halign = 'center';
+            else if (selectedType === 'DML Challan' || selectedType === 'Damage and Lost' || selectedType === 'Damage & Lost') {
+              if (data.column.index === 1 || data.column.index === 2 || data.column.index === 3 || data.column.index === 9) data.cell.styles.halign = 'left';
+              else if (data.column.index === 7) data.cell.styles.halign = 'center';
+              else data.cell.styles.halign = 'right';
+            } else {
+              if (data.column.index === 1 || data.column.index === 2) data.cell.styles.halign = 'left';
+              else data.cell.styles.halign = 'right';
+            }
           }
           if (data.row.index === items.length - 1) {
             data.cell.styles.fontStyle = 'bold';
@@ -815,34 +1062,37 @@ const Reprint = () => {
         margin: { top: 10, left: 14, right: 14 }
       });
 
-      const finalY = doc.lastAutoTable.finalY || startY + 50;
+      const finalY = doc.lastAutoTable?.finalY || startY + 50;
 
-      // 5. Signatures
-      const sigY = Math.max(finalY + 26, pageHeight - 20);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8.5);
+      // 5. Signatures (Matching Image 2)
+      const sigY = Math.max(finalY + 24, pageHeight - 24);
+      doc.setDrawColor(160, 174, 192);
       doc.setLineWidth(0.4);
 
-      // Posted By
-      doc.line(20, sigY, 70, sigY);
-      doc.setFont("helvetica", "normal");
+      // Prepared By (Left)
+      doc.setFont("helvetica", "bold");
       doc.setFontSize(8.5);
-      doc.setTextColor(2, 132, 199);
-      doc.text(displayName, 45, sigY - 2, { align: 'center' });
+      doc.setTextColor(30, 41, 59);
+      doc.text(displayName, 47.5, sigY - 2.5, { align: 'center' });
+      doc.line(20, sigY, 75, sigY);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Prepared By', 47.5, sigY + 5, { align: 'center' });
 
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(40, 40, 40);
-      doc.text('Posted By', 45, sigY + 5, { align: 'center' });
-
-      // Checked By
-      doc.setFont("helvetica", "bold");
-      doc.line(pageWidth / 2 - 25, sigY, pageWidth / 2 + 25, sigY);
+      // Checked By (Middle)
+      doc.line(pageWidth / 2 - 27.5, sigY, pageWidth / 2 + 27.5, sigY);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
       doc.text('Checked By', pageWidth / 2, sigY + 5, { align: 'center' });
 
-      // Authorized Signature
-      doc.setFont("helvetica", "bold");
-      doc.line(pageWidth - 70, sigY, pageWidth - 20, sigY);
-      doc.text('Authorized Signature', pageWidth - 45, sigY + 5, { align: 'center' });
+      // Authorized Signature (Right)
+      doc.line(pageWidth - 75, sigY, pageWidth - 20, sigY);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Authorized Signature', pageWidth - 47.5, sigY + 5, { align: 'center' });
 
       doc.save(`Reprint_${String(headerInfo.docNo || selectedDocument).replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`);
       toast.success("Reprint PDF Generated");
