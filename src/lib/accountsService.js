@@ -96,7 +96,19 @@ export const accountsService = {
     } catch (e) {}
 
     if (rawAccounts.length === 0) {
-      rawAccounts = getLocal('bank_accounts', DEFAULT_BANK_ACCOUNTS);
+      rawAccounts = DEFAULT_BANK_ACCOUNTS;
+      setLocal('bank_accounts', DEFAULT_BANK_ACCOUNTS);
+    } else {
+      // Auto-clean legacy demo initial balances cached from previous sessions
+      let needsResave = false;
+      rawAccounts = rawAccounts.map(a => {
+        if ([150000, 850000, 420000, 65000].includes(Number(a.initial_balance))) {
+          needsResave = true;
+          return { ...a, initial_balance: 0 };
+        }
+        return a;
+      });
+      if (needsResave) setLocal('bank_accounts', rawAccounts);
     }
 
     // Now compute real dynamic balances for Cash and Banks from transactions:
