@@ -105,11 +105,13 @@ import ExpenseManagement from './pages/accounts/ExpenseManagement';
 import PayrollManagement from './pages/accounts/PayrollManagement';
 import ChartOfAccounts from './pages/accounts/ChartOfAccounts';
 import FinancialReports from './pages/accounts/FinancialReports';
+import TopLoadingBar from './components/TopLoadingBar';
 
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <TopLoadingBar />
         <Toaster 
           position="bottom-left" 
           toastOptions={{ 
