@@ -552,9 +552,10 @@ const AccountsDashboard = () => {
             </div>
             <button 
               onClick={() => navigate('/accounts/chart-of-accounts')}
-              className="text-xs font-semibold text-emerald-700 hover:underline"
+              className="btn-theme"
+              style={{ fontSize: '11px', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
             >
-              + Add / Edit
+              <Plus size={12} /> Add / Edit
             </button>
           </div>
 
@@ -599,7 +600,8 @@ const AccountsDashboard = () => {
             </div>
             <button 
               onClick={() => navigate('/accounts/vouchers')}
-              className="text-xs font-semibold text-emerald-700 hover:underline"
+              className="btn-info"
+              style={{ fontSize: '11px', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
             >
               View All Vouchers &rarr;
             </button>
