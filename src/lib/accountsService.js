@@ -82,82 +82,110 @@ const DEFAULT_CHART_OF_ACCOUNTS = [
   { id: '5260', code: '5260', name: 'Depreciation & Amortization', type: 'Expense', parent_code: '5200' }
 ];
 
+// In-Memory Cache for Sub-Second Navigation & SWR
+let memoryCache = {
+  overview: null,
+  overviewKey: '',
+  timestamp: 0,
+  payables: null,
+  receivables: null,
+  banks: null
+};
+
+const CACHE_TTL_MS = 15000; // 15 seconds
+
 export const accountsService = {
+  // Clear cache after mutations
+  invalidateCache() {
+    memoryCache = {
+      overview: null,
+      overviewKey: '',
+      timestamp: 0,
+      payables: null,
+      receivables: null,
+      banks: null
+    };
+  },
+
   // -------------------------------------------------------------
-  // 1. BANK & CASH ACCOUNTS (WITH DYNAMIC BALANCE CALCULATION)
+  // 1. BANK & CASH ACCOUNTS
   // -------------------------------------------------------------
-  async getBankAccounts() {
-    let rawAccounts = [];
+  async getBankAccounts(prefetchedData = null) {
     try {
-      const { data, error } = await supabase.from('accounts_bank_accounts').select('*').order('account_name');
-      if (!error && data && data.length > 0) {
-        rawAccounts = data;
+      let rawAccounts = [];
+      let sales = [];
+      let collections = [];
+      let expenses = [];
+      let vendorPayments = [];
+      let purchaseReceives = [];
+      let salaries = [];
+
+      if (prefetchedData) {
+        rawAccounts = prefetchedData.banks || [];
+        sales = prefetchedData.sales || [];
+        collections = prefetchedData.collections || [];
+        expenses = prefetchedData.expenses || [];
+        vendorPayments = prefetchedData.vendorPayments || [];
+        purchaseReceives = prefetchedData.purchaseReceives || [];
+        salaries = prefetchedData.salaries || [];
+      } else {
+        const [banksRes, salesRes, colRes, expRes, vpRes, prsRes, salRes] = await Promise.all([
+          supabase.from('accounts_bank_accounts').select('*').order('account_name'),
+          supabase.from('sales').select('net_amount, total_amount, paid_amount, payment_type, status'),
+          supabase.from('accounts_customer_collections').select('*'),
+          supabase.from('accounts_expenses').select('*'),
+          supabase.from('accounts_vendor_payments').select('*'),
+          supabase.from('purchase_receives').select('net_amount, total_value, supplier_payment_type, payment_type'),
+          supabase.from('accounts_salaries').select('*')
+        ]);
+
+        rawAccounts = banksRes.data || [];
+        sales = salesRes.data || [];
+        collections = colRes.data || getLocal('customer_collections', []);
+        expenses = expRes.data || getLocal('expenses', []);
+        vendorPayments = vpRes.data || getLocal('vendor_payments', []);
+        purchaseReceives = prsRes.data || [];
+        salaries = (salRes.data || getLocal('salaries', [])).filter(s => s.payment_status === 'Paid');
       }
-    } catch (e) {}
 
-    if (rawAccounts.length === 0) {
-      rawAccounts = DEFAULT_BANK_ACCOUNTS;
-      setLocal('bank_accounts', DEFAULT_BANK_ACCOUNTS);
-    } else {
-      // Auto-clean legacy demo initial balances cached from previous sessions
-      let needsResave = false;
-      rawAccounts = rawAccounts.map(a => {
-        if ([150000, 850000, 420000, 65000].includes(Number(a.initial_balance))) {
-          needsResave = true;
-          return { ...a, initial_balance: 0 };
-        }
-        return a;
-      });
-      if (needsResave) setLocal('bank_accounts', rawAccounts);
-    }
+      if (rawAccounts.length === 0) {
+        rawAccounts = DEFAULT_BANK_ACCOUNTS;
+        setLocal('bank_accounts', DEFAULT_BANK_ACCOUNTS);
+      } else {
+        let needsResave = false;
+        rawAccounts = rawAccounts.map(a => {
+          if ([150000, 850000, 420000, 65000].includes(Number(a.initial_balance))) {
+            needsResave = true;
+            return { ...a, initial_balance: 0 };
+          }
+          return a;
+        });
+        if (needsResave) setLocal('bank_accounts', rawAccounts);
+      }
 
-    // Now compute real dynamic balances for Cash and Banks from transactions:
-    try {
-      const [salesRes, colRes, expRes, vpRes, prsRes, salRes] = await Promise.all([
-        supabase.from('sales').select('net_amount, total_amount, paid_amount, payment_type, status'),
-        this.getCustomerCollections(),
-        this.getExpenses(),
-        this.getVendorPayments(),
-        supabase.from('purchase_receives').select('net_amount, total_value, supplier_payment_type, payment_type'),
-        this.getSalaries()
-      ]);
-
-      const sales = salesRes.data || [];
-      const collections = colRes || [];
-      const expenses = expRes || [];
-      const vendorPayments = vpRes || [];
-      const purchaseReceives = prsRes.data || [];
-      const salaries = (salRes || []).filter(s => s.payment_status === 'Paid');
-
-      // Cash Inflows:
-      // 1. POS Cash Sales
+      // Cash Inflows
       const posCashSales = sales
         .filter(s => !s.payment_type || s.payment_type === 'Cash' || s.payment_type === 'cash')
         .reduce((sum, s) => sum + Number(s.paid_amount || 0), 0);
 
-      // 2. POS Digital/Bank Sales
       const posBankSales = sales
         .filter(s => s.payment_type && s.payment_type !== 'Cash' && s.payment_type !== 'cash')
         .reduce((sum, s) => sum + Number(s.paid_amount || 0), 0);
 
-      // Cash Outflows:
-      // Cash Purchases from Central Store
+      // Cash Outflows
       const cashPurchasesOut = purchaseReceives
         .filter(pr => pr.supplier_payment_type === 'CashPurchase' || (!pr.supplier_payment_type && pr.payment_type === 'Cash'))
         .reduce((sum, pr) => sum + Number(pr.net_amount || pr.total_value || 0), 0);
 
-      // Compute dynamic balance for each configured account:
       return rawAccounts.map(acc => {
         const init = Number(acc.initial_balance || 0);
         let dynamicBalance = init;
 
         if (acc.account_type === 'Cash') {
-          // Cash Inflows
           const cashCollections = collections
             .filter(c => !c.payment_mode || c.payment_mode === 'Cash')
             .reduce((sum, c) => sum + Number(c.amount || 0), 0);
 
-          // Cash Outflows
           const cashExpenses = expenses
             .filter(e => !e.payment_mode || e.payment_mode === 'Cash')
             .reduce((sum, e) => sum + Number(e.amount || 0), 0);
@@ -172,7 +200,6 @@ export const accountsService = {
 
           dynamicBalance = init + posCashSales + cashCollections - (cashExpenses + cashVp + cashPurchasesOut + cashSal);
         } else {
-          // Bank / Mobile account
           const bankName = acc.account_name;
           const bankCollections = collections
             .filter(c => c.payment_mode !== 'Cash' && (c.bank_account_name === bankName || (!c.bank_account_name && acc.account_type === 'Bank')))
@@ -190,9 +217,7 @@ export const accountsService = {
             .filter(s => s.payment_mode !== 'Cash' && (s.bank_account_name === bankName || (!s.bank_account_name && acc.account_type === 'Bank')))
             .reduce((sum, s) => sum + Number(s.net_salary || 0), 0);
 
-          // If it's a primary bank account, also include POS digital receipts
           const digitalReceipts = (acc.account_type === 'Bank' && acc.id === 'bank-2') ? posBankSales : 0;
-
           dynamicBalance = init + digitalReceipts + bankCollections - (bankExpenses + bankVp + bankSal);
         }
 
@@ -202,12 +227,13 @@ export const accountsService = {
         };
       });
     } catch (err) {
-      console.warn('Dynamic balance calculation fallback:', err);
-      return rawAccounts;
+      console.warn('Bank accounts dynamic calculation fallback:', err);
+      return DEFAULT_BANK_ACCOUNTS;
     }
   },
 
   async saveBankAccount(account) {
+    this.invalidateCache();
     try {
       if (account.id && !account.id.startsWith('bank-')) {
         const { data, error } = await supabase.from('accounts_bank_accounts').upsert(account).select().single();
@@ -236,6 +262,7 @@ export const accountsService = {
   },
 
   async addExpenseCategory(cat) {
+    this.invalidateCache();
     try {
       const { data, error } = await supabase.from('accounts_expense_categories').insert(cat).select().single();
       if (!error && data) return data;
@@ -264,6 +291,7 @@ export const accountsService = {
   },
 
   async saveExpense(expense) {
+    this.invalidateCache();
     const voucherNo = expense.voucher_no || this.generateVoucherNo('Debit Voucher (Payment)');
     const record = {
       ...expense,
@@ -342,6 +370,7 @@ export const accountsService = {
   },
 
   async saveVoucher(voucher) {
+    this.invalidateCache();
     const voucherNo = voucher.voucher_no || this.generateVoucherNo(voucher.voucher_type || 'Journal Voucher');
     const record = {
       ...voucher,
@@ -365,27 +394,35 @@ export const accountsService = {
   // -------------------------------------------------------------
   // 4. ACCOUNTS PAYABLE (VENDOR DUES & PURCHASE RETURNS)
   // -------------------------------------------------------------
-  async getPayableData() {
-    // 1. Fetch Vendors, Purchase Receives, and Central Store Purchase Returns
-    const [vendorsRes, prsRes, pretRes] = await Promise.all([
-      supabase.from('vendors').select('*').order('name'),
-      supabase.from('purchase_receives').select('*').order('purchase_date', { ascending: false }),
-      supabase.from('purchase_returns').select('*').order('return_date', { ascending: false })
-    ]);
+  async getPayableData(prefetchedData = null) {
+    let vendors = [];
+    let purchaseReceives = [];
+    let purchaseReturns = [];
+    let vendorPayments = [];
 
-    const vendors = vendorsRes.data || [];
-    const purchaseReceives = prsRes.data || [];
-    const purchaseReturns = pretRes.data || [];
+    if (prefetchedData) {
+      vendors = prefetchedData.vendors || [];
+      purchaseReceives = prefetchedData.purchaseReceives || [];
+      purchaseReturns = prefetchedData.purchaseReturns || [];
+      vendorPayments = prefetchedData.vendorPayments || [];
+    } else {
+      const [vendorsRes, prsRes, pretRes, vpRes] = await Promise.all([
+        supabase.from('vendors').select('*').order('name'),
+        supabase.from('purchase_receives').select('*').order('purchase_date', { ascending: false }),
+        supabase.from('purchase_returns').select('*').order('return_date', { ascending: false }),
+        supabase.from('accounts_vendor_payments').select('*').order('payment_date', { ascending: false })
+      ]);
+      vendors = vendorsRes.data || [];
+      purchaseReceives = prsRes.data || [];
+      purchaseReturns = pretRes.data || [];
+      vendorPayments = vpRes.data || getLocal('vendor_payments', []);
+    }
 
-    // 2. Fetch Payments made to vendors
-    const vendorPayments = await this.getVendorPayments();
-
-    // 3. Compute breakdown per vendor
     const vendorSummaries = vendors.map(v => {
       const vPrs = purchaseReceives.filter(pr => pr.vendor_id === v.id);
       const vPrets = purchaseReturns.filter(pr => pr.vendor_id === v.id);
+      const vPayments = vendorPayments.filter(vp => vp.vendor_id === v.id);
       
-      // Breakdown by Purchase Type
       const cashPurchases = vPrs.filter(pr => pr.supplier_payment_type === 'CashPurchase' || (!pr.supplier_payment_type && pr.payment_type === 'Cash'));
       const creditPurchases = vPrs.filter(pr => pr.supplier_payment_type === 'CreditPurchase' || (!pr.supplier_payment_type && pr.payment_type !== 'Cash'));
       const afterSalePurchases = vPrs.filter(pr => pr.supplier_payment_type === 'AfterSale');
@@ -395,14 +432,8 @@ export const accountsService = {
       const totalAfterSaleValue = afterSalePurchases.reduce((s, pr) => s + (Number(pr.net_amount || pr.total_value || 0)), 0);
       const totalPurchases = totalCashValue + totalCreditValue + totalAfterSaleValue;
 
-      // Purchase Returns to this vendor (Central Store goods return)
       const totalReturned = vPrets.reduce((s, pr) => s + (Number(pr.total_amount || 0)), 0);
-
-      // Payments made towards this vendor
-      const vPayments = vendorPayments.filter(vp => vp.vendor_id === v.id);
       const totalPaid = vPayments.reduce((s, vp) => s + (Number(vp.amount || 0)), 0);
-
-      // Net due = (Credit Purchases + AfterSale Purchases) - Purchase Returns - Payments Paid
       const netDue = Math.max(0, (totalCreditValue + totalAfterSaleValue) - totalReturned - totalPaid);
 
       return {
@@ -447,6 +478,7 @@ export const accountsService = {
   },
 
   async saveVendorPayment(payment) {
+    this.invalidateCache();
     const voucherNo = this.generateVoucherNo('Debit Voucher (Payment)');
     const record = {
       ...payment,
@@ -496,15 +528,25 @@ export const accountsService = {
   // -------------------------------------------------------------
   // 5. ACCOUNTS RECEIVABLE (CUSTOMER DUES FROM POS) & COLLECTIONS
   // -------------------------------------------------------------
-  async getReceivableData() {
-    const [customersRes, salesRes] = await Promise.all([
-      supabase.from('customers').select('*').order('first_name'),
-      supabase.from('sales').select('*').order('created_at', { ascending: false })
-    ]);
+  async getReceivableData(prefetchedData = null) {
+    let customers = [];
+    let sales = [];
+    let collections = [];
 
-    const customers = customersRes.data || [];
-    const sales = salesRes.data || [];
-    const collections = await this.getCustomerCollections();
+    if (prefetchedData) {
+      customers = prefetchedData.customers || [];
+      sales = prefetchedData.sales || [];
+      collections = prefetchedData.collections || [];
+    } else {
+      const [customersRes, salesRes, colRes] = await Promise.all([
+        supabase.from('customers').select('*').order('first_name'),
+        supabase.from('sales').select('*').order('created_at', { ascending: false }),
+        supabase.from('accounts_customer_collections').select('*').order('collection_date', { ascending: false })
+      ]);
+      customers = customersRes.data || [];
+      sales = salesRes.data || [];
+      collections = colRes.data || getLocal('customer_collections', []);
+    }
 
     const customerSummaries = customers.map(c => {
       const fullName = [c.first_name, c.middle_name, c.last_name].filter(Boolean).join(' ') || c.name || 'Customer';
@@ -513,7 +555,6 @@ export const accountsService = {
       const totalInvoiced = cSales.reduce((sum, s) => sum + (Number(s.net_amount || s.total_amount || 0)), 0);
       const paidInSales = cSales.reduce((sum, s) => sum + (Number(s.paid_amount || 0)), 0);
       
-      // Collections made separately in accounts
       const cCollections = collections.filter(col => col.customer_id === c.id || col.customer_name === fullName);
       const totalCollectedLater = cCollections.reduce((sum, col) => sum + (Number(col.amount || 0)), 0);
 
@@ -550,6 +591,7 @@ export const accountsService = {
   },
 
   async saveCustomerCollection(col) {
+    this.invalidateCache();
     const voucherNo = this.generateVoucherNo('Credit Voucher (Receipt)');
     const record = {
       ...col,
@@ -653,6 +695,7 @@ export const accountsService = {
   },
 
   async paySalary(salaryData) {
+    this.invalidateCache();
     const voucherNo = this.generateVoucherNo('Debit Voucher (Payment)');
     const record = {
       ...salaryData,
@@ -712,94 +755,174 @@ export const accountsService = {
   },
 
   // -------------------------------------------------------------
-  // 8. FINANCIAL OVERVIEW & REAL-TIME DYNAMIC STATEMENTS
+  // 8. HIGH-PERFORMANCE FINANCIAL OVERVIEW (PARALLEL & SUB-SECOND)
   // -------------------------------------------------------------
-  async getFinancialOverview(fromDate, toDate) {
+  async getFinancialOverview(fromDate, toDate, forceRefresh = false) {
     const now = new Date();
     const fDate = fromDate || new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
     const tDate = toDate || now.toISOString().split('T')[0];
+    const cacheKey = `${fDate}_${tDate}`;
 
-    // 1. POS Sales Revenue (Gross Sales & Returns)
-    let salesQuery = supabase.from('sales').select('net_amount, total_amount, paid_amount, created_at, return_amount, payment_type');
-    if (fDate) salesQuery = salesQuery.gte('created_at', `${fDate}T00:00:00.000Z`);
-    if (tDate) salesQuery = salesQuery.lte('created_at', `${tDate}T23:59:59.999Z`);
-    const { data: salesData } = await salesQuery;
-    const salesList = salesData || [];
+    // Return instant memory cache if available and not expired
+    if (!forceRefresh && memoryCache.overview && memoryCache.overviewKey === cacheKey && (Date.now() - memoryCache.timestamp < CACHE_TTL_MS)) {
+      return memoryCache.overview;
+    }
 
-    const grossSales = salesList.reduce((sum, s) => sum + (Number(s.net_amount || s.total_amount || 0)), 0);
-    const salesReturns = salesList.reduce((sum, s) => sum + (Number(s.return_amount || 0)), 0);
-    const totalSales = Math.max(0, grossSales - salesReturns);
+    try {
+      // ONE SINGLE PARALLEL BATCH FOR ALL BASE TABLES
+      const [
+        salesRes,
+        prsRes,
+        pretRes,
+        dmlRes,
+        vendorsRes,
+        customersRes,
+        banksRes,
+        expensesRes,
+        vouchersRes,
+        vpRes,
+        colRes,
+        salRes
+      ] = await Promise.all([
+        supabase.from('sales').select('id, net_amount, total_amount, paid_amount, created_at, return_amount, payment_type, customer_id, customer_mobile'),
+        supabase.from('purchase_receives').select('id, vendor_id, receive_no, challan_no, net_amount, total_value, purchase_date, supplier_payment_type, payment_type'),
+        supabase.from('purchase_returns').select('id, vendor_id, challan_no, reference_no, return_date, total_amount, return_reason, reason'),
+        supabase.from('damage_and_lost').select('id, total_cost, total_amount, date, damage_date'),
+        supabase.from('vendors').select('id, code, name, contact_no, address').order('name'),
+        supabase.from('customers').select('id, code, name, first_name, middle_name, last_name, contact_no, address').order('first_name'),
+        supabase.from('accounts_bank_accounts').select('*').order('account_name'),
+        supabase.from('accounts_expenses').select('*').order('expense_date', { ascending: false }),
+        supabase.from('accounts_vouchers').select('*').order('voucher_date', { ascending: false }),
+        supabase.from('accounts_vendor_payments').select('*').order('payment_date', { ascending: false }),
+        supabase.from('accounts_customer_collections').select('*').order('collection_date', { ascending: false }),
+        supabase.from('accounts_salaries').select('*')
+      ]);
 
-    // 2. Central Store Purchases & Purchase Returns (COGS)
-    let prQuery = supabase.from('purchase_receives').select('net_amount, total_value, purchase_date, supplier_payment_type');
-    if (fDate) prQuery = prQuery.gte('purchase_date', fDate);
-    if (tDate) prQuery = prQuery.lte('purchase_date', tDate);
-    const { data: prData } = await prQuery;
-    const grossPurchases = (prData || []).reduce((sum, pr) => sum + (Number(pr.net_amount || pr.total_value || 0)), 0);
+      const allSales = salesRes.data || [];
+      const allPrs = prsRes.data || [];
+      const allPrets = pretRes.data || [];
+      const allDmls = dmlRes.data || [];
+      const allVendors = vendorsRes.data || [];
+      const allCustomers = customersRes.data || [];
+      const allBanks = banksRes.data || [];
+      const allExpenses = expensesRes.data || getLocal('expenses', []);
+      const allVouchers = vouchersRes.data || getLocal('vouchers', []);
+      const allVp = vpRes.data || getLocal('vendor_payments', []);
+      const allCol = colRes.data || getLocal('customer_collections', []);
+      const allSal = salRes.data || getLocal('salaries', []);
 
-    // Central Store Purchase Returns to Vendor
-    let pretQuery = supabase.from('purchase_returns').select('total_amount, return_date');
-    if (fDate) pretQuery = pretQuery.gte('return_date', fDate);
-    if (tDate) pretQuery = pretQuery.lte('return_date', tDate);
-    const { data: pretData } = await pretQuery;
-    const totalPurchaseReturns = (pretData || []).reduce((sum, pr) => sum + (Number(pr.total_amount || 0)), 0);
+      const prefetched = {
+        sales: allSales,
+        purchaseReceives: allPrs,
+        purchaseReturns: allPrets,
+        vendors: allVendors,
+        customers: allCustomers,
+        banks: allBanks,
+        expenses: allExpenses,
+        vendorPayments: allVp,
+        collections: allCol,
+        salaries: allSal
+      };
 
-    // Central Store Damage & Lost
-    let dmlQuery = supabase.from('damage_and_lost').select('total_cost, total_amount, date, damage_date');
-    if (fDate) dmlQuery = dmlQuery.gte('date', fDate);
-    if (tDate) dmlQuery = dmlQuery.lte('date', tDate);
-    const { data: dmlData } = await dmlQuery;
-    const totalDamageLoss = (dmlData || []).reduce((sum, d) => sum + (Number(d.total_cost || d.total_amount || 0)), 0);
+      // 1. Filter Sales within Date Range
+      const periodSales = allSales.filter(s => {
+        const d = String(s.created_at || s.sale_date || '').slice(0, 10);
+        if (fDate && d && d < fDate) return false;
+        if (tDate && d && d > tDate) return false;
+        return true;
+      });
 
-    // Net Cost of Goods Sold (COGS)
-    const netPurchases = Math.max(0, grossPurchases - totalPurchaseReturns);
-    const totalCOGS = netPurchases + totalDamageLoss;
+      const grossSales = periodSales.reduce((sum, s) => sum + (Number(s.net_amount || s.total_amount || 0)), 0);
+      const salesReturns = periodSales.reduce((sum, s) => sum + (Number(s.return_amount || 0)), 0);
+      const totalSales = Math.max(0, grossSales - salesReturns);
 
-    // 3. Operating Expenses
-    const expenses = await this.getExpenses({ fromDate: fDate, toDate: tDate });
-    const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+      // 2. Filter Purchases, Returns, & Damages within Date Range
+      const periodPrs = allPrs.filter(pr => {
+        const d = String(pr.purchase_date || '').slice(0, 10);
+        if (fDate && d && d < fDate) return false;
+        if (tDate && d && d > tDate) return false;
+        return true;
+      });
+      const grossPurchases = periodPrs.reduce((sum, pr) => sum + (Number(pr.net_amount || pr.total_value || 0)), 0);
 
-    // 4. Staff Salaries Paid in period
-    const currentMonth = fDate.slice(0, 7);
-    const salaries = await this.getSalaries(currentMonth);
-    const totalSalaries = salaries.filter(s => s.payment_status === 'Paid').reduce((sum, s) => sum + Number(s.net_salary || 0), 0);
+      const periodPrets = allPrets.filter(pr => {
+        const d = String(pr.return_date || '').slice(0, 10);
+        if (fDate && d && d < fDate) return false;
+        if (tDate && d && d > tDate) return false;
+        return true;
+      });
+      const totalPurchaseReturns = periodPrets.reduce((sum, pr) => sum + (Number(pr.total_amount || 0)), 0);
 
-    // 5. Vendor Payables & Customer Receivables
-    const payableData = await this.getPayableData();
-    const receivableData = await this.getReceivableData();
+      const periodDmls = allDmls.filter(dm => {
+        const d = String(dm.date || dm.damage_date || '').slice(0, 10);
+        if (fDate && d && d < fDate) return false;
+        if (tDate && d && d > tDate) return false;
+        return true;
+      });
+      const totalDamageLoss = periodDmls.reduce((sum, d) => sum + (Number(d.total_cost || d.total_amount || 0)), 0);
 
-    // 6. Dynamic Bank & Cash Liquidity Balances
-    const bankAccounts = await this.getBankAccounts();
-    const totalBankCash = bankAccounts.reduce((sum, b) => sum + Number(b.current_balance || 0), 0);
+      const netPurchases = Math.max(0, grossPurchases - totalPurchaseReturns);
+      const totalCOGS = netPurchases + totalDamageLoss;
 
-    // 7. Gross & Net Profit Calculation
-    const grossProfit = totalSales - totalCOGS;
-    const totalOperatingCost = totalExpenses + totalSalaries;
-    const netProfit = grossProfit - totalOperatingCost;
+      // 3. Filter Operating Expenses within Date Range
+      const periodExpenses = allExpenses.filter(e => {
+        const d = String(e.expense_date || '').slice(0, 10);
+        if (fDate && d && d < fDate) return false;
+        if (tDate && d && d > tDate) return false;
+        return true;
+      });
+      const totalExpenses = periodExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
-    return {
-      fromDate: fDate,
-      toDate: tDate,
-      grossSales,
-      salesReturns,
-      totalSales, // Net Sales Revenue
-      grossPurchases,
-      totalPurchaseReturns, // Central store returns
-      netPurchases,
-      totalDamageLoss, // Central store inventory loss
-      totalCOGS, // Net COGS
-      totalPurchases: totalCOGS,
-      grossProfit,
-      totalExpenses,
-      totalSalaries,
-      totalOperatingCost,
-      netProfit,
-      totalPayable: payableData.totalPayable,
-      totalReceivable: receivableData.totalReceivable,
-      totalBankCash,
-      bankAccounts,
-      recentExpenses: expenses.slice(0, 5),
-      recentVouchers: (await this.getVouchers()).slice(0, 5)
-    };
+      // 4. Filter Paid Salaries within Period
+      const currentMonth = fDate.slice(0, 7);
+      const periodSalaries = allSal.filter(s => s.payment_status === 'Paid' && (!currentMonth || s.month_year === currentMonth));
+      const totalSalaries = periodSalaries.reduce((sum, s) => sum + Number(s.net_salary || 0), 0);
+
+      // 5. Compute Payables, Receivables, and Bank Balances in memory
+      const payableData = await this.getPayableData(prefetched);
+      const receivableData = await this.getReceivableData(prefetched);
+      const bankAccounts = await this.getBankAccounts(prefetched);
+      const totalBankCash = bankAccounts.reduce((sum, b) => sum + Number(b.current_balance || 0), 0);
+
+      // 6. Profit Calculations
+      const grossProfit = totalSales - totalCOGS;
+      const totalOperatingCost = totalExpenses + totalSalaries;
+      const netProfit = grossProfit - totalOperatingCost;
+
+      const result = {
+        fromDate: fDate,
+        toDate: tDate,
+        grossSales,
+        salesReturns,
+        totalSales,
+        grossPurchases,
+        totalPurchaseReturns,
+        netPurchases,
+        totalDamageLoss,
+        totalCOGS,
+        totalPurchases: totalCOGS,
+        grossProfit,
+        totalExpenses,
+        totalSalaries,
+        totalOperatingCost,
+        netProfit,
+        totalPayable: payableData.totalPayable,
+        totalReceivable: receivableData.totalReceivable,
+        totalBankCash,
+        bankAccounts,
+        recentExpenses: periodExpenses.slice(0, 5),
+        recentVouchers: allVouchers.slice(0, 5)
+      };
+
+      // Save into high-speed memory cache
+      memoryCache.overview = result;
+      memoryCache.overviewKey = cacheKey;
+      memoryCache.timestamp = Date.now();
+
+      return result;
+    } catch (err) {
+      console.error('Financial overview calculation error:', err);
+      throw err;
+    }
   }
 };

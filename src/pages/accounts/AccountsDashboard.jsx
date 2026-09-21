@@ -27,10 +27,10 @@ const AccountsDashboard = () => {
     loadDashboardData();
   }, [fromDate, toDate]);
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (force = false) => {
     setLoading(true);
     try {
-      const data = await accountsService.getFinancialOverview(fromDate, toDate);
+      const data = await accountsService.getFinancialOverview(fromDate, toDate, force);
       setOverview(data);
     } catch (err) {
       console.error(err);
@@ -131,7 +131,7 @@ const AccountsDashboard = () => {
           </div>
 
           <button 
-            onClick={loadDashboardData}
+            onClick={() => loadDashboardData(true)}
             className="btn-theme"
             style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', fontSize: '12px' }}
           >

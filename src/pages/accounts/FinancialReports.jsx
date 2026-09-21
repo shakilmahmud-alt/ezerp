@@ -36,34 +36,26 @@ const FinancialReports = () => {
         const data = await accountsService.getFinancialOverview(fromDate, toDate);
         setReportResult({ type: 'pl', ...data });
       } else if (activeReport === 'bs') {
-        const [overview, banks, payables, receivables] = await Promise.all([
-          accountsService.getFinancialOverview(fromDate, toDate),
-          accountsService.getBankAccounts(),
-          accountsService.getPayableData(),
-          accountsService.getReceivableData()
-        ]);
+        const overview = await accountsService.getFinancialOverview(fromDate, toDate);
         setReportResult({
           type: 'bs',
           overview,
-          banks,
-          payables,
-          receivables
+          banks: overview.bankAccounts,
+          payables: { totalPayable: overview.totalPayable },
+          receivables: { totalReceivable: overview.totalReceivable }
         });
       } else if (activeReport === 'tb') {
-        const [coas, overview, payables, receivables, banks] = await Promise.all([
+        const [coas, overview] = await Promise.all([
           accountsService.getChartOfAccounts(),
-          accountsService.getFinancialOverview(fromDate, toDate),
-          accountsService.getPayableData(),
-          accountsService.getReceivableData(),
-          accountsService.getBankAccounts()
+          accountsService.getFinancialOverview(fromDate, toDate)
         ]);
         setReportResult({
           type: 'tb',
           coas,
           overview,
-          payables,
-          receivables,
-          banks
+          payables: { totalPayable: overview.totalPayable },
+          receivables: { totalReceivable: overview.totalReceivable },
+          banks: overview.bankAccounts
         });
       } else if (activeReport === 'daybook') {
         const [vouchers, expenses] = await Promise.all([
