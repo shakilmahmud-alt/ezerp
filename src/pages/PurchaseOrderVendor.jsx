@@ -679,6 +679,7 @@ const PurchaseOrderVendor = () => {
             <CustomSelect name="supplierPaymentType" value={headerData.supplierPaymentType} onChange={handleHeaderChange} className="input-animated">
               <option value="CashPurchase">CashPurchase</option>
               <option value="CreditPurchase">CreditPurchase</option>
+              <option value="AfterSale">After Sale</option>
             </CustomSelect>
           </div>
           <div>

@@ -39,6 +39,7 @@ const PurchaseReceive = () => {
     lastChallanNo: '',
     referenceNo: '',
     deliveryTo: 'Central Store',
+    supplierPaymentType: 'CashPurchase',
     additionalDiscount: 0,
     additionalCost: 0
   });
@@ -162,7 +163,7 @@ const PurchaseReceive = () => {
     try {
       const { data, error } = await supabase
         .from('purchase_orders')
-        .select('id, po_number, reference_no, order_date')
+        .select('id, po_number, reference_no, order_date, supplier_payment_type')
         .eq('vendor_id', vendorId)
         .neq('status', 'Received')
         .order('created_at', { ascending: false });
@@ -382,6 +383,7 @@ const PurchaseReceive = () => {
         last_challan_no: finalChallanNo,
         reference_no: finalReferenceNo,
         delivery_to: headerData.deliveryTo,
+        supplier_payment_type: headerData.supplierPaymentType || 'CashPurchase',
         additional_discount: Number(headerData.additionalDiscount || 0),
         additional_cost: Number(headerData.additionalCost || 0),
         status: status,
@@ -833,6 +835,14 @@ const PurchaseReceive = () => {
             <CustomSelect name="deliveryTo" value={headerData.deliveryTo} onChange={handleHeaderChange} className="input-animated">
               <option value="Central Store">Central Store</option>
               {stores.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+            </CustomSelect>
+          </div>
+          <div>
+            <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Supplier Payment Type</label>
+            <CustomSelect name="supplierPaymentType" value={headerData.supplierPaymentType} onChange={handleHeaderChange} className="input-animated">
+              <option value="CashPurchase">CashPurchase</option>
+              <option value="CreditPurchase">CreditPurchase</option>
+              <option value="AfterSale">After Sale</option>
             </CustomSelect>
           </div>
         </div>

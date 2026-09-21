@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Store, MonitorSmartphone, BarChart3 } from 'lucide-react';
+import { Store, MonitorSmartphone, BarChart3, Landmark } from 'lucide-react';
 
 const HomeSelector = () => {
   const navigate = useNavigate();
@@ -21,7 +21,7 @@ const HomeSelector = () => {
         <p style={{ color: '#666', fontSize: '1.1rem', margin: 0 }}>Select your portal to continue</p>
       </div>
 
-      <div style={{ display: 'flex', gap: '25px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '1050px' }}>
+      <div style={{ display: 'flex', gap: '25px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '1200px' }}>
         
         {/* Central Store Option */}
         <div 
@@ -36,7 +36,7 @@ const HomeSelector = () => {
             flexDirection: 'column',
             alignItems: 'center',
             gap: '18px',
-            width: '270px',
+            width: '260px',
             transition: 'transform 0.3s, box-shadow 0.3s',
             border: '2px solid transparent'
           }}
@@ -63,8 +63,8 @@ const HomeSelector = () => {
             <Store size={38} color="var(--accent-primary)" />
           </div>
           <div style={{ textAlign: 'center' }}>
-            <h3 style={{ margin: '0 0 10px 0', fontSize: '1.4rem', color: 'var(--text-primary)' }}>Central Store</h3>
-            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.88rem', lineHeight: '1.5' }}>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '1.35rem', color: 'var(--text-primary)' }}>Central Store</h3>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '1.5' }}>
               Manage inventory, catalog, HR, and operations for the network.
             </p>
           </div>
@@ -83,7 +83,7 @@ const HomeSelector = () => {
             flexDirection: 'column',
             alignItems: 'center',
             gap: '18px',
-            width: '270px',
+            width: '260px',
             transition: 'transform 0.3s, box-shadow 0.3s',
             border: '2px solid transparent'
           }}
@@ -110,8 +110,8 @@ const HomeSelector = () => {
             <MonitorSmartphone size={38} color="#10b981" />
           </div>
           <div style={{ textAlign: 'center' }}>
-            <h3 style={{ margin: '0 0 10px 0', fontSize: '1.4rem', color: 'var(--text-primary)' }}>POS</h3>
-            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.88rem', lineHeight: '1.5' }}>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '1.35rem', color: 'var(--text-primary)' }}>POS</h3>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '1.5' }}>
               Point of Sale counter terminal system for retail branches.
             </p>
           </div>
@@ -130,7 +130,7 @@ const HomeSelector = () => {
             flexDirection: 'column',
             alignItems: 'center',
             gap: '18px',
-            width: '270px',
+            width: '260px',
             transition: 'transform 0.3s, box-shadow 0.3s',
             border: '2px solid transparent'
           }}
@@ -157,9 +157,56 @@ const HomeSelector = () => {
             <BarChart3 size={38} color="#0284c7" />
           </div>
           <div style={{ textAlign: 'center' }}>
-            <h3 style={{ margin: '0 0 10px 0', fontSize: '1.4rem', color: 'var(--text-primary)' }}>MIS</h3>
-            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.88rem', lineHeight: '1.5' }}>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '1.35rem', color: 'var(--text-primary)' }}>MIS</h3>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '1.5' }}>
               Management Information System & Comprehensive Analytics Reports.
+            </p>
+          </div>
+        </div>
+
+        {/* Accounts Option */}
+        <div 
+          onClick={() => navigate('/accounts')}
+          style={{
+            backgroundColor: 'var(--card-bg)',
+            padding: '35px 25px',
+            borderRadius: '16px',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.08)',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '18px',
+            width: '260px',
+            transition: 'transform 0.3s, box-shadow 0.3s',
+            border: '2px solid transparent'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-10px)';
+            e.currentTarget.style.boxShadow = '0 20px 40px rgba(0,0,0,0.12)';
+            e.currentTarget.style.borderColor = '#8b5cf6';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 10px 30px rgba(0,0,0,0.08)';
+            e.currentTarget.style.borderColor = 'transparent';
+          }}
+        >
+          <div style={{ 
+            width: '76px', 
+            height: '76px', 
+            borderRadius: '50%', 
+            backgroundColor: 'rgba(139, 92, 246, 0.1)', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center' 
+          }}>
+            <Landmark size={38} color="#8b5cf6" />
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '1.35rem', color: 'var(--text-primary)' }}>Accounts</h3>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '1.5' }}>
+              Manage income, expenses, accounts payable, accounts receivable, staff payroll & financial reports.
             </p>
           </div>
         </div>

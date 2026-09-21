@@ -95,6 +95,17 @@ import CircularPriceChangedReport from './pages/mis/reports/CircularPriceChanged
 import DiscountCircularReport from './pages/mis/reports/DiscountCircularReport';
 import CustomerSummaryReport from './pages/mis/reports/CustomerSummaryReport';
 
+// Accounts Management Module
+import AccountsLayout from './components/accounts/AccountsLayout';
+import AccountsDashboard from './pages/accounts/AccountsDashboard';
+import VoucherEntry from './pages/accounts/VoucherEntry';
+import AccountsPayable from './pages/accounts/AccountsPayable';
+import AccountsReceivable from './pages/accounts/AccountsReceivable';
+import ExpenseManagement from './pages/accounts/ExpenseManagement';
+import PayrollManagement from './pages/accounts/PayrollManagement';
+import ChartOfAccounts from './pages/accounts/ChartOfAccounts';
+import FinancialReports from './pages/accounts/FinancialReports';
+
 function App() {
   return (
     <AuthProvider>
@@ -202,6 +213,18 @@ function App() {
             <Route path="crm-reports/*" element={<CustomerSummaryReport />} />
           </Route>
           
+          {/* Accounts Management Module Routes */}
+          <Route path="/accounts" element={<ProtectedRoute><AccountsLayout /></ProtectedRoute>}>
+            <Route index element={<AccountsDashboard />} />
+            <Route path="vouchers" element={<VoucherEntry />} />
+            <Route path="payables" element={<AccountsPayable />} />
+            <Route path="receivables" element={<AccountsReceivable />} />
+            <Route path="expenses" element={<ExpenseManagement />} />
+            <Route path="payroll" element={<PayrollManagement />} />
+            <Route path="chart-of-accounts" element={<ChartOfAccounts />} />
+            <Route path="reports" element={<FinancialReports />} />
+          </Route>
+
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route path="dashboard" element={<ProtectedRoute moduleName="Dashboard"><Dashboard /></ProtectedRoute>} />
             
